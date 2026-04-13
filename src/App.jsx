@@ -33,7 +33,12 @@ function SectionHeading({ title, eyebrow }) {
     <div className="section-heading">
       {eyebrow && <p className="eyebrow">{eyebrow}</p>}
       <h2>{title}</h2>
-      <span className="heading-flourish" aria-hidden="true" />
+      <span className="heading-flourish" aria-hidden="true">
+        <svg viewBox="0 0 320 24" role="presentation" focusable="false">
+          <path d="M6 12c10 0 14-8 22-8 11 0 10 16 24 16 9 0 15-7 22-7 12 0 13 10 25 10h122c12 0 13-10 25-10 7 0 13 7 22 7 14 0 13-16 24-16 8 0 12 8 22 8" />
+          <circle cx="160" cy="12" r="2" />
+        </svg>
+      </span>
     </div>
   );
 }
@@ -112,7 +117,9 @@ export default function App() {
         <section id="home" className="section hero">
           <div className="container hero-inner">
             <span className="hero-top-flourish" aria-hidden="true" />
-            <img src={logo} className="hero-logo" alt="Nails by Brittney logo" />
+            <div className="hero-logo-wrap">
+              <img src={logo} className="hero-logo" alt="Nails by Brittney logo" />
+            </div>
             <h1>Nails by Brittney</h1>
             <p className="subtitle">Certified Nail Technician</p>
             <p>Emerald Isle&apos;s premier nail services</p>
@@ -123,6 +130,13 @@ export default function App() {
             </div>
           </div>
         </section>
+        <div className="section-separator" aria-hidden="true">
+          <svg viewBox="0 0 720 84" role="presentation" focusable="false">
+            <path d="M20 42c42 0 48-23 82-23 41 0 42 46 86 46 30 0 41-21 66-21 40 0 45 32 82 32h48c37 0 42-32 82-32 25 0 36 21 66 21 44 0 45-46 86-46 34 0 40 23 82 23" />
+            <path d="M142 42h436" />
+            <circle cx="360" cy="42" r="3" />
+          </svg>
+        </div>
 
         <section id="about" className="section about-section">
           <div className="container split">
@@ -133,6 +147,13 @@ export default function App() {
             </div>
           </div>
         </section>
+        <div className="section-separator" aria-hidden="true">
+          <svg viewBox="0 0 720 84" role="presentation" focusable="false">
+            <path d="M20 42c42 0 48-23 82-23 41 0 42 46 86 46 30 0 41-21 66-21 40 0 45 32 82 32h48c37 0 42-32 82-32 25 0 36 21 66 21 44 0 45-46 86-46 34 0 40 23 82 23" />
+            <path d="M142 42h436" />
+            <circle cx="360" cy="42" r="3" />
+          </svg>
+        </div>
 
         <section id="examples" className="section alt examples-section">
           <div className="container">
@@ -151,6 +172,13 @@ export default function App() {
             {!hasImages && <p className="muted">Sample gallery records are ready; upload images in Admin to display them.</p>}
           </div>
         </section>
+        <div className="section-separator" aria-hidden="true">
+          <svg viewBox="0 0 720 84" role="presentation" focusable="false">
+            <path d="M20 42c42 0 48-23 82-23 41 0 42 46 86 46 30 0 41-21 66-21 40 0 45 32 82 32h48c37 0 42-32 82-32 25 0 36 21 66 21 44 0 45-46 86-46 34 0 40 23 82 23" />
+            <path d="M142 42h436" />
+            <circle cx="360" cy="42" r="3" />
+          </svg>
+        </div>
 
         <section id="services" className="section services-section">
           <div className="container">
@@ -167,6 +195,13 @@ export default function App() {
             </div>
           </div>
         </section>
+        <div className="section-separator" aria-hidden="true">
+          <svg viewBox="0 0 720 84" role="presentation" focusable="false">
+            <path d="M20 42c42 0 48-23 82-23 41 0 42 46 86 46 30 0 41-21 66-21 40 0 45 32 82 32h48c37 0 42-32 82-32 25 0 36 21 66 21 44 0 45-46 86-46 34 0 40 23 82 23" />
+            <path d="M142 42h436" />
+            <circle cx="360" cy="42" r="3" />
+          </svg>
+        </div>
 
         <section id="contact" className="section alt contact-section">
           <div className="container">
@@ -205,6 +240,13 @@ export default function App() {
             </form>
           </div>
         </section>
+        <div className="section-separator" aria-hidden="true">
+          <svg viewBox="0 0 720 84" role="presentation" focusable="false">
+            <path d="M20 42c42 0 48-23 82-23 41 0 42 46 86 46 30 0 41-21 66-21 40 0 45 32 82 32h48c37 0 42-32 82-32 25 0 36 21 66 21 44 0 45-46 86-46 34 0 40 23 82 23" />
+            <path d="M142 42h436" />
+            <circle cx="360" cy="42" r="3" />
+          </svg>
+        </div>
 
         <section id="location" className="section location-section">
           <div className="container split">
