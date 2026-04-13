@@ -29,14 +29,39 @@ function usePrefersReducedMotion() {
 const NailIcon = () => <svg aria-hidden="true" viewBox="0 0 24 24" className="nail-icon"><path d="M7 4.5c2.1-.4 4.4-.4 6.6 0 1 .2 1.7 1.1 1.6 2.1l-.8 8.8c-.2 2-1.9 3.6-4 3.6s-3.8-1.6-4-3.6l-.8-8.8c-.1-1 .6-1.9 1.4-2.1zM9 8h6" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>;
 
 function Divider({ variant = 'section' }) {
+  const flourishSvg = (
+    <svg viewBox="0 0 600 80" role="presentation" focusable="false" className="flourish-svg">
+      <path className="flourish-line" d="M12 40H204" />
+      <path
+        className="flourish-main"
+        d="M300 40C286 40 279 29 270 22C260 14 246 14 236 22C227 30 227 43 236 51C246 59 260 59 270 51C279 44 286 40 300 40C282 40 268 52 252 60C236 68 216 66 205 53C194 40 196 21 210 12C224 3 245 6 259 16C273 26 285 40 300 40"
+      />
+      <path
+        className="flourish-detail"
+        d="M300 40C289 40 283 34 277 29C271 24 263 24 258 30C253 35 253 44 258 49C263 55 271 55 277 50C283 45 289 40 300 40"
+      />
+      <path className="flourish-cap" d="M20 40L16 36L12 40L16 44Z" />
+      <g transform="translate(600 0) scale(-1 1)">
+        <path className="flourish-line" d="M12 40H204" />
+        <path
+          className="flourish-main"
+          d="M300 40C286 40 279 29 270 22C260 14 246 14 236 22C227 30 227 43 236 51C246 59 260 59 270 51C279 44 286 40 300 40C282 40 268 52 252 60C236 68 216 66 205 53C194 40 196 21 210 12C224 3 245 6 259 16C273 26 285 40 300 40"
+        />
+        <path
+          className="flourish-detail"
+          d="M300 40C289 40 283 34 277 29C271 24 263 24 258 30C253 35 253 44 258 49C263 55 271 55 277 50C283 45 289 40 300 40"
+        />
+        <path className="flourish-cap" d="M20 40L16 36L12 40L16 44Z" />
+      </g>
+      <path className="flourish-center" d="M300 33L307 40L300 47L293 40Z" />
+      <circle className="flourish-center-dot" cx="300" cy="40" r="1.7" />
+    </svg>
+  );
+
   if (variant === 'heading') {
     return (
       <span className="heading-flourish" aria-hidden="true">
-        <svg viewBox="0 0 320 24" role="presentation" focusable="false">
-          <path d="M14 12c16 0 18-7 30-7 15 0 16 14 30 14h63c15 0 18-13 34-13 14 0 17 10 30 10h58c13 0 16-10 30-10 16 0 19 13 34 13h8" />
-          <path d="M116 12c10 0 14-4 19-8M204 12c-10 0-14-4-19-8" />
-          <circle cx="160" cy="12" r="2.2" />
-        </svg>
+        {flourishSvg}
       </span>
     );
   }
@@ -44,22 +69,14 @@ function Divider({ variant = 'section' }) {
   if (variant === 'hero') {
     return (
       <span className="hero-top-flourish" aria-hidden="true">
-        <svg viewBox="0 0 320 32" role="presentation" focusable="false">
-          <path d="M12 16c22 0 25-8 42-8 17 0 20 10 37 10h53c17 0 20-12 36-12 16 0 19 12 36 12h53c17 0 20-10 37-10 17 0 20 8 42 8" />
-          <path d="M119 16c11 0 14-5 20-10M201 16c-11 0-14-5-20-10" />
-          <circle cx="160" cy="16" r="2.2" />
-        </svg>
+        {flourishSvg}
       </span>
     );
   }
 
   return (
     <div className="section-separator" aria-hidden="true">
-      <svg viewBox="0 0 720 84" role="presentation" focusable="false">
-        <path d="M18 42c38 0 44-16 70-16 28 0 33 20 58 20h128c26 0 31-24 55-24 20 0 24 14 44 14h-26c20 0 24-14 44-14 24 0 29 24 55 24h128c25 0 30-20 58-20 26 0 32 16 70 16" />
-        <path d="M152 42c15 0 22-9 36-19M568 42c-15 0-22-9-36-19" />
-        <circle cx="360" cy="42" r="3" />
-      </svg>
+      {flourishSvg}
     </div>
   );
 }

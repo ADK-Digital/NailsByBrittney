@@ -88,15 +88,24 @@ p{margin:.35rem 0 0;font-size:1.04rem;color:#2e3757}
   height:auto;
   display:block;
 }
-.section-separator path{
+.flourish-svg{overflow:visible}
+.flourish-svg .flourish-line,
+.flourish-svg .flourish-main,
+.flourish-svg .flourish-detail{
   fill:none;
   stroke:currentColor;
   stroke-linecap:round;
   stroke-linejoin:round;
 }
-.section-separator path:first-child{stroke-width:1.35}
-.section-separator path:nth-child(2){stroke-width:.95;opacity:.72}
-.section-separator circle{fill:currentColor;opacity:.78}
+.flourish-svg .flourish-main{stroke-width:1.25}
+.flourish-svg .flourish-detail{stroke-width:.95;opacity:.82}
+.flourish-svg .flourish-line{stroke-width:.9;opacity:.65}
+.flourish-svg .flourish-cap,
+.flourish-svg .flourish-center{
+  fill:currentColor;
+  opacity:.74;
+}
+.flourish-svg .flourish-center-dot{fill:currentColor;opacity:.9}
 
 .sticky-nav{
   position:sticky;
@@ -146,15 +155,6 @@ p{margin:.35rem 0 0;font-size:1.04rem;color:#2e3757}
   height:auto;
   display:block;
 }
-.hero-top-flourish path{
-  fill:none;
-  stroke:currentColor;
-  stroke-linecap:round;
-  stroke-linejoin:round;
-}
-.hero-top-flourish path:first-child{stroke-width:1.2}
-.hero-top-flourish path:nth-child(2){stroke-width:.9;opacity:.72}
-.hero-top-flourish circle{fill:currentColor;opacity:.8}
 .hero-logo-wrap{
   width:min(500px,94vw);
   margin:0 auto .95rem;
@@ -224,18 +224,6 @@ p{margin:.35rem 0 0;font-size:1.04rem;color:#2e3757}
   width:100%;
   height:auto;
   display:block;
-}
-.heading-flourish path{
-  fill:none;
-  stroke:currentColor;
-  stroke-linejoin:round;
-  stroke-linecap:round;
-}
-.heading-flourish path:first-child{stroke-width:1.05}
-.heading-flourish path:nth-child(2){stroke-width:.85;opacity:.72}
-.heading-flourish circle{
-  fill:currentColor;
-  opacity:.8;
 }
 
 .split{display:grid;gap:2rem;grid-template-columns:1fr}
