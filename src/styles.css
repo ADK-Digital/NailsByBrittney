@@ -342,3 +342,13 @@ textarea{min-height:120px}
 
 .reorder-buttons{display:flex;gap:.4rem;margin-bottom:.4rem}
 .reorder-buttons button{border:1px solid var(--border);background:#f1eaf5;border-radius:6px;padding:.2rem .5rem}
+
+.booking-grid { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+.service-check { display:block; margin:.35rem 0; }
+.date-list { display:flex; flex-wrap:wrap; gap:.5rem; margin:.5rem 0 1rem; }
+.date-pill,.time-pill { border:1px solid #d0c0c7; background:white; padding:.4rem .7rem; border-radius:999px; }
+.date-pill.unavailable { opacity:.45; }
+.date-pill.available { border-color:#9a6f82; }
+.selected { background:#9a6f82; color:#fff; }
+.booking-form { margin-top:1rem; }
+@media (max-width: 900px){ .booking-grid { grid-template-columns:1fr; } }

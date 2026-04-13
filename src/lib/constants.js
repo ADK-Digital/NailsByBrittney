@@ -11,19 +11,27 @@ export const SAMPLE_TESTIMONIALS = [
   { id: 'sample-3', customer: 'Alyssa T.', quote: 'Absolutely love the detail work and care. Booking is easy and service is always amazing.' },
 ];
 
-export const SAMPLE_SERVICES = [
-  { name: 'No Polish Manicure', description: 'Indulge in a natural and clean manicure without the polish—perfect for a minimalist look with a touch of pampering! Includes nail shaping, detailed cuticule work, buffed to a shine, followed by a massage and finished with cuticle oil (optional).', price_text: '$30', duration: '30 min' },
-  { name: 'Manicure with Gel Polish', description: 'Experience a luxurious manicure with gel polish, keeping your nails looking vibrant and flawless for weeks to come! Includes nail shaping, cuticle work, gel polish color of your choice, followed by a massage and finished with cuticle oil (optional).', price_text: '$35', duration: '45 min' },
-  { name: 'Gel X', description: 'Indulge in durable and trendy Gel X extensions for a natural and chic look! Includes basic manicure.', price_text: '$50', duration: '75 min' },
-  { name: 'Structured (soft) Gel Overlay', description: 'Enhance your natural nails with a durable and protective gel overlay for a flawless finish that lasts! Includes basic manicure.', price_text: '$50', duration: '75 min' },
-  { name: 'Rebalance/Fill', description: 'Includes basic manicure.', price_text: '$45', duration: '75 min' },
-  { name: 'Pedicure without Polish', description: "Indulge in a relaxing pedicure treatment focusing on your feet's health and appearance, without the need for polish, leaving your toes feeling refreshed and rejuvenated. Includes nail shaping, cuticle work, massage, sugar scrub and hot towel.", price_text: '$35', duration: '35 min' },
-  { name: 'Pedicure with Gel Polish', description: 'Indulge in a relaxing pedicure while enjoying chip-resistant gel polish that keeps your toes looking fabulous for weeks! Includes nail shaping, cuticle work, massage, sugar scrub and hot towel.', price_text: '$40', duration: '45 min' },
-  { name: 'French Tip Design', description: 'Elevate your look with French tip nail designs—classic yet stylish for any occasion!', price_text: '$5', duration: '10 min' },
-  { name: 'Minimal Nail Design', description: 'Includes dotting, basic flowers, line work, etc.', price_text: '$8', duration: '15 min' },
-  { name: 'Full Design', description: 'Intricate line work, gems/crystals/decals, chrome, 3D work.', price_text: '$10+', duration: '25 min' },
-  { name: 'Soak Off/File Off', description: 'Effortlessly remove old gel with a gentle soak off/file off service, ensuring a clean and healthy nail bed for your next manicure!', price_text: '$8', duration: '30 min' },
-].map((service, idx) => ({ ...service, id: `sample-service-${idx + 1}`, display_order: idx + 1 }));
+const baseServices = [
+  { name: 'No Polish Manicure', description: 'Natural manicure without polish.', price_text: '$30', price_min_numeric: 30, duration_minutes: 30, is_variable_price: false },
+  { name: 'Manicure with Gel Polish', description: 'Luxury manicure with gel polish.', price_text: '$35', price_min_numeric: 35, duration_minutes: 45, is_variable_price: false },
+  { name: 'Gel X', description: 'Durable Gel X extensions.', price_text: '$50', price_min_numeric: 50, duration_minutes: 75, is_variable_price: false },
+  { name: 'Structured (soft) Gel Overlay', description: 'Protective gel overlay.', price_text: '$50', price_min_numeric: 50, duration_minutes: 75, is_variable_price: false },
+  { name: 'Rebalance/Fill', description: 'Includes basic manicure.', price_text: '$45', price_min_numeric: 45, duration_minutes: 75, is_variable_price: false },
+  { name: 'Pedicure without Polish', description: 'Relaxing pedicure without polish.', price_text: '$35', price_min_numeric: 35, duration_minutes: 35, is_variable_price: false },
+  { name: 'Pedicure with Gel Polish', description: 'Pedicure with chip-resistant gel polish.', price_text: '$40', price_min_numeric: 40, duration_minutes: 45, is_variable_price: false },
+  { name: 'French Tip Design', description: 'Classic French tip add-on.', price_text: '$5', price_min_numeric: 5, duration_minutes: 10, is_variable_price: false },
+  { name: 'Minimal Nail Design', description: 'Dotting, flowers, line work.', price_text: '$8', price_min_numeric: 8, duration_minutes: 15, is_variable_price: false },
+  { name: 'Full Design', description: 'Intricate line work, gems, 3D work.', price_text: '$10+', price_min_numeric: 10, duration_minutes: 25, is_variable_price: true },
+  { name: 'Soak Off/File Off', description: 'Gentle gel removal service.', price_text: '$8', price_min_numeric: 8, duration_minutes: 30, is_variable_price: false },
+];
+
+export const SAMPLE_SERVICES = baseServices.map((service, idx) => ({
+  ...service,
+  id: `sample-service-${idx + 1}`,
+  duration: `${service.duration_minutes} min`,
+  active: true,
+  display_order: idx + 1,
+}));
 
 export const SAMPLE_GALLERY = Array.from({ length: 6 }).map((_, idx) => ({
   id: `sample-gallery-${idx + 1}`,
