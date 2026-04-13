@@ -28,17 +28,48 @@ function usePrefersReducedMotion() {
 
 const NailIcon = () => <svg aria-hidden="true" viewBox="0 0 24 24" className="nail-icon"><path d="M7 4.5c2.1-.4 4.4-.4 6.6 0 1 .2 1.7 1.1 1.6 2.1l-.8 8.8c-.2 2-1.9 3.6-4 3.6s-3.8-1.6-4-3.6l-.8-8.8c-.1-1 .6-1.9 1.4-2.1zM9 8h6" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>;
 
+function Divider({ variant = 'section' }) {
+  if (variant === 'heading') {
+    return (
+      <span className="heading-flourish" aria-hidden="true">
+        <svg viewBox="0 0 320 24" role="presentation" focusable="false">
+          <path d="M14 12c16 0 18-7 30-7 15 0 16 14 30 14h63c15 0 18-13 34-13 14 0 17 10 30 10h58c13 0 16-10 30-10 16 0 19 13 34 13h8" />
+          <path d="M116 12c10 0 14-4 19-8M204 12c-10 0-14-4-19-8" />
+          <circle cx="160" cy="12" r="2.2" />
+        </svg>
+      </span>
+    );
+  }
+
+  if (variant === 'hero') {
+    return (
+      <span className="hero-top-flourish" aria-hidden="true">
+        <svg viewBox="0 0 320 32" role="presentation" focusable="false">
+          <path d="M12 16c22 0 25-8 42-8 17 0 20 10 37 10h53c17 0 20-12 36-12 16 0 19 12 36 12h53c17 0 20-10 37-10 17 0 20 8 42 8" />
+          <path d="M119 16c11 0 14-5 20-10M201 16c-11 0-14-5-20-10" />
+          <circle cx="160" cy="16" r="2.2" />
+        </svg>
+      </span>
+    );
+  }
+
+  return (
+    <div className="section-separator" aria-hidden="true">
+      <svg viewBox="0 0 720 84" role="presentation" focusable="false">
+        <path d="M18 42c38 0 44-16 70-16 28 0 33 20 58 20h128c26 0 31-24 55-24 20 0 24 14 44 14h-26c20 0 24-14 44-14 24 0 29 24 55 24h128c25 0 30-20 58-20 26 0 32 16 70 16" />
+        <path d="M152 42c15 0 22-9 36-19M568 42c-15 0-22-9-36-19" />
+        <circle cx="360" cy="42" r="3" />
+      </svg>
+    </div>
+  );
+}
+
 function SectionHeading({ title, eyebrow }) {
   return (
     <div className="section-heading">
       {eyebrow && <p className="eyebrow">{eyebrow}</p>}
       <h2>{title}</h2>
-      <span className="heading-flourish" aria-hidden="true">
-        <svg viewBox="0 0 320 24" role="presentation" focusable="false">
-          <path d="M6 12c10 0 14-8 22-8 11 0 10 16 24 16 9 0 15-7 22-7 12 0 13 10 25 10h122c12 0 13-10 25-10 7 0 13 7 22 7 14 0 13-16 24-16 8 0 12 8 22 8" />
-          <circle cx="160" cy="12" r="2" />
-        </svg>
-      </span>
+      <Divider variant="heading" />
     </div>
   );
 }
@@ -116,7 +147,7 @@ export default function App() {
       <main>
         <section id="home" className="section hero">
           <div className="container hero-inner">
-            <span className="hero-top-flourish" aria-hidden="true" />
+            <Divider variant="hero" />
             <div className="hero-logo-wrap">
               <img src={logo} className="hero-logo" alt="Nails by Brittney logo" />
             </div>
@@ -130,13 +161,7 @@ export default function App() {
             </div>
           </div>
         </section>
-        <div className="section-separator" aria-hidden="true">
-          <svg viewBox="0 0 720 84" role="presentation" focusable="false">
-            <path d="M20 42c42 0 48-23 82-23 41 0 42 46 86 46 30 0 41-21 66-21 40 0 45 32 82 32h48c37 0 42-32 82-32 25 0 36 21 66 21 44 0 45-46 86-46 34 0 40 23 82 23" />
-            <path d="M142 42h436" />
-            <circle cx="360" cy="42" r="3" />
-          </svg>
-        </div>
+        <Divider />
 
         <section id="about" className="section about-section">
           <div className="container split">
@@ -147,13 +172,7 @@ export default function App() {
             </div>
           </div>
         </section>
-        <div className="section-separator" aria-hidden="true">
-          <svg viewBox="0 0 720 84" role="presentation" focusable="false">
-            <path d="M20 42c42 0 48-23 82-23 41 0 42 46 86 46 30 0 41-21 66-21 40 0 45 32 82 32h48c37 0 42-32 82-32 25 0 36 21 66 21 44 0 45-46 86-46 34 0 40 23 82 23" />
-            <path d="M142 42h436" />
-            <circle cx="360" cy="42" r="3" />
-          </svg>
-        </div>
+        <Divider />
 
         <section id="examples" className="section alt examples-section">
           <div className="container">
@@ -172,13 +191,7 @@ export default function App() {
             {!hasImages && <p className="muted">Sample gallery records are ready; upload images in Admin to display them.</p>}
           </div>
         </section>
-        <div className="section-separator" aria-hidden="true">
-          <svg viewBox="0 0 720 84" role="presentation" focusable="false">
-            <path d="M20 42c42 0 48-23 82-23 41 0 42 46 86 46 30 0 41-21 66-21 40 0 45 32 82 32h48c37 0 42-32 82-32 25 0 36 21 66 21 44 0 45-46 86-46 34 0 40 23 82 23" />
-            <path d="M142 42h436" />
-            <circle cx="360" cy="42" r="3" />
-          </svg>
-        </div>
+        <Divider />
 
         <section id="services" className="section services-section">
           <div className="container">
@@ -195,13 +208,7 @@ export default function App() {
             </div>
           </div>
         </section>
-        <div className="section-separator" aria-hidden="true">
-          <svg viewBox="0 0 720 84" role="presentation" focusable="false">
-            <path d="M20 42c42 0 48-23 82-23 41 0 42 46 86 46 30 0 41-21 66-21 40 0 45 32 82 32h48c37 0 42-32 82-32 25 0 36 21 66 21 44 0 45-46 86-46 34 0 40 23 82 23" />
-            <path d="M142 42h436" />
-            <circle cx="360" cy="42" r="3" />
-          </svg>
-        </div>
+        <Divider />
 
         <section id="contact" className="section alt contact-section">
           <div className="container">
@@ -240,13 +247,7 @@ export default function App() {
             </form>
           </div>
         </section>
-        <div className="section-separator" aria-hidden="true">
-          <svg viewBox="0 0 720 84" role="presentation" focusable="false">
-            <path d="M20 42c42 0 48-23 82-23 41 0 42 46 86 46 30 0 41-21 66-21 40 0 45 32 82 32h48c37 0 42-32 82-32 25 0 36 21 66 21 44 0 45-46 86-46 34 0 40 23 82 23" />
-            <path d="M142 42h436" />
-            <circle cx="360" cy="42" r="3" />
-          </svg>
-        </div>
+        <Divider />
 
         <section id="location" className="section location-section">
           <div className="container split">
