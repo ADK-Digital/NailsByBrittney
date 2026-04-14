@@ -8,6 +8,37 @@ import logo from '../Images/logo.png';
 
 const navItems = [['home', 'Home'], ['about', 'About'], ['examples', 'Examples'], ['services', 'Services'], ['booking', 'Booking'], ['contact', 'Contact'], ['location', 'Location']];
 
+function Divider() {
+  return <div className="section-separator" aria-hidden="true">
+    <svg viewBox="0 0 600 80" role="presentation" focusable="false" className="flourish-svg">
+      <path className="flourish-line" d="M12 40H204" />
+      <path
+        className="flourish-main"
+        d="M300 40C286 40 279 29 270 22C260 14 246 14 236 22C227 30 227 43 236 51C246 59 260 59 270 51C279 44 286 40 300 40C282 40 268 52 252 60C236 68 216 66 205 53C194 40 196 21 210 12C224 3 245 6 259 16C273 26 285 40 300 40"
+      />
+      <path
+        className="flourish-detail"
+        d="M300 40C289 40 283 34 277 29C271 24 263 24 258 30C253 35 253 44 258 49C263 55 271 55 277 50C283 45 289 40 300 40"
+      />
+      <path className="flourish-cap" d="M20 40L16 36L12 40L16 44Z" />
+      <g transform="translate(600 0) scale(-1 1)">
+        <path className="flourish-line" d="M12 40H204" />
+        <path
+          className="flourish-main"
+          d="M300 40C286 40 279 29 270 22C260 14 246 14 236 22C227 30 227 43 236 51C246 59 260 59 270 51C279 44 286 40 300 40C282 40 268 52 252 60C236 68 216 66 205 53C194 40 196 21 210 12C224 3 245 6 259 16C273 26 285 40 300 40"
+        />
+        <path
+          className="flourish-detail"
+          d="M300 40C289 40 283 34 277 29C271 24 263 24 258 30C253 35 253 44 258 49C263 55 271 55 277 50C283 45 289 40 300 40"
+        />
+        <path className="flourish-cap" d="M20 40L16 36L12 40L16 44Z" />
+      </g>
+      <path className="flourish-center" d="M300 33L307 40L300 47L293 40Z" />
+      <circle className="flourish-center-dot" cx="300" cy="40" r="1.7" />
+    </svg>
+  </div>;
+}
+
 function SectionHeading({ title, eyebrow }) { return <div className="section-heading">{eyebrow && <p className="eyebrow">{eyebrow}</p>}<h2>{title}</h2></div>; }
 
 function usePrefersReducedMotion() {
@@ -147,11 +178,17 @@ export default function App() {
     <header className="sticky-nav"><div className="container nav-inner"><a href="#home" className="brand-mini">Nails by Brittney</a><button className="menu-toggle" aria-expanded={menuOpen} onClick={() => setMenuOpen((o) => !o)}>Menu</button><nav className={`nav-links ${menuOpen ? 'open' : ''}`}>{navItems.map(([id, label]) => <a key={id} href={`#${id}`} onClick={() => setMenuOpen(false)}>{label}</a>)}<Link to="/admin">Admin</Link></nav></div></header>
     <main>
       <section id="home" className="section hero"><div className="container hero-inner"><img src={logo} className="hero-logo" alt="Nails by Brittney logo" /><h1>Nails by Brittney</h1><p className="subtitle">Certified Nail Technician</p><div className="cta-row"><a href="#booking" className="btn primary">Book Appointment</a><a href={`tel:${PHONE_LINK}`} className="btn">Call to Book</a><a href={INSTAGRAM_URL} target="_blank" rel="noreferrer" className="btn ghost">Instagram</a></div></div></section>
+      <Divider />
       <section id="about" className="section about-section"><div className="container split"><div className="headshot-placeholder">Headshot Placeholder</div><div><SectionHeading title="Brittney Prosser, Certified Nail Technician" eyebrow="About" /><p>{SAMPLE_BIO}</p></div></div></section>
+      <Divider />
       <section id="examples" className="section alt"><div className="container"><SectionHeading title="Examples" eyebrow="Portfolio" /><h3>Testimonials</h3>{testimonials.map((item) => <blockquote key={item.id}>"{item.quote}" <span>- {item.customer}</span></blockquote>)}<h3>Gallery</h3><GalleryCarousel items={gallery} />{!hasImages && <p className="muted">Upload images in admin.</p>}</div></section>
+      <Divider />
       <section id="services" className="section"><div className="container"><SectionHeading title="Services and Pricing" eyebrow="Signature Menu" /><div className="service-grid">{services.map((service) => <article key={service.id} className="card"><h3>{service.name}</h3><p className="meta">{service.price_text} • {service.duration || `${service.duration_minutes} min`}</p><p>{service.description}</p></article>)}</div></div></section>
+      <Divider />
       <BookingSection services={services} />
+      <Divider />
       <section id="contact" className="section alt"><div className="container"><SectionHeading title="Contact" eyebrow="Get in Touch" /><p className="contact-blurb"><strong>Nails by Brittney: {PHONE_DISPLAY} (call or text)</strong><br />{EMAIL}</p><div className="cta-row"><a href="#booking" className="btn primary">Open Scheduler</a><a href={`sms:${PHONE_LINK}`} className="btn">Text</a><a href={INSTAGRAM_URL} target="_blank" rel="noreferrer" className="btn ghost">Instagram</a></div></div></section>
+      <Divider />
       <section id="location" className="section"><div className="container split"><div><SectionHeading title="Location" eyebrow="Visit" /><p>Brittney Prosser at "Bronzed and Polished"<br />139 Eastview Dr<br />Emerald Isle NC 28594<br />{PHONE_DISPLAY}<br />{EMAIL}</p></div><div className="map-shell"><iframe title="Map" className="map" loading="lazy" src="https://www.google.com/maps?q=139%20Eastview%20Dr%2C%20Emerald%20Isle%20NC%2028594&output=embed" /></div></div></section>
     </main>
   </>;
