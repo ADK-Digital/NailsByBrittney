@@ -81,7 +81,9 @@ function GalleryCarousel({ items, interval = 6000 }) {
     <div className="carousel-content">
       {src ? (
         <button type="button" className="gallery-slide">
-          <img src={src} loading="lazy" alt={item.caption || 'Nail service example'} />
+          <span className="gallery-media">
+            <img src={src} loading="lazy" alt={item.caption || 'Nail service example'} />
+          </span>
         </button>
       ) : <div className="missing-image">Add image in admin</div>}
     </div>

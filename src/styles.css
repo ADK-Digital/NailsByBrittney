@@ -275,18 +275,27 @@ blockquote span{display:block;margin-top:.9rem;font-size:.84rem;letter-spacing:.
   display:grid;
   place-items:center;
 }
-.gallery-slide::after{
+.gallery-media{
+  position:relative;
+  display:inline-flex;
+  max-width:100%;
+  max-height:min(80vh,700px);
+  border-radius:18px;
+  overflow:hidden;
+}
+.gallery-media::after{
   content:'';
   position:absolute;
   inset:0;
   pointer-events:none;
   background:
-    linear-gradient(to right, #f6f2fa 0%, rgba(246,242,250,0) 13%, rgba(246,242,250,0) 87%, #f6f2fa 100%),
+    linear-gradient(to right, #f6f2fa 0%, rgba(246,242,250,0) 12%, rgba(246,242,250,0) 88%, #f6f2fa 100%),
     linear-gradient(to bottom, #f6f2fa 0%, rgba(246,242,250,0) 12%, rgba(246,242,250,0) 88%, #f6f2fa 100%);
 }
 .gallery-slide img{
   display:block;
-  width:100%;
+  width:auto;
+  max-width:100%;
   height:auto;
   max-height:min(80vh,700px);
   object-fit:contain;
