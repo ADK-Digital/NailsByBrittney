@@ -8,8 +8,8 @@
   --accent-soft:#aa95b0;
   --blush:#cfbeca;
   --card:#f7f3f8;
-  --gallery-matte:#f1ecf8;
-  --gallery-matte-edge:#ece3f5;
+  --gallery-matte:var(--bg);
+  --gallery-matte-edge:var(--bg-alt);
   --border:rgba(26,47,95,.2);
   --shadow:0 18px 34px rgba(17,32,69,.1);
 }
