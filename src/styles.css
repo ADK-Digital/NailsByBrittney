@@ -264,7 +264,17 @@ blockquote span{display:block;margin-top:.9rem;font-size:.84rem;letter-spacing:.
   font-size:1.45rem;
 }
 .gallery-slide{border:none;background:transparent;width:100%;cursor:pointer;padding:0}
-.gallery-slide img{width:100%;max-height:430px;object-fit:cover;border-radius:18px;border:1px solid var(--border);box-shadow:var(--shadow)}
+.gallery-slide img{
+  display:block;
+  width:100%;
+  height:auto;
+  max-height:min(80vh,700px);
+  object-fit:contain;
+  object-position:center;
+  border-radius:18px;
+  border:1px solid var(--border);
+  box-shadow:var(--shadow)
+}
 
 .missing-image{width:100%;min-height:260px;border-radius:12px;border:1px dashed #b9abc0;display:grid;place-items:center;background:#f2ecf7;color:#5f4f6e}
 
