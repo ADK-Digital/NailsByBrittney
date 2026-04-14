@@ -1,6 +1,6 @@
 # Nails by Brittney Website
 
-Public marketing site + full booking and admin management with Supabase + Netlify Functions + Twilio + Postmark.
+Public marketing site + full booking and admin management with Supabase + Netlify Functions + Twilio + Resend.
 
 ## What was added
 - Real public scheduler (service bundle selection, availability calendar, time slots, pending request submission).
@@ -8,7 +8,7 @@ Public marketing site + full booking and admin management with Supabase + Netlif
 - Appointment lifecycle (pending, confirmed, declined, expired, cancelled, completed, no_show).
 - Admin appointment/customer/blocked-time management.
 - Twilio outbound/inbound SMS flow for Brittney confirmation by reply (`yes #` / `no #`).
-- Postmark transactional emails for confirmed/declined/expired.
+- Resend transactional emails for confirmed/declined/expired.
 - Scheduled expiration cleanup (every 15 minutes).
 
 ## Environment variables
@@ -22,8 +22,7 @@ Required:
 - `TWILIO_AUTH_TOKEN`
 - `TWILIO_PHONE_NUMBER`
 - `BRITTNEY_NOTIFICATION_PHONE`
-- `POSTMARK_API_KEY`
-- `POSTMARK_FROM_EMAIL`
+- `RESEND_API_KEY`
 - `BOOKING_PUBLIC_BASE_URL`
 - `VITE_SUPABASE_GALLERY_BUCKET` (default `gallery`)
 
@@ -39,9 +38,9 @@ Required:
    `https://<your-site>/.netlify/functions/twilio-inbound`
 3. Add env vars listed above.
 
-## Postmark setup
-1. Create server token and verified sender.
-2. Add `POSTMARK_API_KEY` and `POSTMARK_FROM_EMAIL`.
+## Resend setup
+1. Create an API key and verified sender/domain in Resend.
+2. Add `RESEND_API_KEY` (and optional `RESEND_FROM_EMAIL`).
 
 ## Local dev
 ```bash
