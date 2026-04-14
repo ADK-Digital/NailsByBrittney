@@ -1,6 +1,5 @@
 const twilioFrom = process.env.TWILIO_PHONE_NUMBER;
 const notifyPhone = process.env.BRITTNEY_NOTIFICATION_PHONE;
-const emailFrom = process.env.POSTMARK_FROM_EMAIL || 'bookings@nailsbybrittney.com';
 
 function authHeader(user, pass) {
   return `Basic ${Buffer.from(`${user}:${pass}`).toString('base64')}`;
@@ -21,17 +20,4 @@ export async function sendSms(to, body) {
 
 export async function notifyBrittney(body) {
   await sendSms(notifyPhone, body);
-}
-
-export async function sendEmail(to, subject, textBody) {
-  if (!process.env.POSTMARK_API_KEY || !to) return;
-  await fetch('https://api.postmarkapp.com/email', {
-    method: 'POST',
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-      'X-Postmark-Server-Token': process.env.POSTMARK_API_KEY,
-    },
-    body: JSON.stringify({ From: emailFrom, To: to, Subject: subject, TextBody: textBody }),
-  });
 }
