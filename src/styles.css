@@ -252,8 +252,9 @@ p{margin:.35rem 0 0;font-size:1.04rem;color:#2e3757}
   position:relative;
 }
 .carousel-content::before{content:'';position:absolute;inset:9px;border:1px solid rgba(26,47,95,.11);border-radius:18px;pointer-events:none}
-blockquote{margin:0;font-size:1.15rem;font-family:'Cormorant Garamond',serif;color:var(--heading);text-align:center;max-width:58ch;font-style:italic;line-height:1.45}
+blockquote{margin:0 auto 1.2rem;font-size:1.15rem;font-family:'Cormorant Garamond',serif;color:var(--heading);text-align:center;max-width:58ch;font-style:italic;line-height:1.45}
 blockquote span{display:block;margin-top:.9rem;font-size:.84rem;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-style:normal}
+blockquote:last-of-type{margin-bottom:0}
 
 .carousel-control{
   border:1px solid rgba(26,47,95,.28);
