@@ -10,6 +10,54 @@ const navItems = [['home', 'Home'], ['about', 'About'], ['examples', 'Examples']
 
 function SectionHeading({ title, eyebrow }) { return <div className="section-heading">{eyebrow && <p className="eyebrow">{eyebrow}</p>}<h2>{title}</h2></div>; }
 
+function usePrefersReducedMotion() {
+  const [reduced, setReduced] = useState(false);
+
+  useEffect(() => {
+    const media = window.matchMedia('(prefers-reduced-motion: reduce)');
+    setReduced(media.matches);
+    const update = () => setReduced(media.matches);
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
+
+  return reduced;
+}
+
+function GalleryCarousel({ items, interval = 6000 }) {
+  const reducedMotion = usePrefersReducedMotion();
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    if (reducedMotion || items.length <= 1) return undefined;
+    const id = setInterval(() => setIndex((curr) => (curr + 1) % items.length), interval);
+    return () => clearInterval(id);
+  }, [items.length, interval, reducedMotion]);
+
+  useEffect(() => {
+    if (index > items.length - 1) setIndex(0);
+  }, [items.length, index]);
+
+  const go = (delta) => setIndex((curr) => (curr + delta + items.length) % items.length);
+
+  if (!items.length) return null;
+
+  const item = items[index];
+  const src = item.imageUrl || item.local_path;
+
+  return <div className="carousel">
+    <button type="button" className="carousel-control" aria-label="Previous image" onClick={() => go(-1)}>‹</button>
+    <div className="carousel-content">
+      {src ? (
+        <button type="button" className="gallery-slide">
+          <img src={src} loading="lazy" alt={item.caption || 'Nail service example'} />
+        </button>
+      ) : <div className="missing-image">Add image in admin</div>}
+    </div>
+    <button type="button" className="carousel-control" aria-label="Next image" onClick={() => go(1)}>›</button>
+  </div>;
+}
+
 function BookingSection({ services }) {
   const [selectedServices, setSelectedServices] = useState([]);
   const [availability, setAvailability] = useState([]);
@@ -100,7 +148,7 @@ export default function App() {
     <main>
       <section id="home" className="section hero"><div className="container hero-inner"><img src={logo} className="hero-logo" alt="Nails by Brittney logo" /><h1>Nails by Brittney</h1><p className="subtitle">Certified Nail Technician</p><div className="cta-row"><a href="#booking" className="btn primary">Book Appointment</a><a href={`tel:${PHONE_LINK}`} className="btn">Call to Book</a><a href={INSTAGRAM_URL} target="_blank" rel="noreferrer" className="btn ghost">Instagram</a></div></div></section>
       <section id="about" className="section about-section"><div className="container split"><div className="headshot-placeholder">Headshot Placeholder</div><div><SectionHeading title="Brittney Prosser, Certified Nail Technician" eyebrow="About" /><p>{SAMPLE_BIO}</p></div></div></section>
-      <section id="examples" className="section alt"><div className="container"><SectionHeading title="Examples" eyebrow="Portfolio" /><h3>Testimonials</h3>{testimonials.map((item) => <blockquote key={item.id}>"{item.quote}" <span>- {item.customer}</span></blockquote>)}<h3>Gallery</h3><div className="service-grid">{gallery.map((item) => <img key={item.id} src={item.imageUrl || item.local_path} alt="Nails" />)}</div>{!hasImages && <p className="muted">Upload images in admin.</p>}</div></section>
+      <section id="examples" className="section alt"><div className="container"><SectionHeading title="Examples" eyebrow="Portfolio" /><h3>Testimonials</h3>{testimonials.map((item) => <blockquote key={item.id}>"{item.quote}" <span>- {item.customer}</span></blockquote>)}<h3>Gallery</h3><GalleryCarousel items={gallery} />{!hasImages && <p className="muted">Upload images in admin.</p>}</div></section>
       <section id="services" className="section"><div className="container"><SectionHeading title="Services and Pricing" eyebrow="Signature Menu" /><div className="service-grid">{services.map((service) => <article key={service.id} className="card"><h3>{service.name}</h3><p className="meta">{service.price_text} • {service.duration || `${service.duration_minutes} min`}</p><p>{service.description}</p></article>)}</div></div></section>
       <BookingSection services={services} />
       <section id="contact" className="section alt"><div className="container"><SectionHeading title="Contact" eyebrow="Get in Touch" /><p className="contact-blurb"><strong>Nails by Brittney: {PHONE_DISPLAY} (call or text)</strong><br />{EMAIL}</p><div className="cta-row"><a href="#booking" className="btn primary">Open Scheduler</a><a href={`sms:${PHONE_LINK}`} className="btn">Text</a><a href={INSTAGRAM_URL} target="_blank" rel="noreferrer" className="btn ghost">Instagram</a></div></div></section>
