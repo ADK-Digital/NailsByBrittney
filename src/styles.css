@@ -252,8 +252,9 @@ p{margin:.35rem 0 0;font-size:1.04rem;color:#2e3757}
   position:relative;
 }
 .carousel-content::before{content:'';position:absolute;inset:9px;border:1px solid rgba(26,47,95,.11);border-radius:18px;pointer-events:none}
-blockquote{margin:0;font-size:1.15rem;font-family:'Cormorant Garamond',serif;color:var(--heading);text-align:center;max-width:58ch;font-style:italic;line-height:1.45}
+blockquote{margin:0 auto 1.2rem;font-size:1.15rem;font-family:'Cormorant Garamond',serif;color:var(--heading);text-align:center;max-width:58ch;font-style:italic;line-height:1.45}
 blockquote span{display:block;margin-top:.9rem;font-size:.84rem;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-style:normal}
+blockquote:last-of-type{margin-bottom:0}
 
 .carousel-control{
   border:1px solid rgba(26,47,95,.28);
@@ -312,7 +313,7 @@ blockquote span{display:block;margin-top:.9rem;font-size:.84rem;letter-spacing:.
 
 .missing-image{width:100%;min-height:260px;border-radius:12px;border:1px dashed #b9abc0;display:grid;place-items:center;background:#f2ecf7;color:#5f4f6e}
 
-.service-grid{display:grid;gap:1.1rem;grid-template-columns:repeat(auto-fit,minmax(245px,1fr))}
+.service-grid{display:grid;gap:1.1rem;grid-template-columns:repeat(4,minmax(0,1fr))}
 .card{
   background:linear-gradient(180deg, rgba(252,250,254,.95), rgba(239,232,244,.88));
   border:1px solid var(--border);
@@ -372,6 +373,46 @@ textarea{min-height:120px}
 .danger{background:#ab1f35;color:white;border:none;padding:.5rem .7rem;border-radius:8px}
 .muted{color:#5c5268}
 
+
+
+/* Section alignment updates */
+#examples .container,
+#services .container,
+#booking .container,
+#contact .container {
+  text-align: center;
+}
+
+#examples h3,
+#services h3,
+#booking h3 {
+  text-align: center;
+}
+
+#booking .booking-grid,
+#booking .booking-form,
+#contact .contact-blurb {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+#booking .service-check {
+  text-align: left;
+}
+
+#booking .date-list {
+  justify-content: center;
+}
+
+#booking .booking-form {
+  text-align: left;
+}
+
+#booking .booking-form h3,
+#booking .booking-form .muted {
+  text-align: center;
+}
+
 @media (max-width:820px){
   body::before,body::after{inset:5px}
   .section{padding:4.2rem 0}
@@ -396,3 +437,5 @@ textarea{min-height:120px}
 .selected { background:#9a6f82; color:#fff; }
 .booking-form { margin-top:1rem; }
 @media (max-width: 900px){ .booking-grid { grid-template-columns:1fr; } }
+@media (max-width: 1100px){ .service-grid { grid-template-columns:repeat(3,minmax(0,1fr)); } }
+@media (max-width: 680px){ .service-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
