@@ -273,16 +273,16 @@ alter table blocked_times enable row level security;
 alter table appointments enable row level security;
 alter table appointment_services enable row level security;
 
-create policy if not exists "public read services" on services for select using (true);
-create policy if not exists "public read testimonials" on testimonials for select using (true);
-create policy if not exists "public read gallery" on gallery_items for select using (true);
+create policy "public read services" on services for select using (true);
+create policy "public read testimonials" on testimonials for select using (true);
+create policy "public read gallery" on gallery_items for select using (true);
 
-create policy if not exists "auth manage services" on services for all to authenticated using (true) with check (true);
-create policy if not exists "auth manage testimonials" on testimonials for all to authenticated using (true) with check (true);
-create policy if not exists "auth manage gallery" on gallery_items for all to authenticated using (true) with check (true);
-create policy if not exists "auth manage booking tables" on customers for all to authenticated using (true) with check (true);
-create policy if not exists "auth manage notes" on customer_notes for all to authenticated using (true) with check (true);
-create policy if not exists "auth manage business hours" on business_hours for all to authenticated using (true) with check (true);
-create policy if not exists "auth manage blocked times" on blocked_times for all to authenticated using (true) with check (true);
-create policy if not exists "auth manage appointments" on appointments for all to authenticated using (true) with check (true);
-create policy if not exists "auth manage appointment services" on appointment_services for all to authenticated using (true) with check (true);
+create policy "auth manage services" on services for all to authenticated using (true) with check (true);
+create policy "auth manage testimonials" on testimonials for all to authenticated using (true) with check (true);
+create policy "auth manage gallery" on gallery_items for all to authenticated using (true) with check (true);
+create policy "auth manage booking tables" on customers for all to authenticated using (true) with check (true);
+create policy "auth manage notes" on customer_notes for all to authenticated using (true) with check (true);
+create policy "auth manage business hours" on business_hours for all to authenticated using (true) with check (true);
+create policy "auth manage blocked times" on blocked_times for all to authenticated using (true) with check (true);
+create policy "auth manage appointments" on appointments for all to authenticated using (true) with check (true);
+create policy "auth manage appointment services" on appointment_services for all to authenticated using (true) with check (true);
