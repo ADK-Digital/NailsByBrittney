@@ -304,8 +304,10 @@ blockquote span{display:block;margin-top:.9rem;font-size:.84rem;letter-spacing:.
   object-fit:contain;
   object-position:center;
   border-radius:18px;
-  border:1px solid rgba(189,176,208,.45);
-  box-shadow:0 10px 28px rgba(26,47,95,.13)
+  border:none;
+  box-shadow:0 10px 28px rgba(26,47,95,.11);
+  -webkit-mask-image:radial-gradient(ellipse 120% 115% at 50% 50%, #000 58%, rgba(0,0,0,.98) 66%, rgba(0,0,0,.8) 75%, rgba(0,0,0,.45) 85%, rgba(0,0,0,.16) 92%, transparent 100%);
+  mask-image:radial-gradient(ellipse 120% 115% at 50% 50%, #000 58%, rgba(0,0,0,.98) 66%, rgba(0,0,0,.8) 75%, rgba(0,0,0,.45) 85%, rgba(0,0,0,.16) 92%, transparent 100%);
 }
 
 .missing-image{width:100%;min-height:260px;border-radius:12px;border:1px dashed #b9abc0;display:grid;place-items:center;background:#f2ecf7;color:#5f4f6e}
