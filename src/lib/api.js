@@ -33,7 +33,11 @@ export async function fetchTestimonials() {
 export async function fetchGalleryItems() {
   if (!hasSupabaseConfig) return SAMPLE_GALLERY.map((i) => withLocalFallback({ ...i, imageUrl: null }));
   const { data, error } = await supabase.from('gallery_items').select('*').order('display_order', { ascending: true });
-  if (error || !data?.length) return SAMPLE_GALLERY.map((i) => withLocalFallback({ ...i, imageUrl: null }));
+  if (error) {
+    console.error('Failed to fetch gallery items from Supabase:', error);
+    return [];
+  }
+  if (!data?.length) return [];
   return mapGalleryWithUrls(data.filter((item) => !item.storage_key?.toLowerCase().includes('logo')));
 }
 
