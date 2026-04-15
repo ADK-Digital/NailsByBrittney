@@ -9,41 +9,13 @@ import logo from '../Images/logo.png';
 const navItems = [['home', 'Home'], ['about', 'About'], ['examples', 'Examples'], ['services', 'Services'], ['booking', 'Booking'], ['contact', 'Contact'], ['location', 'Location']];
 
 function Divider() {
-  return <div className="section-separator" aria-hidden="true">
-    <svg viewBox="0 0 600 80" role="presentation" focusable="false" className="flourish-svg">
-      <path className="flourish-line" d="M12 40H204" />
-      <path
-        className="flourish-main"
-        d="M300 40C286 40 279 29 270 22C260 14 246 14 236 22C227 30 227 43 236 51C246 59 260 59 270 51C279 44 286 40 300 40C282 40 268 52 252 60C236 68 216 66 205 53C194 40 196 21 210 12C224 3 245 6 259 16C273 26 285 40 300 40"
-      />
-      <path
-        className="flourish-detail"
-        d="M300 40C289 40 283 34 277 29C271 24 263 24 258 30C253 35 253 44 258 49C263 55 271 55 277 50C283 45 289 40 300 40"
-      />
-      <path className="flourish-cap" d="M20 40L16 36L12 40L16 44Z" />
-      <g transform="translate(600 0) scale(-1 1)">
-        <path className="flourish-line" d="M12 40H204" />
-        <path
-          className="flourish-main"
-          d="M300 40C286 40 279 29 270 22C260 14 246 14 236 22C227 30 227 43 236 51C246 59 260 59 270 51C279 44 286 40 300 40C282 40 268 52 252 60C236 68 216 66 205 53C194 40 196 21 210 12C224 3 245 6 259 16C273 26 285 40 300 40"
-        />
-        <path
-          className="flourish-detail"
-          d="M300 40C289 40 283 34 277 29C271 24 263 24 258 30C253 35 253 44 258 49C263 55 271 55 277 50C283 45 289 40 300 40"
-        />
-        <path className="flourish-cap" d="M20 40L16 36L12 40L16 44Z" />
-      </g>
-      <path className="flourish-center" d="M300 33L307 40L300 47L293 40Z" />
-      <circle className="flourish-center-dot" cx="300" cy="40" r="1.7" />
-    </svg>
-  </div>;
+  return <div className="section-separator" aria-hidden="true"><svg viewBox="0 0 600 80" role="presentation" focusable="false" className="flourish-svg"><path className="flourish-line" d="M12 40H204" /><path className="flourish-main" d="M300 40C286 40 279 29 270 22C260 14 246 14 236 22C227 30 227 43 236 51C246 59 260 59 270 51C279 44 286 40 300 40C282 40 268 52 252 60C236 68 216 66 205 53C194 40 196 21 210 12C224 3 245 6 259 16C273 26 285 40 300 40" /><path className="flourish-detail" d="M300 40C289 40 283 34 277 29C271 24 263 24 258 30C253 35 253 44 258 49C263 55 271 55 277 50C283 45 289 40 300 40" /><path className="flourish-cap" d="M20 40L16 36L12 40L16 44Z" /><g transform="translate(600 0) scale(-1 1)"><path className="flourish-line" d="M12 40H204" /><path className="flourish-main" d="M300 40C286 40 279 29 270 22C260 14 246 14 236 22C227 30 227 43 236 51C246 59 260 59 270 51C279 44 286 40 300 40C282 40 268 52 252 60C236 68 216 66 205 53C194 40 196 21 210 12C224 3 245 6 259 16C273 26 285 40 300 40" /><path className="flourish-detail" d="M300 40C289 40 283 34 277 29C271 24 263 24 258 30C253 35 253 44 258 49C263 55 271 55 277 50C283 45 289 40 300 40" /><path className="flourish-cap" d="M20 40L16 36L12 40L16 44Z" /></g><path className="flourish-center" d="M300 33L307 40L300 47L293 40Z" /><circle className="flourish-center-dot" cx="300" cy="40" r="1.7" /></svg></div>;
 }
 
 function SectionHeading({ title, eyebrow }) { return <div className="section-heading">{eyebrow && <p className="eyebrow">{eyebrow}</p>}<h2>{title}</h2></div>; }
 
 function usePrefersReducedMotion() {
   const [reduced, setReduced] = useState(false);
-
   useEffect(() => {
     const media = window.matchMedia('(prefers-reduced-motion: reduce)');
     setReduced(media.matches);
@@ -51,7 +23,6 @@ function usePrefersReducedMotion() {
     media.addEventListener('change', update);
     return () => media.removeEventListener('change', update);
   }, []);
-
   return reduced;
 }
 
@@ -70,33 +41,22 @@ function GalleryCarousel({ items, interval = 6000 }) {
   }, [items.length, index]);
 
   const go = (delta) => setIndex((curr) => (curr + delta + items.length) % items.length);
-
   if (!items.length) return null;
-
   const item = items[index];
   const src = item.imageUrl || item.local_path;
 
-  return <div className="carousel">
-    <button type="button" className="carousel-control" aria-label="Previous image" onClick={() => go(-1)}>‹</button>
-    <div className="carousel-content">
-      {src ? (
-        <button type="button" className="gallery-slide">
-          <span className="gallery-media">
-            <img src={src} loading="lazy" alt={item.caption || 'Nail service example'} />
-          </span>
-        </button>
-      ) : <div className="missing-image">Add image in admin</div>}
-    </div>
-    <button type="button" className="carousel-control" aria-label="Next image" onClick={() => go(1)}>›</button>
-  </div>;
+  return <div className="carousel"><button type="button" className="carousel-control" aria-label="Previous image" onClick={() => go(-1)}>‹</button><div className="carousel-content">{src ? <button type="button" className="gallery-slide"><span className="gallery-media"><img src={src} loading="lazy" alt={item.caption || 'Nail service example'} /></span></button> : <div className="missing-image">Add image in admin</div>}</div><button type="button" className="carousel-control" aria-label="Next image" onClick={() => go(1)}>›</button></div>;
 }
 
 function BookingSection({ services }) {
+  const showDevSquareTokenInput = import.meta.env.DEV || import.meta.env.VITE_ENABLE_SQUARE_DEV_TOKEN_INPUT === 'true';
   const [selectedServices, setSelectedServices] = useState([]);
   const [availability, setAvailability] = useState([]);
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedTime, setSelectedTime] = useState('');
-  const [form, setForm] = useState({ firstName: '', lastName: '', phone: '', email: '', notes: '' });
+  const [form, setForm] = useState({
+    firstName: '', lastName: '', phone: '', email: '', notes: '', communicationPreference: 'both', squareCardToken: '', policyAcknowledged: false,
+  });
   const [pendingMessage, setPendingMessage] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -128,9 +88,10 @@ function BookingSection({ services }) {
         time: selectedTime,
         serviceIds: selectedServices,
         idempotencyKey: crypto.randomUUID(),
+        cardIdempotencyKey: crypto.randomUUID(),
       });
       setPendingMessage(result.pendingMessage);
-      setForm({ firstName: '', lastName: '', phone: '', email: '', notes: '' });
+      setForm({ firstName: '', lastName: '', phone: '', email: '', notes: '', communicationPreference: 'both', squareCardToken: '', policyAcknowledged: false });
       setSelectedDate('');
       setSelectedTime('');
       setSelectedServices([]);
@@ -159,8 +120,35 @@ function BookingSection({ services }) {
       <h3>4. Your details</h3>
       <div className="split"><label>First name<input required value={form.firstName} onChange={(e) => setForm((f) => ({ ...f, firstName: e.target.value }))} /></label><label>Last name<input required value={form.lastName} onChange={(e) => setForm((f) => ({ ...f, lastName: e.target.value }))} /></label></div>
       <div className="split"><label>Phone<input required pattern="[0-9]{10}" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value.replace(/\D/g, '').slice(0, 10) }))} /></label><label>Email<input required type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} /></label></div>
+      <label>Preferred notifications
+        <select value={form.communicationPreference} onChange={(e) => setForm((f) => ({ ...f, communicationPreference: e.target.value }))}>
+          <option value="both">SMS + Email</option>
+          <option value="sms">SMS only</option>
+          <option value="email">Email only</option>
+        </select>
+      </label>
       <label>Notes<textarea value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} /></label>
-      <button className="btn primary" disabled={busy || !selectedTime || !selectedServices.length}>{busy ? 'Submitting...' : 'Submit booking request'}</button>
+
+      <h3>5. Card on file</h3>
+      <div className="policy-box">
+        <p><strong>Square integration status:</strong> Secure card collection UI is pending final Square Web Payments SDK hookup.</p>
+        {!showDevSquareTokenInput && <p className="muted">Developer token input is hidden in this mode so this page does not mimic a production-ready card form.</p>}
+        {showDevSquareTokenInput && <label><strong>Developer-only Square token placeholder</strong><input required value={form.squareCardToken} onChange={(e) => setForm((f) => ({ ...f, squareCardToken: e.target.value.trim() }))} placeholder="Developer only: cnon:card-nonce-from-square" /></label>}
+      </div>
+
+      <div className="policy-box">
+        <h4>Card on File and Cancellation Policy</h4>
+        <p>A valid credit or debit card is required to request an appointment. Your card will be securely stored on file and will not be charged at the time of booking. By submitting your appointment request, you authorize Nails by Brittney to charge your card only in the following situations:</p>
+        <ul>
+          <li>Late cancellation: If you cancel less than 24 hours before your scheduled appointment, you may be charged 25% of the estimated service total.</li>
+          <li>No-show: If you miss your appointment without notice, you may be charged 50% of the estimated service total.</li>
+        </ul>
+        <p>Any service charges, late cancellation fees, or no-show fees are applied manually by Nails by Brittney. If a different amount is charged than the standard policy amount, it will be at Nails by Brittney’s discretion. By continuing, you acknowledge and agree to these terms.</p>
+        <label className="service-check"><input type="checkbox" required checked={form.policyAcknowledged} onChange={(e) => setForm((f) => ({ ...f, policyAcknowledged: e.target.checked }))} /> I understand and agree to the card-on-file, late cancellation, and no-show policy.</label>
+      </div>
+
+      <button className="btn primary" disabled={busy || !selectedTime || !selectedServices.length || !form.policyAcknowledged || !form.squareCardToken}>{busy ? 'Submitting...' : 'Submit booking request'}</button>
+      {!showDevSquareTokenInput && !form.squareCardToken && <p className="muted">Booking submission remains disabled until the Square Web Payments SDK token handoff is connected.</p>}
       {pendingMessage && <p className="muted">{pendingMessage}</p>}
     </form>
   </div></section>;
@@ -173,11 +161,9 @@ export default function App() {
   const [gallery, setGallery] = useState([]);
 
   useEffect(() => { Promise.all([fetchServices(), fetchTestimonials(), fetchGalleryItems()]).then(([s, t, g]) => { setServices(s); setTestimonials(t); setGallery(g); }); }, []);
-
   const hasImages = useMemo(() => gallery.some((item) => item.imageUrl || item.local_path), [gallery]);
 
-  return <>
-    <header className="sticky-nav"><div className="container nav-inner"><a href="#home" className="brand-mini">Nails by Brittney</a><button className="menu-toggle" aria-expanded={menuOpen} onClick={() => setMenuOpen((o) => !o)}>Menu</button><nav className={`nav-links ${menuOpen ? 'open' : ''}`}>{navItems.map(([id, label]) => <a key={id} href={`#${id}`} onClick={() => setMenuOpen(false)}>{label}</a>)}<Link to="/admin">Admin</Link></nav></div></header>
+  return <><header className="sticky-nav"><div className="container nav-inner"><a href="#home" className="brand-mini">Nails by Brittney</a><button className="menu-toggle" aria-expanded={menuOpen} onClick={() => setMenuOpen((o) => !o)}>Menu</button><nav className={`nav-links ${menuOpen ? 'open' : ''}`}>{navItems.map(([id, label]) => <a key={id} href={`#${id}`} onClick={() => setMenuOpen(false)}>{label}</a>)}<Link to="/admin">Admin</Link></nav></div></header>
     <main>
       <section id="home" className="section hero"><div className="container hero-inner"><img src={logo} className="hero-logo" alt="Nails by Brittney logo" /><h1>Nails by Brittney</h1><p className="subtitle">Certified Nail Technician</p><div className="cta-row"><a href="#booking" className="btn primary">Book Appointment</a><a href={`tel:${PHONE_LINK}`} className="btn">Call to Book</a><a href={INSTAGRAM_URL} target="_blank" rel="noreferrer" className="btn ghost">Instagram</a></div></div></section>
       <Divider />

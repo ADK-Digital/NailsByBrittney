@@ -2,21 +2,30 @@
 
 Public marketing site + full booking and admin management with Supabase + Netlify Functions + Twilio + Resend.
 
-## What was added
-- Real public scheduler (service bundle selection, availability calendar, time slots, pending request submission).
-- Customer matching and note history model.
-- Appointment lifecycle (pending, confirmed, declined, expired, cancelled, completed, no_show).
-- Admin appointment/customer/blocked-time management.
-- Twilio outbound/inbound SMS flow for Brittney confirmation by reply (`yes #` / `no #`).
-- Resend transactional emails for confirmed/declined/expired.
-- Scheduled expiration cleanup (every 15 minutes).
+## What was added in Phase 2
+- Card-on-file booking flow scaffolded for Square (card is required; no charge at booking time) with a clearly labeled developer placeholder input hidden by default outside dev mode.
+- Customer communication preferences (`sms`, `email`, `both`) with preference-aware customer notifications.
+- Shared appointment action layer for Twilio + dashboard to keep status/charges/refunds synchronized.
+- Manual financial operations for service charges, late fees, no-show fees, and refunds.
+- Financial event ledger + action audit tables in Supabase.
+- Richer admin appointment cards with status/payment/card visibility and action buttons.
+- Expanded Twilio parser commands:
+  - `yes 123`, `no 123`, `status 123`
+  - `late 123`, `late 123 50%`
+  - `no show 123`, `no show 123 40%`
+  - `charge 123 $85`
+  - `refund late 123`
+  - `refund no show 123`
+  - `refund services 123`
+  - `refund services 123 50%`
 
 ## Environment variables
-Copy `.env.example` to `.env` and set all values.
+Copy `.env.example` to `.env` and set values.
 
-Required:
+Required core values:
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
+- `VITE_ENABLE_SQUARE_DEV_TOKEN_INPUT` (optional, default false; developer placeholder control)
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `TWILIO_ACCOUNT_SID`
 - `TWILIO_AUTH_TOKEN`
@@ -24,7 +33,15 @@ Required:
 - `BRITTNEY_NOTIFICATION_PHONE`
 - `RESEND_API_KEY`
 - `BOOKING_PUBLIC_BASE_URL`
-- `VITE_SUPABASE_GALLERY_BUCKET` (default `gallery`)
+
+Square values:
+- `SQUARE_APPLICATION_ID`
+- `SQUARE_LOCATION_ID`
+- `SQUARE_ACCESS_TOKEN`
+- `SQUARE_API_BASE_URL` (default `https://connect.squareup.com`)
+- `SQUARE_API_VERSION` (default `2025-10-16`)
+- `SQUARE_CURRENCY` (default `USD`)
+- `SQUARE_ALLOW_MOCK` (`true` for local mock processing)
 
 ## Supabase setup
 1. Create a Supabase project.
@@ -36,7 +53,7 @@ Required:
 1. Buy/configure SMS-capable Twilio number.
 2. Set inbound webhook to:
    `https://<your-site>/.netlify/functions/twilio-inbound`
-3. Add env vars listed above.
+3. Set `BRITTNEY_NOTIFICATION_PHONE` to Brittney’s authorized sender number.
 
 ## Resend setup
 1. Create an API key and verified sender/domain in Resend.
@@ -53,13 +70,3 @@ npm run dev
 - Publish directory: `dist`
 - Functions directory: `netlify/functions`
 - Scheduled function: `expire-pending` (every 15 minutes)
-
-## Verification checklist
-Core business rules are implemented in DB constraints/functions plus serverless handlers for:
-- Fri/Sat/Sun-only availability via `business_hours` seed rows.
-- Hard close-time fit checking by duration.
-- 15-minute increments in availability endpoint.
-- Idempotency key uniqueness on appointments.
-- Concurrency protection via exclusion constraint + transactional booking function.
-- Request numbers cycling 120–950 via `request_counter` + `next_request_number()`.
-- Historical service snapshots in `appointment_services`.

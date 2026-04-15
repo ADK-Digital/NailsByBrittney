@@ -1,52 +1,158 @@
-import { json, ensureServerConfig, supabaseAdmin } from './_lib/supabaseAdmin.js';
-import { transitionAppointment } from './_lib/bookingActions.js';
+import { ensureServerConfig, supabaseAdmin } from './_lib/supabaseAdmin.js';
+import {
+  transitionAppointment,
+  chargeAppointment,
+  refundAppointment,
+  formatStatusSummary,
+  getAppointmentStatusSummaryByRequestNumber,
+} from './_lib/bookingActions.js';
 
-function parseReply(body = '') {
+function xmlMessage(message) {
+  return {
+    statusCode: 200,
+    headers: { 'Content-Type': 'text/xml' },
+    body: `<Response><Message>${message}</Message></Response>`,
+  };
+}
+
+function normalizePhone(phone = '') {
+  const digits = phone.replace(/\D/g, '');
+  if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`;
+  if (digits.length === 10) return `+1${digits}`;
+  return phone;
+}
+
+function parsePercentToken(token) {
+  if (!token) return null;
+  const match = token.trim().match(/^([0-9]+(?:\.[0-9]+)?)%$/);
+  if (!match) return null;
+  return Number(match[1]);
+}
+
+function parseMoneyToken(token) {
+  if (!token) return null;
+  const match = token.trim().match(/^\$?([0-9]+(?:\.[0-9]{1,2})?)$/);
+  if (!match) return null;
+  return Number(match[1]);
+}
+
+function parseCommand(body = '') {
   const normalized = body.trim().toLowerCase().replace(/\s+/g, ' ');
-  const m = normalized.match(/^(yes|no)\s*#?\s*(\d{2,4})$/i);
-  if (!m) return null;
-  return { decision: m[1].toLowerCase(), requestNumber: Number(m[2]) };
+  if (!normalized) return { action: 'invalid' };
+
+  let m = normalized.match(/^(yes|no)\s*#?\s*(\d{2,6})$/i);
+  if (m) return { action: m[1] === 'yes' ? 'confirm' : 'decline', requestNumber: Number(m[2]) };
+
+  m = normalized.match(/^status\s*#?\s*(\d{2,6})$/i);
+  if (m) return { action: 'status', requestNumber: Number(m[1]) };
+
+  m = normalized.match(/^late\s*#?\s*(\d{2,6})(?:\s+([^\s]+))?$/i);
+  if (m) return { action: 'charge_late', requestNumber: Number(m[1]), percent: parsePercentToken(m[2]) };
+
+  m = normalized.match(/^no show\s*#?\s*(\d{2,6})(?:\s+([^\s]+))?$/i);
+  if (m) return { action: 'charge_no_show', requestNumber: Number(m[1]), percent: parsePercentToken(m[2]) };
+
+  m = normalized.match(/^charge\s*#?\s*(\d{2,6})\s+([^\s]+)$/i);
+  if (m) return { action: 'charge_service', requestNumber: Number(m[1]), amount: parseMoneyToken(m[2]) };
+
+  m = normalized.match(/^refund\s+(late|no show|services)\s*#?\s*(\d{2,6})(?:\s+([^\s]+))?$/i);
+  if (m) {
+    return {
+      action: 'refund',
+      target: m[1] === 'services' ? 'service' : (m[1] === 'late' ? 'late' : 'no_show'),
+      requestNumber: Number(m[2]),
+      percent: parsePercentToken(m[3]),
+    };
+  }
+
+  return { action: 'invalid' };
+}
+
+const HELP_TEXT = [
+  'Invalid command. Examples:',
+  'yes 123 | no 123 | status 123',
+  'late 123 [50%] | no show 123 [40%]',
+  'charge 123 $85',
+  'refund late 123 | refund no show 123 | refund services 123 [50%]',
+].join(' ');
+
+async function findAppointmentByRequest(requestNumber) {
+  const { data: appointment } = await supabaseAdmin
+    .from('appointments')
+    .select('id,status,confirmation_deadline_at')
+    .eq('booking_request_number', requestNumber)
+    .maybeSingle();
+
+  return appointment;
 }
 
 export const handler = async (event) => {
   try {
     ensureServerConfig();
+
     const params = new URLSearchParams(event.body || '');
     const body = params.get('Body') || '';
-    const parsed = parseReply(body);
+    const sender = normalizePhone(params.get('From') || '');
 
-    if (!parsed) {
-      return {
-        statusCode: 200,
-        headers: { 'Content-Type': 'text/xml' },
-        body: '<Response><Message>Invalid reply. Use: yes 184 or no 184</Message></Response>',
-      };
+    const authorized = normalizePhone(process.env.BRITTNEY_NOTIFICATION_PHONE || '');
+    if (!authorized || sender !== authorized) {
+      return xmlMessage('Unauthorized sender.');
     }
 
-    const { data: appointment } = await supabaseAdmin
-      .from('appointments')
-      .select('id,status,confirmation_deadline_at')
-      .eq('booking_request_number', parsed.requestNumber)
-      .eq('status', 'pending_confirmation')
-      .maybeSingle();
+    const command = parseCommand(body);
+    if (command.action === 'invalid') {
+      return xmlMessage(HELP_TEXT);
+    }
 
+    const appointment = await findAppointmentByRequest(command.requestNumber);
     if (!appointment) {
-      return { statusCode: 200, headers: { 'Content-Type': 'text/xml' }, body: '<Response><Message>No pending appointment found for that request number.</Message></Response>' };
+      return xmlMessage(`No appointment found for request #${command.requestNumber}.`);
     }
 
-    if (new Date(appointment.confirmation_deadline_at) <= new Date()) {
-      await transitionAppointment(appointment.id, 'expired');
-      return { statusCode: 200, headers: { 'Content-Type': 'text/xml' }, body: '<Response><Message>Request already expired and released.</Message></Response>' };
+    if (command.action === 'confirm' || command.action === 'decline') {
+      if (appointment.status !== 'pending_confirmation') {
+        return xmlMessage(`Request #${command.requestNumber} is currently ${appointment.status}.`);
+      }
+      if (new Date(appointment.confirmation_deadline_at) <= new Date()) {
+        await transitionAppointment(appointment.id, 'expired', { initiatedBy: 'twilio', commandText: body });
+        return xmlMessage('Request already expired and released.');
+      }
+
+      const nextStatus = command.action === 'confirm' ? 'confirmed' : 'declined';
+      await transitionAppointment(appointment.id, nextStatus, { initiatedBy: 'twilio', commandText: body });
+      return xmlMessage(`Request #${command.requestNumber} ${nextStatus}.`);
     }
 
-    await transitionAppointment(appointment.id, parsed.decision === 'yes' ? 'confirmed' : 'declined');
+    if (command.action === 'charge_late') {
+      await chargeAppointment({ appointmentId: appointment.id, target: 'late', percentOverride: command.percent ?? 25, initiatedBy: 'twilio', commandText: body });
+      return xmlMessage(`Late cancellation fee charged for request #${command.requestNumber}.`);
+    }
 
-    return {
-      statusCode: 200,
-      headers: { 'Content-Type': 'text/xml' },
-      body: `<Response><Message>Request #${parsed.requestNumber} ${parsed.decision === 'yes' ? 'confirmed' : 'declined'}.</Message></Response>`,
-    };
+    if (command.action === 'charge_no_show') {
+      await chargeAppointment({ appointmentId: appointment.id, target: 'no_show', percentOverride: command.percent ?? 50, initiatedBy: 'twilio', commandText: body });
+      return xmlMessage(`No-show fee charged for request #${command.requestNumber}.`);
+    }
+
+    if (command.action === 'charge_service') {
+      if (!command.amount) {
+        return xmlMessage('Invalid amount. Usage: charge 123 $85');
+      }
+      await chargeAppointment({ appointmentId: appointment.id, target: 'service', amountDollars: command.amount, initiatedBy: 'twilio', commandText: body });
+      return xmlMessage(`Service charge posted for request #${command.requestNumber}.`);
+    }
+
+    if (command.action === 'refund') {
+      await refundAppointment({ appointmentId: appointment.id, target: command.target, percentOverride: command.percent ?? null, initiatedBy: 'twilio', commandText: body });
+      return xmlMessage(`Refund processed for request #${command.requestNumber}.`);
+    }
+
+    if (command.action === 'status') {
+      const summary = await getAppointmentStatusSummaryByRequestNumber(command.requestNumber);
+      return xmlMessage(formatStatusSummary(summary));
+    }
+
+    return xmlMessage(HELP_TEXT);
   } catch (error) {
-    return json(500, { error: error.message });
+    return xmlMessage(`Command failed: ${error.message}`);
   }
 };
