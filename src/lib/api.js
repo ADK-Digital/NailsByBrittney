@@ -16,8 +16,11 @@ const mapGalleryWithUrls = (items) =>
 export async function fetchServices() {
   if (!hasSupabaseConfig) return SAMPLE_SERVICES;
   const { data, error } = await supabase.from('services').select('*').order('display_order', { ascending: true });
-  if (error || !data?.length) return SAMPLE_SERVICES;
-  return data.map((item) => ({ ...item, duration: item.duration || `${item.duration_minutes} min` }));
+  if (error) {
+    console.error('Failed to fetch services from Supabase:', error);
+    return [];
+  }
+  return (data || []).map((item) => ({ ...item, duration: item.duration || `${item.duration_minutes} min` }));
 }
 
 export async function fetchTestimonials() {

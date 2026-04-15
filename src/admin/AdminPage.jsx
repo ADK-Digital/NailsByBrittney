@@ -31,6 +31,11 @@ export default function AdminPage() {
     setBlockedTimes(data.blockedTimes || []);
   };
 
+  const refreshServiceList = async () => {
+    const serviceData = await fetchServices();
+    setServices(serviceData);
+  };
+
   useEffect(() => {
     if (!hasSupabaseConfig) return;
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
@@ -39,8 +44,10 @@ export default function AdminPage() {
   }, []);
 
   useEffect(() => {
-    Promise.all([fetchServices(), fetchTestimonials(), fetchGalleryItems()]).then(([s, t, g]) => {
-      setServices(s); setTestimonials(t); setGallery(g);
+    Promise.all([fetchServices(), fetchTestimonials(), fetchGalleryItems()]).then(([serviceData, testimonialData, galleryData]) => {
+      setServices(serviceData);
+      setTestimonials(testimonialData);
+      setGallery(galleryData);
     });
     refreshBookingAdmin();
   }, []);
@@ -80,9 +87,17 @@ export default function AdminPage() {
     <section><h2>Services</h2><button className="btn" onClick={async () => {
       const item = { name: 'New Service', price_text: '$0', price_min_numeric: 0, duration: '30 min', duration_minutes: 30, is_variable_price: false, description: 'Service details', display_order: services.length + 1, active: true };
       const created = hasSupabaseConfig ? await createRecord('services', item) : { ...item, id: crypto.randomUUID() };
-      setServices((p) => [...p, created]);
+      if (hasSupabaseConfig) {
+        await refreshServiceList();
+      } else {
+        setServices((p) => [...p, created]);
+      }
     }}>Add Service</button>
-      <DraggableList items={services} setItems={setServices} table="services" renderFields={(s, idx) => <><input value={s.name} onChange={(e) => setServices((p) => p.map((i) => i.id === s.id ? { ...i, name: e.target.value } : i))} /><input value={s.price_text} onChange={(e) => setServices((p) => p.map((i) => i.id === s.id ? { ...i, price_text: e.target.value } : i))} /><input type="number" value={s.price_min_numeric || 0} onChange={(e) => setServices((p) => p.map((i) => i.id === s.id ? { ...i, price_min_numeric: Number(e.target.value) } : i))} /><input type="number" value={s.duration_minutes || 0} onChange={(e) => setServices((p) => p.map((i) => i.id === s.id ? { ...i, duration_minutes: Number(e.target.value), duration: `${e.target.value} min` } : i))} /><label><input type="checkbox" checked={Boolean(s.is_variable_price)} onChange={(e) => setServices((p) => p.map((i) => i.id === s.id ? { ...i, is_variable_price: e.target.checked } : i))} /> Variable price</label><textarea value={s.description} onChange={(e) => setServices((p) => p.map((i) => i.id === s.id ? { ...i, description: e.target.value } : i))} /><button onClick={async () => hasSupabaseConfig && updateRecord('services', s.id, { name: s.name, price_text: s.price_text, price_min_numeric: s.price_min_numeric, duration: `${s.duration_minutes} min`, duration_minutes: s.duration_minutes, is_variable_price: s.is_variable_price, description: s.description, display_order: idx + 1 })}>Save</button><button onClick={async () => { if (hasSupabaseConfig) await deleteRecord('services', s.id); setServices((p) => p.filter((i) => i.id !== s.id)); }}>Delete</button><button onClick={async () => hasSupabaseConfig && updateOrder('services', services)}>Save Order</button></>} />
+      <DraggableList items={services} setItems={setServices} table="services" renderFields={(s, idx) => <><label>Service name<input value={s.name} onChange={(e) => setServices((p) => p.map((i) => i.id === s.id ? { ...i, name: e.target.value } : i))} /></label><label>Price (display)<input value={s.price_text} onChange={(e) => setServices((p) => p.map((i) => i.id === s.id ? { ...i, price_text: e.target.value } : i))} /></label><label>Base Price for Estimates<input type="number" value={s.price_min_numeric || 0} onChange={(e) => setServices((p) => p.map((i) => i.id === s.id ? { ...i, price_min_numeric: Number(e.target.value) } : i))} /></label><label>Duration (minutes)<input type="number" value={s.duration_minutes || 0} onChange={(e) => setServices((p) => p.map((i) => i.id === s.id ? { ...i, duration_minutes: Number(e.target.value), duration: `${e.target.value} min` } : i))} /></label><label><input type="checkbox" checked={Boolean(s.is_variable_price)} onChange={(e) => setServices((p) => p.map((i) => i.id === s.id ? { ...i, is_variable_price: e.target.checked } : i))} /> Variable price</label><label>Description<textarea value={s.description} onChange={(e) => setServices((p) => p.map((i) => i.id === s.id ? { ...i, description: e.target.value } : i))} /></label><button onClick={async () => {
+        if (!hasSupabaseConfig) return;
+        await updateRecord('services', s.id, { name: s.name, price_text: s.price_text, price_min_numeric: s.price_min_numeric, duration: `${s.duration_minutes} min`, duration_minutes: s.duration_minutes, is_variable_price: s.is_variable_price, description: s.description, display_order: idx + 1 });
+        await refreshServiceList();
+      }}>Save</button><button onClick={async () => { if (hasSupabaseConfig) { await deleteRecord('services', s.id); await refreshServiceList(); return; } setServices((p) => p.filter((i) => i.id !== s.id)); }}>Delete</button><button onClick={async () => { if (!hasSupabaseConfig) return; await updateOrder('services', services); await refreshServiceList(); }}>Save Order</button></>} />
     </section>
 
     <section><h2>Gallery</h2><input type="file" accept="image/*" multiple onChange={async (e) => {
