@@ -1,5 +1,64 @@
 import { json, ensureServerConfig, supabaseAdmin } from './_lib/supabaseAdmin.js';
-import { transitionAppointment } from './_lib/bookingActions.js';
+import {
+  transitionAppointment,
+  chargeAppointment,
+  refundAppointment,
+  getAppointmentStatusSummaryByRequestNumber,
+} from './_lib/bookingActions.js';
+
+async function handleAppointmentAction(payload) {
+  const initiatedBy = 'dashboard';
+
+  if (payload.action === 'set_status') {
+    await transitionAppointment(payload.appointmentId, payload.status, { initiatedBy, note: payload.note });
+    return { ok: true };
+  }
+
+  if (payload.action === 'charge') {
+    const event = await chargeAppointment({
+      appointmentId: payload.appointmentId,
+      target: payload.target,
+      amountDollars: payload.amount,
+      percentOverride: payload.percent,
+      initiatedBy,
+      note: payload.note,
+    });
+    return { ok: true, event };
+  }
+
+  if (payload.action === 'refund') {
+    const event = await refundAppointment({
+      appointmentId: payload.appointmentId,
+      target: payload.target,
+      percentOverride: payload.percent,
+      initiatedBy,
+      note: payload.note,
+    });
+    return { ok: true, event };
+  }
+
+  if (payload.action === 'status_summary') {
+    const summary = await getAppointmentStatusSummaryByRequestNumber(payload.requestNumber);
+    return { ok: true, summary };
+  }
+
+  if (payload.action === 'create_block') {
+    const { error } = await supabaseAdmin.from('blocked_times').insert({
+      start_at: payload.startAt,
+      end_at: payload.endAt,
+      reason: payload.reason || null,
+    });
+    if (error) throw error;
+    return { ok: true };
+  }
+
+  if (payload.action === 'delete_block') {
+    await supabaseAdmin.from('blocked_times').delete().eq('id', payload.blockId);
+    return { ok: true };
+  }
+
+  throw new Error('Unsupported action');
+}
 
 export const handler = async (event) => {
   try {
@@ -8,7 +67,7 @@ export const handler = async (event) => {
     if (event.httpMethod === 'GET') {
       const { data: appointments } = await supabaseAdmin
         .from('appointments')
-        .select('*, customers(*), appointment_services(*)')
+        .select('*, customers(*), appointment_services(*), appointment_financial_events(*)')
         .order('start_at', { ascending: true });
       const { data: customers } = await supabaseAdmin
         .from('customers')
@@ -23,26 +82,8 @@ export const handler = async (event) => {
 
     if (event.httpMethod === 'POST') {
       const payload = JSON.parse(event.body || '{}');
-
-      if (payload.action === 'set_status') {
-        await transitionAppointment(payload.appointmentId, payload.status);
-        return json(200, { ok: true });
-      }
-
-      if (payload.action === 'create_block') {
-        const { error } = await supabaseAdmin.from('blocked_times').insert({
-          start_at: payload.startAt,
-          end_at: payload.endAt,
-          reason: payload.reason || null,
-        });
-        if (error) throw error;
-        return json(200, { ok: true });
-      }
-
-      if (payload.action === 'delete_block') {
-        await supabaseAdmin.from('blocked_times').delete().eq('id', payload.blockId);
-        return json(200, { ok: true });
-      }
+      const result = await handleAppointmentAction(payload);
+      return json(200, result);
     }
 
     return json(405, { error: 'Method not allowed' });
