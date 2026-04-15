@@ -23,6 +23,10 @@ export default function AdminPage() {
   const [appointments, setAppointments] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [blockedTimes, setBlockedTimes] = useState([]);
+  const [selectedGalleryFiles, setSelectedGalleryFiles] = useState([]);
+  const [galleryCaptionDraft, setGalleryCaptionDraft] = useState('');
+  const [galleryUploadBusy, setGalleryUploadBusy] = useState(false);
+  const [galleryMessage, setGalleryMessage] = useState({ type: '', text: '' });
 
   const refreshBookingAdmin = async () => {
     const data = await fetchAdminAppointments();
@@ -34,6 +38,11 @@ export default function AdminPage() {
   const refreshServiceList = async () => {
     const serviceData = await fetchServices();
     setServices(serviceData);
+  };
+
+  const refreshGalleryList = async () => {
+    const galleryData = await fetchGalleryItems();
+    setGallery(galleryData);
   };
 
   useEffect(() => {
@@ -54,6 +63,60 @@ export default function AdminPage() {
 
   const signedIn = useMemo(() => (!hasSupabaseConfig ? true : Boolean(session)), [session]);
   const signIn = async (e) => { e.preventDefault(); const fd = new FormData(e.currentTarget); await supabase.auth.signInWithPassword({ email: fd.get('email'), password: fd.get('password') }); };
+
+  const uploadSelectedGalleryPhotos = async () => {
+    if (!selectedGalleryFiles.length) {
+      setGalleryMessage({ type: 'error', text: 'Please choose at least one photo to upload.' });
+      return;
+    }
+
+    if (!hasSupabaseConfig) {
+      const mockRows = selectedGalleryFiles.map((file, index) => ({
+        id: crypto.randomUUID(),
+        storage_key: `local/${Date.now()}-${index}-${file.name}`,
+        caption: galleryCaptionDraft.trim(),
+        display_order: gallery.length + index + 1,
+        imageUrl: URL.createObjectURL(file),
+      }));
+      setGallery((prev) => [...prev, ...mockRows]);
+      setSelectedGalleryFiles([]);
+      setGalleryCaptionDraft('');
+      setGalleryMessage({ type: 'success', text: `Added ${mockRows.length} local sample photo(s).` });
+      return;
+    }
+
+    setGalleryUploadBusy(true);
+    setGalleryMessage({ type: '', text: '' });
+
+    try {
+      const existing = await fetchGalleryItems();
+      const baseDisplayOrder = existing.reduce((max, item) => Math.max(max, Number(item.display_order || 0)), 0);
+
+      for (const [index, file] of selectedGalleryFiles.entries()) {
+        const extension = file.name.includes('.') ? file.name.split('.').pop()?.toLowerCase() : 'jpg';
+        const safeExtension = extension || 'jpg';
+        const storageKey = `uploads/${Date.now()}-${crypto.randomUUID()}.${safeExtension}`;
+
+        // eslint-disable-next-line no-await-in-loop
+        await uploadGalleryImage(file, storageKey);
+        // eslint-disable-next-line no-await-in-loop
+        await createRecord('gallery_items', {
+          storage_key: storageKey,
+          caption: galleryCaptionDraft.trim(),
+          display_order: baseDisplayOrder + index + 1,
+        });
+      }
+
+      await refreshGalleryList();
+      setSelectedGalleryFiles([]);
+      setGalleryCaptionDraft('');
+      setGalleryMessage({ type: 'success', text: `Uploaded ${selectedGalleryFiles.length} photo(s) successfully.` });
+    } catch (error) {
+      setGalleryMessage({ type: 'error', text: error?.message || 'Upload failed. Please try again.' });
+    } finally {
+      setGalleryUploadBusy(false);
+    }
+  };
 
   if (!signedIn) return <main className="admin-wrap"><h1>Admin Login</h1><form onSubmit={signIn} className="admin-form"><label>Email<input name="email" type="email" required /></label><label>Password<input name="password" type="password" required /></label><button className="btn primary" type="submit">Sign in</button></form></main>;
 
@@ -100,23 +163,43 @@ export default function AdminPage() {
       }}>Save</button><button onClick={async () => { if (hasSupabaseConfig) { await deleteRecord('services', s.id); await refreshServiceList(); return; } setServices((p) => p.filter((i) => i.id !== s.id)); }}>Delete</button><button onClick={async () => { if (!hasSupabaseConfig) return; await updateOrder('services', services); await refreshServiceList(); }}>Save Order</button></>} />
     </section>
 
-    <section><h2>Gallery</h2><input type="file" accept="image/*" multiple onChange={async (e) => {
-      const files = Array.from(e.target.files || []);
-      for (const file of files) {
-        const storageKey = `gallery/${Date.now()}-${Math.random().toString(16).slice(2)}.jpg`;
-        let created;
+    <section><h2>Gallery</h2>
+      <div className="gallery-upload-panel">
+        <label htmlFor="gallery-file-picker">Select photo(s) to upload</label>
+        <input
+          id="gallery-file-picker"
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={(e) => {
+            setSelectedGalleryFiles(Array.from(e.target.files || []));
+            setGalleryMessage({ type: '', text: '' });
+          }}
+        />
+        <label htmlFor="gallery-caption-input">Caption (optional)</label>
+        <input id="gallery-caption-input" placeholder="Caption for selected photo(s)" value={galleryCaptionDraft} onChange={(e) => setGalleryCaptionDraft(e.target.value)} />
+        <button className="btn primary" onClick={uploadSelectedGalleryPhotos} disabled={galleryUploadBusy}>{galleryUploadBusy ? 'Uploading...' : 'Upload Selected Photos'}</button>
+        {!!selectedGalleryFiles.length && <p className="muted">{selectedGalleryFiles.length} file(s) selected.</p>}
+        {!!galleryMessage.text && <p className={galleryMessage.type === 'error' ? 'admin-message error' : 'admin-message success'}>{galleryMessage.text}</p>}
+      </div>
+      <DraggableList items={gallery} setItems={setGallery} table="gallery_items" renderFields={(g) => <div className="gallery-admin-item">{(g.imageUrl || g.local_path) ? <img src={g.imageUrl || g.local_path} alt="Gallery" /> : <div className="missing-image">No image</div>}<input placeholder="Caption" value={g.caption || ''} onChange={(e) => setGallery((p) => p.map((i) => i.id === g.id ? { ...i, caption: e.target.value } : i))} /><button onClick={async () => {
+        if (!hasSupabaseConfig) return;
+        await updateRecord('gallery_items', g.id, { caption: g.caption || '' });
+        await refreshGalleryList();
+      }}>Save</button><button className="danger" onClick={async () => {
         if (hasSupabaseConfig) {
-          await uploadGalleryImage(file, storageKey);
-          created = await createRecord('gallery_items', { storage_key: storageKey, caption: '', display_order: gallery.length + 1 });
-          const { data } = supabase.storage.from(import.meta.env.VITE_SUPABASE_GALLERY_BUCKET || 'gallery').getPublicUrl(storageKey);
-          created = { ...created, imageUrl: data.publicUrl };
-        } else {
-          created = { id: crypto.randomUUID(), storage_key: storageKey, caption: '', display_order: gallery.length + 1, imageUrl: URL.createObjectURL(file) };
+          await deleteGalleryImage(g.storage_key);
+          await deleteRecord('gallery_items', g.id);
+          await refreshGalleryList();
+          return;
         }
-        setGallery((p) => [...p, created]);
-      }
-    }} />
-      <DraggableList items={gallery} setItems={setGallery} table="gallery_items" renderFields={(g) => <div className="gallery-admin-item">{(g.imageUrl || g.local_path) ? <img src={g.imageUrl || g.local_path} alt="Gallery" /> : <div className="missing-image">No image</div>}<input placeholder="Caption" value={g.caption || ''} onChange={(e) => setGallery((p) => p.map((i) => i.id === g.id ? { ...i, caption: e.target.value } : i))} /><button onClick={async () => hasSupabaseConfig && updateRecord('gallery_items', g.id, { caption: g.caption || '' })}>Save</button><button className="danger" onClick={async () => { if (hasSupabaseConfig) { await deleteGalleryImage(g.storage_key); await deleteRecord('gallery_items', g.id); } setGallery((p) => p.filter((i) => i.id !== g.id)); }}>Delete</button></div>} />
+        setGallery((p) => p.filter((i) => i.id !== g.id));
+      }}>Delete</button></div>} />
+      <button className="btn" onClick={async () => {
+        if (!hasSupabaseConfig) return;
+        await updateOrder('gallery_items', gallery);
+        await refreshGalleryList();
+      }}>Save Gallery Order</button>
     </section>
   </main>;
 }

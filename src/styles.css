@@ -370,6 +370,11 @@ textarea{min-height:120px}
 .admin-item{list-style:none;background:white;border:1px solid var(--border);border-radius:12px;padding:.8rem;margin:.6rem 0}
 .admin-item input,.admin-item textarea{width:100%;margin:.2rem 0}
 .gallery-admin-item img{max-width:140px;border-radius:8px}
+.gallery-upload-panel{display:grid;gap:.5rem;max-width:520px;margin:.6rem 0 1rem}
+.gallery-upload-panel label{font-weight:600;color:var(--heading)}
+.admin-message{padding:.55rem .75rem;border-radius:10px;border:1px solid}
+.admin-message.success{background:#eef9f0;border-color:#a8d9b1;color:#1f6132}
+.admin-message.error{background:#fff1f1;border-color:#e6b2b2;color:#7d2323}
 .danger{background:#ab1f35;color:white;border:none;padding:.5rem .7rem;border-radius:8px}
 .muted{color:#5c5268}
 
