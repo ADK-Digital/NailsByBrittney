@@ -32,7 +32,7 @@ function canMock() {
   return process.env.SQUARE_ALLOW_MOCK === 'true' || process.env.NODE_ENV !== 'production';
 }
 
-export async function ensureSquareCustomer({ existingSquareCustomerId, firstName, lastName, email, phone, customerId }) {
+export async function ensureSquareCustomer({ existingSquareCustomerId, firstName, lastName, email, phone, customerId, idempotencyKey }) {
   if (!hasSquareCredentials()) {
     if (!canMock()) throw new Error('Square is not configured.');
     return { squareCustomerId: existingSquareCustomerId || `mock-customer-${customerId}`, created: !existingSquareCustomerId };
@@ -42,9 +42,9 @@ export async function ensureSquareCustomer({ existingSquareCustomerId, firstName
     return { squareCustomerId: existingSquareCustomerId, created: false };
   }
 
-  const idempotencyKey = crypto.randomUUID();
+  const customerCreateIdempotencyKey = idempotencyKey || crypto.randomUUID();
   const response = await squareRequest('/v2/customers', {
-    idempotency_key: idempotencyKey,
+    idempotency_key: customerCreateIdempotencyKey,
     given_name: firstName,
     family_name: lastName,
     email_address: email,
