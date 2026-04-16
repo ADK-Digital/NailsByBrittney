@@ -79,7 +79,11 @@ export function nyOffsetForDate(isoDate) {
     timeZoneName: 'shortOffset',
   }).formatToParts(noonUtc);
   const value = parts.find((p) => p.type === 'timeZoneName')?.value || 'GMT-5';
-  return value.replace('GMT', '');
+  const rawOffset = value.replace('GMT', '');
+  const match = rawOffset.match(/^([+-])(\d{1,2})(?::?(\d{2}))?$/);
+  if (!match) return '-05:00';
+  const [, sign, hour, minute = '00'] = match;
+  return `${sign}${hour.padStart(2, '0')}:${minute}`;
 }
 
 export function localDateTimeToUtcIso(isoDate, hhmm) {
