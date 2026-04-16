@@ -454,6 +454,9 @@ textarea{min-height:120px}
 }
 .policy-box h4{margin:0 0 .5rem;font-size:1.2rem}
 .policy-box ul{margin:.4rem 0 .8rem 1.2rem}
+.square-card-field{display:grid;gap:.5rem}
+.square-card-container{min-height:90px;padding:.65rem .7rem;background:#fff;border:1px solid var(--border);border-radius:12px}
+.form-error{color:#8f1f3b;font-weight:600;margin:.25rem 0 0}
 
 .appointment-card{margin-bottom:1rem}
 .appointment-head{display:flex;flex-wrap:wrap;gap:.35rem;align-items:center;margin-bottom:.4rem}

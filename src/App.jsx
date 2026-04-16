@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { EMAIL, INSTAGRAM_URL, PHONE_DISPLAY, PHONE_LINK, SAMPLE_BIO } from './lib/constants';
 import { fetchGalleryItems, fetchServices, fetchTestimonials } from './lib/api';
 import { createBookingRequest, fetchAvailability } from './lib/bookingApi';
+import SquareCardField from './components/SquareCardField';
 import './styles.css';
 import logo from '../Images/logo.png';
 
@@ -50,14 +51,18 @@ function GalleryCarousel({ items, interval = 6000 }) {
 
 function BookingSection({ services }) {
   const showDevSquareTokenInput = import.meta.env.DEV || import.meta.env.VITE_ENABLE_SQUARE_DEV_TOKEN_INPUT === 'true';
+  const squareCardRef = useRef(null);
   const [selectedServices, setSelectedServices] = useState([]);
   const [availability, setAvailability] = useState([]);
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedTime, setSelectedTime] = useState('');
   const [form, setForm] = useState({
-    firstName: '', lastName: '', phone: '', email: '', notes: '', communicationPreference: 'both', squareCardToken: '', policyAcknowledged: false,
+    firstName: '', lastName: '', phone: '', email: '', notes: '', communicationPreference: 'both', policyAcknowledged: false,
   });
   const [pendingMessage, setPendingMessage] = useState('');
+  const [cardError, setCardError] = useState('');
+  const [isSquareReady, setIsSquareReady] = useState(showDevSquareTokenInput);
+  const [devSquareToken, setDevSquareToken] = useState('');
   const [busy, setBusy] = useState(false);
 
   const selected = services.filter((s) => selectedServices.includes(s.id));
@@ -80,10 +85,34 @@ function BookingSection({ services }) {
 
   const submit = async (e) => {
     e.preventDefault();
+    setPendingMessage('');
+    setCardError('');
+
+    let squareCardToken = '';
+    if (showDevSquareTokenInput) {
+      squareCardToken = devSquareToken.trim();
+      if (!squareCardToken) {
+        setCardError('Developer token input is enabled; enter a Square test token to continue.');
+        return;
+      }
+    } else {
+      if (!squareCardRef.current?.isReady?.()) {
+        setCardError('Secure card entry is still loading. Please wait a moment and try again.');
+        return;
+      }
+      try {
+        squareCardToken = await squareCardRef.current.tokenize();
+      } catch (error) {
+        setCardError(error.message || 'Unable to tokenize card. Please review your card details and try again.');
+        return;
+      }
+    }
+
     setBusy(true);
     try {
       const result = await createBookingRequest({
         ...form,
+        squareCardToken,
         date: selectedDate,
         time: selectedTime,
         serviceIds: selectedServices,
@@ -91,17 +120,22 @@ function BookingSection({ services }) {
         cardIdempotencyKey: crypto.randomUUID(),
       });
       setPendingMessage(result.pendingMessage);
-      setForm({ firstName: '', lastName: '', phone: '', email: '', notes: '', communicationPreference: 'both', squareCardToken: '', policyAcknowledged: false });
+      setForm({ firstName: '', lastName: '', phone: '', email: '', notes: '', communicationPreference: 'both', policyAcknowledged: false });
+      setDevSquareToken('');
       setSelectedDate('');
       setSelectedTime('');
       setSelectedServices([]);
       setAvailability([]);
     } catch (error) {
-      setPendingMessage(error.message);
+      setPendingMessage(error.message || 'Booking submission failed after card tokenization. Please try again.');
     } finally {
       setBusy(false);
     }
   };
+
+  const onSquareReadyStateChange = useCallback((ready) => {
+    setIsSquareReady(ready);
+  }, []);
 
   return <section id="booking" className="section alt"><div className="container"><SectionHeading title="Book an Appointment" eyebrow="Real-time Scheduler" />
     <div className="booking-grid">
@@ -131,9 +165,19 @@ function BookingSection({ services }) {
 
       <h3>5. Card on file</h3>
       <div className="policy-box">
-        <p><strong>Square integration status:</strong> Secure card collection UI is pending final Square Web Payments SDK hookup.</p>
-        {!showDevSquareTokenInput && <p className="muted">Developer token input is hidden in this mode so this page does not mimic a production-ready card form.</p>}
-        {showDevSquareTokenInput && <label><strong>Developer-only Square token placeholder</strong><input required value={form.squareCardToken} onChange={(e) => setForm((f) => ({ ...f, squareCardToken: e.target.value.trim() }))} placeholder="Developer only: cnon:card-nonce-from-square" /></label>}
+        {!showDevSquareTokenInput && (
+          <>
+            <p>Enter your card information securely below. Card details are tokenized by Square and never sent directly to our servers.</p>
+            <SquareCardField ref={squareCardRef} onReadyStateChange={onSquareReadyStateChange} />
+          </>
+        )}
+        {showDevSquareTokenInput && (
+          <>
+            <p className="muted"><strong>Developer-only mode:</strong> manual token input is enabled for local testing and should never be used as the default customer flow.</p>
+            <label><strong>Developer-only Square token placeholder</strong><input required value={devSquareToken} onChange={(e) => setDevSquareToken(e.target.value.trim())} placeholder="Developer only: cnon:card-nonce-from-square" /></label>
+          </>
+        )}
+        {cardError && <p className="form-error" role="alert">{cardError}</p>}
       </div>
 
       <div className="policy-box">
@@ -147,8 +191,8 @@ function BookingSection({ services }) {
         <label className="service-check"><input type="checkbox" required checked={form.policyAcknowledged} onChange={(e) => setForm((f) => ({ ...f, policyAcknowledged: e.target.checked }))} /> I understand and agree to the card-on-file, late cancellation, and no-show policy.</label>
       </div>
 
-      <button className="btn primary" disabled={busy || !selectedTime || !selectedServices.length || !form.policyAcknowledged || !form.squareCardToken}>{busy ? 'Submitting...' : 'Submit booking request'}</button>
-      {!showDevSquareTokenInput && !form.squareCardToken && <p className="muted">Booking submission remains disabled until the Square Web Payments SDK token handoff is connected.</p>}
+      <button className="btn primary" disabled={busy || !selectedTime || !selectedServices.length || !form.policyAcknowledged || (!showDevSquareTokenInput && !isSquareReady)}>{busy ? 'Submitting...' : 'Submit booking request'}</button>
+      {!showDevSquareTokenInput && !isSquareReady && <p className="muted">Secure card entry must finish loading before you can submit your booking request.</p>}
       {pendingMessage && <p className="muted">{pendingMessage}</p>}
     </form>
   </div></section>;
