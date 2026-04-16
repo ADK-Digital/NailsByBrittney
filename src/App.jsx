@@ -50,7 +50,7 @@ function GalleryCarousel({ items, interval = 6000 }) {
 }
 
 function BookingSection({ services }) {
-  const showDevSquareTokenInput = import.meta.env.DEV || import.meta.env.VITE_ENABLE_SQUARE_DEV_TOKEN_INPUT === 'true';
+  const showDevSquareTokenInput = import.meta.env.VITE_ENABLE_SQUARE_DEV_TOKEN_INPUT === 'true';
   const squareCardRef = useRef(null);
   const [selectedServices, setSelectedServices] = useState([]);
   const [availability, setAvailability] = useState([]);
