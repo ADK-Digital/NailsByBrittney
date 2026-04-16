@@ -15,7 +15,52 @@ async function findMatchedCustomerIdentity({ firstName, lastName, email, phone }
   return data?.[0] || null;
 }
 
-async function logOrphanedSquareArtifacts({ payload, squareCustomerId, squareCardId, reason, cleanedUp }) {
+async function findAppointmentByIdempotencyKey(idempotencyKey) {
+  if (!idempotencyKey?.trim()) return null;
+
+  const { data, error } = await supabaseAdmin
+    .from('appointments')
+    .select(`
+      id,
+      booking_request_number,
+      estimated_total_text,
+      total_duration_minutes,
+      customers (
+        first_name,
+        last_name,
+        phone,
+        card_on_file_status
+      )
+    `)
+    .eq('idempotency_key', idempotencyKey)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data || null;
+}
+
+async function fetchAppointmentServices(appointmentId) {
+  const { data: appointmentServices } = await supabaseAdmin
+    .from('appointment_services')
+    .select('service_name_snapshot')
+    .eq('appointment_id', appointmentId);
+
+  return (appointmentServices || []).map((service) => service.service_name_snapshot);
+}
+
+async function buildBookingResponse(appointment) {
+  return {
+    appointmentId: appointment.id,
+    requestNumber: appointment.booking_request_number,
+    pendingMessage:
+      'Your appointment request is pending for your selected time. You will be notified based on your communication preference once your appointment is confirmed or canceled.',
+    estimatedTotalText: appointment.estimated_total_text,
+    estimatedDurationText: formatDuration(appointment.total_duration_minutes),
+    cardOnFileStatus: appointment.customers?.card_on_file_status || 'unknown',
+  };
+}
+
+async function logOrphanedSquareArtifacts({ payload, squareCustomerId, squareCardId, reason, cleanupAttempted, cleanedUp }) {
   const auditPayload = {
     first_name: payload.firstName?.trim() || null,
     last_name: payload.lastName?.trim() || null,
@@ -24,11 +69,18 @@ async function logOrphanedSquareArtifacts({ payload, squareCustomerId, squareCar
     square_customer_id: squareCustomerId || null,
     square_card_id: squareCardId || null,
     failure_reason: reason,
-    cleanup_attempted: Boolean(squareCardId),
+    cleanup_attempted: cleanupAttempted,
     cleanup_succeeded: cleanedUp,
   };
 
-  console.error('booking_square_orphan', auditPayload);
+  console.error('booking_square_orphan', {
+    ...auditPayload,
+    customer_cleanup_supported: false,
+    customer_cleanup_note: squareCustomerId && !squareCardId
+      ? 'Square customer cleanup is not automated in this flow; customer artifact may remain orphaned.'
+      : null,
+  });
+
   try {
     await supabaseAdmin.from('booking_intake_audit').insert(auditPayload);
   } catch (auditError) {
@@ -36,32 +88,52 @@ async function logOrphanedSquareArtifacts({ payload, squareCustomerId, squareCar
   }
 }
 
-async function cleanupAndLogOrphan({ payload, squareCustomerId, squareCardId, failureReason }) {
+async function cleanupAndLogOrphan({ payload, squareCustomerId, squareCardId, failureReason, stage }) {
   let cleanedUp = false;
-  try {
-    await disableCardOnFile({ cardId: squareCardId });
-    cleanedUp = true;
-  } catch (cleanupError) {
-    console.error('square_card_cleanup_failed', {
-      squareCardId,
-      squareCustomerId,
-      cleanupError: cleanupError.message,
-    });
+  const cleanupAttempted = Boolean(squareCardId);
+
+  if (squareCardId) {
+    try {
+      await disableCardOnFile({ cardId: squareCardId });
+      cleanedUp = true;
+    } catch (cleanupError) {
+      console.error('square_card_cleanup_failed', {
+        squareCardId,
+        squareCustomerId,
+        cleanupError: cleanupError.message,
+      });
+    }
   }
+
+  const reason = `[${stage}] ${failureReason}${
+    squareCustomerId && !squareCardId
+      ? ' | customer created but card setup failed; customer cleanup is not automated and may remain orphaned.'
+      : ''
+  }`;
 
   await logOrphanedSquareArtifacts({
     payload,
     squareCustomerId,
     squareCardId,
-    reason: failureReason,
+    reason,
+    cleanupAttempted,
     cleanedUp,
   });
+}
+
+function bookingCardIdempotencyKey(bookingIdempotencyKey) {
+  const normalized = String(bookingIdempotencyKey || '').trim();
+  if (!normalized) throw new Error('Idempotency key is required.');
+
+  // Square idempotency keys must be <= 45 chars.
+  return `bk-card-${normalized}`.slice(0, 45);
 }
 
 export const handler = async (event) => {
   let payload = null;
   let createdSquareCustomerId = null;
   let createdSquareCardId = null;
+  let squareSetupStage = null;
 
   try {
     ensureServerConfig();
@@ -70,6 +142,12 @@ export const handler = async (event) => {
     payload = JSON.parse(event.body || '{}');
     const { errors, phone, email } = validateBookingInput(payload);
     if (Object.keys(errors).length) return json(400, { errors });
+
+    const existingAppointment = await findAppointmentByIdempotencyKey(payload.idempotencyKey);
+    if (existingAppointment) {
+      const existingResponse = await buildBookingResponse(existingAppointment);
+      return json(200, existingResponse);
+    }
 
     const startAt = localDateTimeToUtcIso(payload.date, payload.time);
 
@@ -80,6 +158,7 @@ export const handler = async (event) => {
       phone,
     });
 
+    squareSetupStage = 'square_customer';
     const squareCustomer = await ensureSquareCustomer({
       existingSquareCustomerId: matchedIdentity?.square_customer_id,
       firstName: payload.firstName.trim(),
@@ -87,19 +166,22 @@ export const handler = async (event) => {
       email,
       phone,
       customerId: matchedIdentity?.customer_id || crypto.randomUUID(),
+      idempotencyKey: `bk-customer-${String(payload.idempotencyKey || '').trim()}`.slice(0, 45),
     });
 
     createdSquareCustomerId = squareCustomer.squareCustomerId;
 
+    squareSetupStage = 'square_card';
     const card = await storeCardOnFile({
       squareCustomerId: squareCustomer.squareCustomerId,
       cardToken: payload.squareCardToken,
-      idempotencyKey: payload.cardIdempotencyKey || payload.idempotencyKey,
+      idempotencyKey: bookingCardIdempotencyKey(payload.idempotencyKey),
     });
 
     createdSquareCardId = card.cardId;
     const communicationPreference = payload.communicationPreference || 'both';
 
+    squareSetupStage = 'booking_rpc';
     const { data, error } = await supabaseAdmin.rpc('create_booking_request', {
       p_first_name: payload.firstName.trim(),
       p_last_name: payload.lastName.trim(),
@@ -123,6 +205,7 @@ export const handler = async (event) => {
         squareCustomerId: createdSquareCustomerId,
         squareCardId: createdSquareCardId,
         failureReason: error.message,
+        stage: squareSetupStage,
       });
 
       if (error.message.includes('appointments_no_overlap')) {
@@ -133,34 +216,27 @@ export const handler = async (event) => {
 
     const { data: appointment } = await supabaseAdmin
       .from('appointments')
-      .select('id,booking_request_number,estimated_total_text,total_duration_minutes,customers(first_name,last_name,phone)')
+      .select('id,booking_request_number,estimated_total_text,total_duration_minutes,customers(first_name,last_name,phone,card_on_file_status)')
       .eq('id', data.appointment_id)
       .single();
 
-    const { data: appointmentServices } = await supabaseAdmin
-      .from('appointment_services')
-      .select('service_name_snapshot')
-      .eq('appointment_id', data.appointment_id);
-
-    const serviceList = (appointmentServices || []).map((s) => s.service_name_snapshot).join(', ');
+    const responseBody = await buildBookingResponse(appointment);
+    const serviceList = (await fetchAppointmentServices(appointment.id)).join(', ');
     const body = `appointment request #${appointment.booking_request_number}: Customer ${appointment.customers.first_name} ${appointment.customers.last_name}. Phone number ${appointment.customers.phone}. Service(s): ${serviceList}. Estimated revenue: ${appointment.estimated_total_text}. Reply "yes ${appointment.booking_request_number}" to confirm or "no ${appointment.booking_request_number}" to cancel.`;
     await notifyBrittney(body);
 
     return json(200, {
-      appointmentId: data.appointment_id,
-      requestNumber: data.booking_request_number,
-      pendingMessage: 'Your appointment request is pending for your selected time. You will be notified based on your communication preference once your appointment is confirmed or canceled.',
-      estimatedTotalText: data.estimated_total_text,
-      estimatedDurationText: formatDuration(data.total_duration_minutes),
+      ...responseBody,
       cardOnFileStatus: card.status,
     });
   } catch (error) {
-    if (payload && createdSquareCardId) {
+    if (payload && createdSquareCustomerId) {
       await cleanupAndLogOrphan({
         payload,
         squareCustomerId: createdSquareCustomerId,
         squareCardId: createdSquareCardId,
         failureReason: error.message,
+        stage: squareSetupStage || 'unexpected',
       });
     }
     return json(500, { error: error.message });
