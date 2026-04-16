@@ -1,7 +1,17 @@
 const SQUARE_SCRIPT_ID = 'square-web-payments-sdk';
-const SQUARE_SCRIPT_SRC = 'https://web.squarecdn.com/v1/square.js';
+const SQUARE_PRODUCTION_SCRIPT_SRC = 'https://web.squarecdn.com/v1/square.js';
+const SQUARE_SANDBOX_SCRIPT_SRC = 'https://sandbox.web.squarecdn.com/v1/square.js';
 
 let squareScriptPromise;
+
+function getSquareScriptSrc() {
+  const configuredEnvironment = import.meta.env.VITE_SQUARE_ENVIRONMENT?.toLowerCase();
+  const applicationId = import.meta.env.VITE_SQUARE_APPLICATION_ID || '';
+  const isSandbox = configuredEnvironment === 'sandbox'
+    || (configuredEnvironment !== 'production' && applicationId.startsWith('sandbox-'));
+
+  return isSandbox ? SQUARE_SANDBOX_SCRIPT_SRC : SQUARE_PRODUCTION_SCRIPT_SRC;
+}
 
 export function loadSquareWebPaymentsSdk() {
   if (typeof window === 'undefined') {
@@ -23,7 +33,7 @@ export function loadSquareWebPaymentsSdk() {
 
       const script = document.createElement('script');
       script.id = SQUARE_SCRIPT_ID;
-      script.src = SQUARE_SCRIPT_SRC;
+      script.src = getSquareScriptSrc();
       script.async = true;
       script.onload = () => {
         if (!window.Square?.payments) {
