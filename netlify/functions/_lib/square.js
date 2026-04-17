@@ -134,6 +134,8 @@ export async function chargeCardOnFile({ squareCustomerId, squareCardId, amountC
 
 export async function refundPayment({ paymentId, amountCents, reason, idempotencyKey }) {
   if (amountCents <= 0) throw new Error('Refund amount must be greater than zero.');
+  // This helper performs linked refunds (via payment_id), so Square requires omitting location_id.
+  if (!paymentId) throw new Error('Payment ID is required for linked refunds.');
 
   if (!hasSquareCredentials()) {
     if (!canMock()) throw new Error('Square is not configured.');
@@ -147,7 +149,6 @@ export async function refundPayment({ paymentId, amountCents, reason, idempotenc
   const response = await squareRequest('/v2/refunds', {
     idempotency_key: idempotencyKey,
     payment_id: paymentId,
-    location_id: process.env.SQUARE_LOCATION_ID,
     amount_money: {
       amount: amountCents,
       currency: process.env.SQUARE_CURRENCY || 'USD',
