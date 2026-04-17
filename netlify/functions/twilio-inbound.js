@@ -1,17 +1,21 @@
 import { ensureServerConfig, supabaseAdmin } from './_lib/supabaseAdmin.js';
-import {
-  transitionAppointment,
-  chargeAppointment,
-  refundAppointment,
-  formatStatusSummary,
-  getAppointmentStatusSummaryByRequestNumber,
-} from './_lib/bookingActions.js';
+import { transitionAppointment } from './_lib/bookingActions.js';
+import { APP_TIMEZONE } from './_lib/config.js';
+
+function escapeXml(value = '') {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
 
 function xmlMessage(message) {
   return {
     statusCode: 200,
     headers: { 'Content-Type': 'text/xml' },
-    body: `<Response><Message>${message}</Message></Response>`,
+    body: `<Response><Message>${escapeXml(message)}</Message></Response>`,
   };
 }
 
@@ -22,68 +26,85 @@ function normalizePhone(phone = '') {
   return phone;
 }
 
-function parsePercentToken(token) {
-  if (!token) return null;
-  const match = token.trim().match(/^([0-9]+(?:\.[0-9]+)?)%$/);
-  if (!match) return null;
-  return Number(match[1]);
-}
+const BUSINESS_TIMEZONE = process.env.BUSINESS_TIMEZONE || APP_TIMEZONE || 'America/New_York';
 
-function parseMoneyToken(token) {
-  if (!token) return null;
-  const match = token.trim().match(/^\$?([0-9]+(?:\.[0-9]{1,2})?)$/);
-  if (!match) return null;
-  return Number(match[1]);
+function formatShortDateTime(value) {
+  return new Date(value).toLocaleString('en-US', {
+    timeZone: BUSINESS_TIMEZONE,
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
 }
 
 function parseCommand(body = '') {
   const normalized = body.trim().toLowerCase().replace(/\s+/g, ' ');
   if (!normalized) return { action: 'invalid' };
 
-  let m = normalized.match(/^(yes|no)\s*#?\s*(\d{2,6})$/i);
+  if (normalized === 'help') return { action: 'help' };
+  if (normalized === 'list') return { action: 'list' };
+
+  let m = normalized.match(/^details\s*#?\s*(\d{2,6})$/i);
+  if (m) return { action: 'details', requestNumber: Number(m[1]) };
+
+  m = normalized.match(/^(yes|no)\s*#?\s*(\d{2,6})$/i);
   if (m) return { action: m[1] === 'yes' ? 'confirm' : 'decline', requestNumber: Number(m[2]) };
-
-  m = normalized.match(/^status\s*#?\s*(\d{2,6})$/i);
-  if (m) return { action: 'status', requestNumber: Number(m[1]) };
-
-  m = normalized.match(/^late\s*#?\s*(\d{2,6})(?:\s+([^\s]+))?$/i);
-  if (m) return { action: 'charge_late', requestNumber: Number(m[1]), percent: parsePercentToken(m[2]) };
-
-  m = normalized.match(/^no show\s*#?\s*(\d{2,6})(?:\s+([^\s]+))?$/i);
-  if (m) return { action: 'charge_no_show', requestNumber: Number(m[1]), percent: parsePercentToken(m[2]) };
-
-  m = normalized.match(/^charge\s*#?\s*(\d{2,6})\s+([^\s]+)$/i);
-  if (m) return { action: 'charge_service', requestNumber: Number(m[1]), amount: parseMoneyToken(m[2]) };
-
-  m = normalized.match(/^refund\s+(late|no show|services)\s*#?\s*(\d{2,6})(?:\s+([^\s]+))?$/i);
-  if (m) {
-    return {
-      action: 'refund',
-      target: m[1] === 'services' ? 'service' : (m[1] === 'late' ? 'late' : 'no_show'),
-      requestNumber: Number(m[2]),
-      percent: parsePercentToken(m[3]),
-    };
-  }
 
   return { action: 'invalid' };
 }
 
 const HELP_TEXT = [
-  'Invalid command. Examples:',
-  'yes 123 | no 123 | status 123',
-  'late 123 [50%] | no show 123 [40%]',
-  'charge 123 $85',
-  'refund late 123 | refund no show 123 | refund services 123 [50%]',
-].join(' ');
+  'Commands:',
+  'help',
+  'list',
+  'details 123',
+  'yes 123',
+  'no 123',
+].join(' | ');
 
 async function findAppointmentByRequest(requestNumber) {
   const { data: appointment } = await supabaseAdmin
     .from('appointments')
-    .select('id,status,confirmation_deadline_at')
+    .select('id,booking_request_number,start_at,status,confirmation_deadline_at,customers(first_name,last_name)')
     .eq('booking_request_number', requestNumber)
     .maybeSingle();
 
   return appointment;
+}
+
+async function listUpcomingAppointments(limit = 5) {
+  const nowIso = new Date().toISOString();
+  const { data } = await supabaseAdmin
+    .from('appointments')
+    .select('booking_request_number,start_at,status,customers(first_name,last_name)')
+    .gte('start_at', nowIso)
+    .in('status', ['pending_confirmation', 'confirmed'])
+    .order('start_at', { ascending: true })
+    .limit(limit);
+
+  return data || [];
+}
+
+async function getAppointmentDetailsByRequest(requestNumber) {
+  const { data: appointment } = await supabaseAdmin
+    .from('appointments')
+    .select('id,booking_request_number,start_at,status,customers(first_name,last_name)')
+    .eq('booking_request_number', requestNumber)
+    .maybeSingle();
+
+  if (!appointment) return null;
+
+  const { data: services } = await supabaseAdmin
+    .from('appointment_services')
+    .select('service_name_snapshot')
+    .eq('appointment_id', appointment.id)
+    .order('service_name_snapshot', { ascending: true });
+
+  return {
+    ...appointment,
+    services: (services || []).map((row) => row.service_name_snapshot),
+  };
 }
 
 export const handler = async (event) => {
@@ -100,8 +121,40 @@ export const handler = async (event) => {
     }
 
     const command = parseCommand(body);
-    if (command.action === 'invalid') {
+
+    if (command.action === 'help' || command.action === 'invalid') {
       return xmlMessage(HELP_TEXT);
+    }
+
+    if (command.action === 'list') {
+      const upcoming = await listUpcomingAppointments();
+      if (!upcoming.length) return xmlMessage('No upcoming pending/confirmed appointments.');
+
+      const lines = upcoming.map((item) => {
+        const customerName = `${item.customers?.first_name || ''} ${item.customers?.last_name || ''}`.trim() || 'Unknown';
+        return `#${item.booking_request_number} ${customerName} ${formatShortDateTime(item.start_at)}`;
+      });
+
+      return xmlMessage(`Upcoming: ${lines.join(' | ')}`);
+    }
+
+    if (command.action === 'details') {
+      const details = await getAppointmentDetailsByRequest(command.requestNumber);
+      if (!details) return xmlMessage(`No appointment found for request #${command.requestNumber}.`);
+
+      const customerName = `${details.customers?.first_name || ''} ${details.customers?.last_name || ''}`.trim() || 'Unknown';
+      const parts = [
+        `#${details.booking_request_number}`,
+        customerName,
+        formatShortDateTime(details.start_at),
+        `Status: ${details.status}`,
+      ];
+
+      if (details.services?.length) {
+        parts.push(`Services: ${details.services.join(', ')}`);
+      }
+
+      return xmlMessage(parts.join(' | '));
     }
 
     const appointment = await findAppointmentByRequest(command.requestNumber);
@@ -113,42 +166,15 @@ export const handler = async (event) => {
       if (appointment.status !== 'pending_confirmation') {
         return xmlMessage(`Request #${command.requestNumber} is currently ${appointment.status}.`);
       }
-      if (new Date(appointment.confirmation_deadline_at) <= new Date()) {
+
+      if (appointment.confirmation_deadline_at && new Date(appointment.confirmation_deadline_at) <= new Date()) {
         await transitionAppointment(appointment.id, 'expired', { initiatedBy: 'twilio', commandText: body });
-        return xmlMessage('Request already expired and released.');
+        return xmlMessage(`Request #${command.requestNumber} already expired and released.`);
       }
 
       const nextStatus = command.action === 'confirm' ? 'confirmed' : 'declined';
       await transitionAppointment(appointment.id, nextStatus, { initiatedBy: 'twilio', commandText: body });
-      return xmlMessage(`Request #${command.requestNumber} ${nextStatus}.`);
-    }
-
-    if (command.action === 'charge_late') {
-      await chargeAppointment({ appointmentId: appointment.id, target: 'late', percentOverride: command.percent ?? 25, initiatedBy: 'twilio', commandText: body });
-      return xmlMessage(`Late cancellation fee charged for request #${command.requestNumber}.`);
-    }
-
-    if (command.action === 'charge_no_show') {
-      await chargeAppointment({ appointmentId: appointment.id, target: 'no_show', percentOverride: command.percent ?? 50, initiatedBy: 'twilio', commandText: body });
-      return xmlMessage(`No-show fee charged for request #${command.requestNumber}.`);
-    }
-
-    if (command.action === 'charge_service') {
-      if (!command.amount) {
-        return xmlMessage('Invalid amount. Usage: charge 123 $85');
-      }
-      await chargeAppointment({ appointmentId: appointment.id, target: 'service', amountDollars: command.amount, initiatedBy: 'twilio', commandText: body });
-      return xmlMessage(`Service charge posted for request #${command.requestNumber}.`);
-    }
-
-    if (command.action === 'refund') {
-      await refundAppointment({ appointmentId: appointment.id, target: command.target, percentOverride: command.percent ?? null, initiatedBy: 'twilio', commandText: body });
-      return xmlMessage(`Refund processed for request #${command.requestNumber}.`);
-    }
-
-    if (command.action === 'status') {
-      const summary = await getAppointmentStatusSummaryByRequestNumber(command.requestNumber);
-      return xmlMessage(formatStatusSummary(summary));
+      return xmlMessage(`#${command.requestNumber} ${nextStatus}.`);
     }
 
     return xmlMessage(HELP_TEXT);

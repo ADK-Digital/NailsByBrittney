@@ -2,22 +2,12 @@
 
 Public marketing site + full booking and admin management with Supabase + Netlify Functions + Twilio + Resend.
 
-## What was added in Phase 2
-- Card-on-file booking flow scaffolded for Square (card is required; no charge at booking time) with a clearly labeled developer placeholder input hidden by default outside dev mode.
-- Customer communication preferences (`sms`, `email`, `both`) with preference-aware customer notifications.
-- Shared appointment action layer for Twilio + dashboard to keep status/charges/refunds synchronized.
-- Manual financial operations for service charges, late fees, no-show fees, and refunds.
-- Financial event ledger + action audit tables in Supabase.
-- Richer admin appointment cards with status/payment/card visibility and action buttons.
-- Expanded Twilio parser commands:
-  - `yes 123`, `no 123`, `status 123`
-  - `late 123`, `late 123 50%`
-  - `no show 123`, `no show 123 40%`
-  - `charge 123 $85`
-  - `refund late 123`
-  - `refund no show 123`
-  - `refund services 123`
-  - `refund services 123 50%`
+## Twilio inbound commands (current phase)
+- `help`
+- `list`
+- `details 123`
+- `yes 123`
+- `no 123`
 
 ## Environment variables
 Copy `.env.example` to `.env` and set values.
