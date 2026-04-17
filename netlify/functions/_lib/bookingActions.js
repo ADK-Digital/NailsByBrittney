@@ -4,6 +4,7 @@ import { sendSms } from './notifications.js';
 import { sendBookingConfirmedEmail, sendBookingDeclinedEmail, sendBookingExpiredEmail } from './email.js';
 import { formatDuration } from './time.js';
 import { chargeCardOnFile, refundPayment } from './square.js';
+import { createHash } from 'node:crypto';
 
 const PAYMENT_TARGET = {
   service: { chargeType: 'service_charge', refundType: 'refund_service', statusField: 'service_payment_status' },
@@ -41,6 +42,13 @@ function canSendSms(preference) {
 
 function canSendEmail(preference) {
   return preference === 'email' || preference === 'both' || !preference;
+}
+
+function buildSquareIdempotencyKey(action, appointmentId, eventType, amountCents, basisValue) {
+  const seed = `${action}|${appointmentId}|${eventType}|${amountCents}|${basisValue ?? 'na'}|${Date.now()}`;
+  const digest = createHash('sha256').update(seed).digest('hex').slice(0, 24);
+  const appointmentToken = String(appointmentId || '').replace(/-/g, '').slice(0, 8) || 'appt';
+  return `${action}-${appointmentToken}-${digest}`;
 }
 
 async function loadAppointment(appointmentId) {
@@ -249,7 +257,13 @@ export async function chargeAppointment({
   const amountCents = dollarsToCents(dollars);
   if (amountCents <= 0) throw new Error('Charge amount must be greater than zero.');
 
-  const idempotencyKey = `charge-${appointmentId}-${type.chargeType}-${amountCents}-${percentBasis ?? 'custom'}-${Date.now()}`;
+  const idempotencyKey = buildSquareIdempotencyKey(
+    'charge',
+    appointmentId,
+    type.chargeType,
+    amountCents,
+    percentBasis ?? 'custom',
+  );
 
   const charge = await chargeCardOnFile({
     appointmentId,
@@ -316,7 +330,13 @@ export async function refundAppointment({ appointmentId, target, percentOverride
   const latestCharge = [...chargeEvents].reverse().find((item) => item.processor_reference);
   if (!latestCharge) throw new Error('Cannot refund because no processor payment reference was stored for the original charge.');
 
-  const idempotencyKey = `refund-${appointmentId}-${type.refundType}-${refundCents}-${percentOverride ?? 'full'}-${Date.now()}`;
+  const idempotencyKey = buildSquareIdempotencyKey(
+    'refund',
+    appointmentId,
+    type.refundType,
+    refundCents,
+    percentOverride ?? 'full',
+  );
 
   const refund = await refundPayment({
     paymentId: latestCharge.processor_reference,
