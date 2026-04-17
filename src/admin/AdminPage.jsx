@@ -54,7 +54,11 @@ function AppointmentCard({ appointment, onRefresh }) {
       <button className="btn" onClick={() => call(() => adminChargeAppointment({ appointmentId: appointment.id, target: 'no_show', percent: Number(noShowPct || 50) }))}>Charge no-show fee</button>
       <input value={noShowPct} onChange={(e) => setNoShowPct(e.target.value.replace(/[^0-9.]/g, ''))} placeholder="50" />
       <button className="btn" onClick={() => call(() => adminChargeAppointment({ appointmentId: appointment.id, target: 'service', amount: Number(serviceAmount || 0) }))}>Charge services</button>
-      <input value={serviceAmount} onChange={(e) => setServiceAmount(e.target.value.replace(/[^0-9.]/g, ''))} placeholder="85.00" />
+      <input
+        value={serviceAmount}
+        onChange={(e) => setServiceAmount(e.target.value.replace(/[^0-9.]/g, ''))}
+        placeholder="Type service amount (e.g. 85.00)"
+      />
     </div>
 
     <div className="admin-action-grid">
