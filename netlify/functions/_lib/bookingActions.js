@@ -87,14 +87,15 @@ async function logAudit(appointmentId, actionType, initiatedBy, note, commandTex
   });
 }
 
-async function notifyCustomerStatus(appointment, services, nextStatus) {
+async function notifyCustomerStatus(appointment, services, nextStatus, context = {}) {
   const serviceList = services.join(', ');
   const date = new Date(appointment.start_at).toLocaleDateString('en-US', { timeZone: 'America/New_York', weekday: 'long', month: 'long', day: 'numeric' });
   const time = new Date(appointment.start_at).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' });
   const preference = appointment.customers.communication_preference || 'both';
 
   if (nextStatus === 'confirmed') {
-    const sms = `Your appointment with Nails By Brittney is confirmed for ${date} at ${time}, for ${serviceList}. ${appointment.estimated_total_text}. Estimated appointment length: ${formatDuration(appointment.total_duration_minutes)}.`;
+    const sms = context.confirmationMessageOverride
+      || `Your appointment with Nails By Brittney is confirmed for ${date} at ${time}, for ${serviceList}. ${appointment.estimated_total_text}. Estimated appointment length: ${formatDuration(appointment.total_duration_minutes)}.`;
     if (canSendSms(preference)) await sendSms(appointment.customers.phone, sms);
     if (canSendEmail(preference)) await sendBookingConfirmedEmail({ customer: appointment.customers, appointment, services });
   }
@@ -123,7 +124,7 @@ export async function transitionAppointment(appointmentId, nextStatus, context =
 
   await supabaseAdmin.from('appointments').update(patch).eq('id', appointmentId);
   await logAudit(appointmentId, `status_${nextStatus}`, context.initiatedBy || 'dashboard', context.note, context.commandText || null);
-  await notifyCustomerStatus(appointment, services, nextStatus);
+  await notifyCustomerStatus(appointment, services, nextStatus, context);
 }
 
 async function getNetTotals(appointmentId, type) {
