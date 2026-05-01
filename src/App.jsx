@@ -64,8 +64,11 @@ function BookingSection({ services }) {
   const [isSquareReady, setIsSquareReady] = useState(showDevSquareTokenInput);
   const [devSquareToken, setDevSquareToken] = useState('');
   const [busy, setBusy] = useState(false);
+  const [serviceError, setServiceError] = useState('');
 
   const selected = services.filter((s) => selectedServices.includes(s.id));
+  const selectedBaseServices = selected.filter((s) => (s.type || 'base') === 'base');
+  const selectedAddonServices = selected.filter((s) => s.type === 'addon');
   const duration = selected.reduce((sum, s) => sum + (s.duration_minutes || 0), 0);
   const totalMin = selected.reduce((sum, s) => sum + Number(s.price_min_numeric || 0), 0);
   const startsAt = selected.some((s) => s.is_variable_price);
@@ -78,6 +81,7 @@ function BookingSection({ services }) {
   const times = useMemo(() => availability.find((d) => d.date === selectedDate)?.times || [], [availability, selectedDate]);
 
   const toggleService = (id) => {
+    setServiceError('');
     setSelectedDate('');
     setSelectedTime('');
     setSelectedServices((curr) => curr.includes(id) ? curr.filter((x) => x !== id) : [...curr, id]);
@@ -87,6 +91,12 @@ function BookingSection({ services }) {
     e.preventDefault();
     setPendingMessage('');
     setCardError('');
+    setServiceError('');
+
+    if (selectedAddonServices.length && !selectedBaseServices.length) {
+      setServiceError('Add-ons must be booked with a manicure or pedicure.');
+      return;
+    }
 
     let squareCardToken = '';
     if (showDevSquareTokenInput) {
@@ -141,7 +151,10 @@ function BookingSection({ services }) {
     <div className="booking-grid">
       <div>
         <h3>1. Select service(s)</h3>
-        {services.filter((s) => s.active !== false).map((s) => <label key={s.id} className="service-check"><input type="checkbox" checked={selectedServices.includes(s.id)} onChange={() => toggleService(s.id)} /> {s.name} — {s.price_text} • {s.duration_minutes || 0} min</label>)}
+        {services.filter((s) => s.active !== false && (s.type || 'base') === 'base').map((s) => <label key={s.id} className="service-check"><input type="checkbox" checked={selectedServices.includes(s.id)} onChange={() => toggleService(s.id)} /> {s.name} — {s.price_text} • {s.duration_minutes || 0} min</label>)}
+        <h4>Add-ons</h4>
+        {services.filter((s) => s.active !== false && s.type === 'addon').map((s) => <label key={s.id} className="service-check"><input type="checkbox" checked={selectedServices.includes(s.id)} onChange={() => toggleService(s.id)} /> {s.name} (Add-on) — {s.price_text} • {s.duration_minutes || 0} min</label>)}
+        {serviceError && <p className="form-error" role="alert">{serviceError}</p>}
         {!!selected.length && <p className="muted">Estimated length: {duration} min. {startsAt ? `Estimated total starts at $${totalMin.toFixed(2)}` : `Estimated total is $${totalMin.toFixed(2)}`}</p>}
       </div>
       <div>
