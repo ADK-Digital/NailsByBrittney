@@ -10,11 +10,34 @@ create table if not exists services (
   duration text not null default '30 min',
   duration_minutes int not null default 30 check (duration_minutes > 0),
   is_variable_price boolean not null default false,
+  type text not null default 'base' check (type in ('base', 'addon')),
+  requires_service_ids uuid[] not null default '{}'::uuid[],
+  requires_service_names text[] not null default '{}'::text[],
   active boolean not null default true,
   display_order int not null default 1,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table services add column if not exists type text not null default 'base' check (type in ('base', 'addon'));
+alter table services add column if not exists requires_service_ids uuid[] not null default '{}'::uuid[];
+alter table services add column if not exists requires_service_names text[] not null default '{}'::text[];
+
+with addon_requirements as (
+  select
+    addon.id as addon_id,
+    coalesce(array_agg(required.id order by required.display_order) filter (where required.id is not null), '{}'::uuid[]) as required_ids
+  from services addon
+  left join lateral unnest(coalesce(addon.requires_service_names, '{}'::text[])) as req_name(name) on true
+  left join services required on required.name = req_name.name
+  where addon.type = 'addon'
+  group by addon.id
+)
+update services s
+set requires_service_ids = addon_requirements.required_ids
+from addon_requirements
+where s.id = addon_requirements.addon_id
+  and (s.requires_service_ids is null or cardinality(s.requires_service_ids) = 0);
 
 create table if not exists testimonials (
   id uuid primary key default gen_random_uuid(),
