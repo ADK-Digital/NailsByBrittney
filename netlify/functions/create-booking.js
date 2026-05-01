@@ -129,6 +129,29 @@ function bookingCardIdempotencyKey(bookingIdempotencyKey) {
   return `bk-card-${normalized}`.slice(0, 45);
 }
 
+async function validateAddonSelection(serviceIds) {
+  const { data: services, error } = await supabaseAdmin
+    .from('services')
+    .select('id,type,requires_service_ids')
+    .in('id', serviceIds)
+    .eq('active', true);
+
+  if (error) throw error;
+  if (!services?.length) return;
+
+  const selectedIds = new Set(services.map((service) => service.id));
+  const hasInvalidAddon = services.some((service) => {
+    if (service.type !== 'addon') return false;
+    const requiredIds = Array.isArray(service.requires_service_ids) ? service.requires_service_ids : [];
+    if (!requiredIds.length) return false;
+    return !requiredIds.some((id) => selectedIds.has(id));
+  });
+
+  if (hasInvalidAddon) {
+    throw new Error('Design and removal services must be booked with a manicure or pedicure service.');
+  }
+}
+
 export const handler = async (event) => {
   let payload = null;
   let createdSquareCustomerId = null;
@@ -150,6 +173,7 @@ export const handler = async (event) => {
     }
 
     const startAt = localDateTimeToUtcIso(payload.date, payload.time);
+    await validateAddonSelection(payload.serviceIds);
 
     const matchedIdentity = await findMatchedCustomerIdentity({
       firstName: payload.firstName.trim(),
