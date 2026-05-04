@@ -14,7 +14,14 @@ export const handler = async (event) => {
   try {
     ensureServerConfig();
     const q = event.queryStringParameters || {};
-    const serviceIds = (q.serviceIds || '').split(',').filter(Boolean);
+    const multi = event.multiValueQueryStringParameters || {};
+    const rawServiceIds = multi.serviceIds?.length
+      ? multi.serviceIds
+      : (q.serviceIds ? [q.serviceIds] : []);
+    const serviceIds = rawServiceIds
+      .flatMap((value) => String(value).split(','))
+      .map((value) => value.trim())
+      .filter(Boolean);
     const selectedDate = q.date;
     if (!serviceIds.length) return json(400, { error: 'serviceIds is required.' });
 

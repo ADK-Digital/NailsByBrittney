@@ -1,9 +1,8 @@
 export async function fetchAvailability(serviceIds) {
   console.log('fetchAvailability called', serviceIds);
 
-  const params = new URLSearchParams({
-    serviceIds: serviceIds.join(',')
-  });
+  const params = new URLSearchParams();
+  serviceIds.forEach((serviceId) => params.append('serviceIds', serviceId));
 
   const res = await fetch(`/.netlify/functions/availability?${params.toString()}`);
 
