@@ -1,7 +1,14 @@
 import { supabaseAdmin } from './supabaseAdmin.js';
 import { BOOKING_LINK } from './config.js';
 import { sendSms } from './notifications.js';
-import { sendBookingConfirmedEmail, sendBookingDeclinedEmail, sendBookingExpiredEmail } from './email.js';
+import {
+  sendBookingCancelledEmail,
+  sendBookingConfirmedEmail,
+  sendBookingDeclinedEmail,
+  sendBookingExpiredEmail,
+  sendChargeAppliedEmail,
+  sendRefundIssuedEmail,
+} from './email.js';
 import { formatDuration } from './time.js';
 import { chargeCardOnFile, refundPayment } from './square.js';
 import { createHash } from 'node:crypto';
@@ -97,19 +104,25 @@ async function notifyCustomerStatus(appointment, services, nextStatus, context =
     const sms = context.confirmationMessageOverride
       || `Your appointment with Nails By Brittney is confirmed for ${date} at ${time}, for ${serviceList}. ${appointment.estimated_total_text}. Estimated appointment length: ${formatDuration(appointment.total_duration_minutes)}.`;
     if (canSendSms(preference)) await sendSms(appointment.customers.phone, sms);
-    if (canSendEmail(preference)) await sendBookingConfirmedEmail({ customer: appointment.customers, appointment, services });
+    await sendBookingConfirmedEmail({ customer: appointment.customers, appointment, services });
   }
 
-  if (nextStatus === 'declined' || nextStatus === 'cancelled') {
+  if (nextStatus === 'declined') {
     const sms = `Sorry, the appointment time you requested is no longer available. Please choose another available time here: ${BOOKING_LINK}`;
     if (canSendSms(preference)) await sendSms(appointment.customers.phone, sms);
-    if (canSendEmail(preference)) await sendBookingDeclinedEmail({ customer: appointment.customers, appointment, services });
+    await sendBookingDeclinedEmail({ customer: appointment.customers, appointment, services });
+  }
+
+  if (nextStatus === 'cancelled') {
+    const sms = `Your appointment has been cancelled. Please choose another available time here: ${BOOKING_LINK}`;
+    if (canSendSms(preference)) await sendSms(appointment.customers.phone, sms);
+    await sendBookingCancelledEmail({ customer: appointment.customers, appointment, services });
   }
 
   if (nextStatus === 'expired') {
     const sms = `Your appointment request could not be confirmed in time and has been released. Please choose another available time here: ${BOOKING_LINK}`;
     if (canSendSms(preference)) await sendSms(appointment.customers.phone, sms);
-    if (canSendEmail(preference)) await sendBookingExpiredEmail({ customer: appointment.customers, appointment, services });
+    await sendBookingExpiredEmail({ customer: appointment.customers, appointment, services });
   }
 }
 
@@ -291,6 +304,15 @@ export async function chargeAppointment({
   await updatePaymentStatusFields(appointmentId, target);
   await logAudit(appointmentId, `charge_${target}`, initiatedBy, note, commandText || null);
 
+  const { services } = await loadAppointment(appointmentId);
+  const preference = appointment.customers.communication_preference || 'both';
+  await sendChargeAppliedEmail({
+    customer: appointment.customers,
+    appointment,
+    services,
+    amountCents,
+  });
+
   return event;
 }
 
@@ -362,6 +384,15 @@ export async function refundAppointment({ appointmentId, target, percentOverride
 
   await updatePaymentStatusFields(appointmentId, target);
   await logAudit(appointmentId, `refund_${target}`, initiatedBy, note, commandText || null);
+
+  const { appointment, services } = await loadAppointment(appointmentId);
+  const preference = appointment.customers.communication_preference || 'both';
+  await sendRefundIssuedEmail({
+    customer: appointment.customers,
+    appointment,
+    services,
+    amountCents: refundCents,
+  });
 
   return event;
 }

@@ -3,6 +3,7 @@ import { normalizeEmail, validateBookingInput } from './_lib/validation.js';
 import { localDateTimeToUtcIso, formatDuration } from './_lib/time.js';
 import { notifyBrittney } from './_lib/notifications.js';
 import { disableCardOnFile, ensureSquareCustomer, storeCardOnFile } from './_lib/square.js';
+import { sendBookingCreatedEmail } from './_lib/email.js';
 
 async function findMatchedCustomerIdentity({ firstName, lastName, email, phone }) {
   const { data, error } = await supabaseAdmin.rpc('find_matching_customer_identity', {
@@ -240,7 +241,7 @@ export const handler = async (event) => {
 
     const { data: appointment } = await supabaseAdmin
       .from('appointments')
-      .select('id,booking_request_number,estimated_total_text,total_duration_minutes,customers(first_name,last_name,phone,card_on_file_status)')
+      .select('id,start_at,booking_request_number,estimated_total_text,total_duration_minutes,customers(first_name,last_name,phone,email,card_on_file_status,communication_preference)')
       .eq('id', data.appointment_id)
       .single();
 
@@ -248,6 +249,12 @@ export const handler = async (event) => {
     const serviceList = (await fetchAppointmentServices(appointment.id)).join(', ');
     const body = `appointment request #${appointment.booking_request_number}: Customer ${appointment.customers.first_name} ${appointment.customers.last_name}. Phone number ${appointment.customers.phone}. Service(s): ${serviceList}. Estimated revenue: ${appointment.estimated_total_text}. Reply "yes ${appointment.booking_request_number}" to confirm or "no ${appointment.booking_request_number}" to cancel.`;
     await notifyBrittney(body);
+
+    await sendBookingCreatedEmail({
+      customer: appointment.customers,
+      appointment,
+      services: await fetchAppointmentServices(appointment.id),
+    });
 
     return json(200, {
       ...responseBody,
