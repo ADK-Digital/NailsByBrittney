@@ -1,7 +1,14 @@
-export async function fetchAvailability(serviceIds, date) {
-  const params = new URLSearchParams({ serviceIds: serviceIds.join(',') });
-  if (date) params.set('date', date);
+export async function fetchAvailability(serviceIds) {
+  const params = new URLSearchParams();
+
+  serviceIds.forEach((id) => params.append('services', id));
+
   const res = await fetch(`/.netlify/functions/availability?${params.toString()}`);
+
+  if (!res.ok) {
+    throw new Error('Failed to fetch availability');
+  }
+
   return res.json();
 }
 
