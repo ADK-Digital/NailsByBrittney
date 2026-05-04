@@ -4,7 +4,7 @@ export async function fetchAvailability(serviceIds) {
 
   serviceIds.forEach((id) => params.append('services', id));
 
-  const res = await fetch(`/.netlify/functions/availability?${params.toString()}`);
+  const res = await fetch(`${import.meta.env.DEV ? 'http://localhost:8888' : ''}/.netlify/functions/availability?${params.toString()}`);
 
   if (!res.ok) {
     throw new Error('Failed to fetch availability');
