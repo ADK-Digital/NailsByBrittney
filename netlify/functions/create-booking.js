@@ -270,6 +270,8 @@ export const handler = async (event) => {
         stage: squareSetupStage || 'unexpected',
       });
     }
+    console.error('CREATE BOOKING ERROR:', error);
+    console.error('STACK:', error?.stack);
     return json(500, { error: error.message });
   }
 };
