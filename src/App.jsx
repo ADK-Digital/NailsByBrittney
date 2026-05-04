@@ -74,7 +74,11 @@ function BookingSection({ services }) {
   const startsAt = selected.some((s) => s.is_variable_price);
 
   useEffect(() => {
-    if (!selectedServices.length) return;
+    if (!selectedServices.length) {
+      setAvailability([]);
+      return;
+    }
+
     fetchAvailability(selectedServices).then((data) => setAvailability(data.dates || []));
   }, [selectedServices.join(',')]);
 
