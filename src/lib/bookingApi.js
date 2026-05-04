@@ -1,4 +1,5 @@
 export async function fetchAvailability(serviceIds) {
+  console.log('fetchAvailability called', serviceIds);
   const params = new URLSearchParams();
 
   serviceIds.forEach((id) => params.append('services', id));
