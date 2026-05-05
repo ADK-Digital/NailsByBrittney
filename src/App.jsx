@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { EMAIL, INSTAGRAM_URL, PHONE_DISPLAY, PHONE_LINK, SAMPLE_BIO } from './lib/constants';
 import { fetchGalleryItems, fetchServices, fetchTestimonials } from './lib/api';
 import { createBookingRequest, fetchAvailability } from './lib/bookingApi';
@@ -156,8 +155,8 @@ function BookingSection({ services }) {
       <div>
         <h3>1. Select service(s)</h3>
         {services.filter((s) => s.active !== false && (s.type || 'base') === 'base').map((s) => <label key={s.id} className="service-check"><input type="checkbox" checked={selectedServices.includes(s.id)} onChange={() => toggleService(s.id)} /> {s.name} — {s.price_text} • {s.duration_minutes || 0} min</label>)}
-        <h4>Add-ons</h4>
-        {services.filter((s) => s.active !== false && s.type === 'addon').map((s) => <label key={s.id} className="service-check"><input type="checkbox" checked={selectedServices.includes(s.id)} onChange={() => toggleService(s.id)} /> {s.name} (Add-on) — {s.price_text} • {s.duration_minutes || 0} min</label>)}
+        {services.filter((s) => s.active !== false && s.type === 'addon').map((s) => <label key={s.id} className="service-check"><input type="checkbox" checked={selectedServices.includes(s.id)} onChange={() => toggleService(s.id)} /> * {s.name} — {s.price_text} • {s.duration_minutes || 0} min</label>)}
+        <p className="muted addon-disclaimer">Services marked with * must be added with a pedicure or manicure</p>
         {serviceError && <p className="form-error" role="alert">{serviceError}</p>}
         {!!selected.length && <p className="muted">Estimated length: {duration} min. {startsAt ? `Estimated total starts at $${totalMin.toFixed(2)}` : `Estimated total is $${totalMin.toFixed(2)}`}</p>}
       </div>
@@ -180,7 +179,7 @@ function BookingSection({ services }) {
       </label>
       <label>Notes<textarea value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} /></label>
 
-      <h3>5. Card on file</h3>
+      <h3>5. Payment information</h3>
       <div className="policy-box">
         {!showDevSquareTokenInput && (
           <>
@@ -198,13 +197,13 @@ function BookingSection({ services }) {
       </div>
 
       <div className="policy-box">
-        <h4>Card on File and Cancellation Policy</h4>
+        <h4>Late, no-show, and cancellation policy</h4>
         <p>A valid credit or debit card is required to request an appointment. Your card will be securely stored on file and will not be charged at the time of booking. By submitting your appointment request, you authorize Nails by Brittney to charge your card only in the following situations:</p>
         <ul>
           <li>Late cancellation: If you cancel less than 24 hours before your scheduled appointment, you may be charged 25% of the estimated service total.</li>
           <li>No-show: If you miss your appointment without notice, you may be charged 50% of the estimated service total.</li>
         </ul>
-        <p>Any service charges, late cancellation fees, or no-show fees are applied manually by Nails by Brittney. If a different amount is charged than the standard policy amount, it will be at Nails by Brittney’s discretion. By continuing, you acknowledge and agree to these terms.</p>
+        <p>Any service charges, late cancellation fees, or no-show fees are applied manually by Nails by Brittney. If a lesser amount is charged than the standard policy amount, it will be at Nails by Brittney’s discretion. By continuing, you acknowledge and agree to these terms.</p>
         <label className="service-check"><input type="checkbox" required checked={form.policyAcknowledged} onChange={(e) => setForm((f) => ({ ...f, policyAcknowledged: e.target.checked }))} /> I understand and agree to the card-on-file, late cancellation, and no-show policy.</label>
       </div>
 
@@ -224,21 +223,22 @@ export default function App() {
   useEffect(() => { Promise.all([fetchServices(), fetchTestimonials(), fetchGalleryItems()]).then(([s, t, g]) => { setServices(s); setTestimonials(t); setGallery(g); }); }, []);
   const hasImages = useMemo(() => gallery.some((item) => item.imageUrl || item.local_path), [gallery]);
 
-  return <><header className="sticky-nav"><div className="container nav-inner"><a href="#home" className="brand-mini">Nails by Brittney</a><button className="menu-toggle" aria-expanded={menuOpen} onClick={() => setMenuOpen((o) => !o)}>Menu</button><nav className={`nav-links ${menuOpen ? 'open' : ''}`}>{navItems.map(([id, label]) => <a key={id} href={`#${id}`} onClick={() => setMenuOpen(false)}>{label}</a>)}<Link to="/admin">Admin</Link></nav></div></header>
+  return <><header className="sticky-nav"><div className="container nav-inner"><a href="#home" className="brand-mini">Nails by Brittney</a><button className="menu-toggle" aria-expanded={menuOpen} onClick={() => setMenuOpen((o) => !o)}>Menu</button><nav className={`nav-links ${menuOpen ? 'open' : ''}`}>{navItems.map(([id, label]) => <a key={id} href={`#${id}`} onClick={() => setMenuOpen(false)}>{label}</a>)}</nav></div></header>
     <main>
-      <section id="home" className="section hero"><div className="container hero-inner"><img src={logo} className="hero-logo" alt="Nails by Brittney logo" /><h1>Nails by Brittney</h1><p className="subtitle">Certified Nail Technician</p><div className="cta-row"><a href="#booking" className="btn primary">Book Appointment</a><a href={`tel:${PHONE_LINK}`} className="btn">Call to Book</a><a href={INSTAGRAM_URL} target="_blank" rel="noreferrer" className="btn ghost">Instagram</a></div></div></section>
+      <section id="home" className="section hero"><div className="container hero-inner"><img src={logo} className="hero-logo" alt="Nails by Brittney logo" /><h1>Nails by Brittney</h1><p className="subtitle">Certified Nail Technician</p><div className="cta-row"><a href="#booking" className="btn primary">Book now</a><a href={`tel:${PHONE_LINK}`} className="btn">Call now</a><a href={INSTAGRAM_URL} target="_blank" rel="noreferrer" className="btn ghost">Instagram</a></div></div></section>
       <Divider />
-      <section id="about" className="section about-section"><div className="container split"><div className="headshot-placeholder">Headshot Placeholder</div><div><SectionHeading title="Brittney Prosser, Certified Nail Technician" eyebrow="About" /><p>{SAMPLE_BIO}</p></div></div></section>
+      <section id="about" className="section about-section"><div className="container"><div><SectionHeading title="Brittney Prosser, Certified Nail Technician" eyebrow="About" /><p>{SAMPLE_BIO}</p></div></div></section>
       <Divider />
-      <section id="examples" className="section alt"><div className="container"><SectionHeading title="Examples" eyebrow="Portfolio" /><h3>Testimonials</h3>{testimonials.map((item) => <blockquote key={item.id}>"{item.quote}" <span>- {item.customer}</span></blockquote>)}<h3>Gallery</h3><GalleryCarousel items={gallery} />{!hasImages && <p className="muted">Upload images in admin.</p>}</div></section>
+      <section id="examples" className="section alt"><div className="container"><h3>Testimonials</h3>{testimonials.map((item) => <blockquote key={item.id}>"{item.quote}" <span>- {item.customer}</span></blockquote>)}<h3>Gallery</h3><GalleryCarousel items={gallery} />{!hasImages && <p className="muted">Upload images in admin.</p>}</div></section>
       <Divider />
       <section id="services" className="section"><div className="container"><SectionHeading title="Services and Pricing" eyebrow="Signature Menu" /><div className="service-grid">{services.map((service) => <article key={service.id} className="card"><h3>{service.name}</h3><p className="meta">{service.price_text} • {service.duration || `${service.duration_minutes} min`}</p><p>{service.description}</p></article>)}</div></div></section>
       <Divider />
       <BookingSection services={services} />
       <Divider />
-      <section id="contact" className="section alt"><div className="container"><SectionHeading title="Contact" eyebrow="Get in Touch" /><p className="contact-blurb"><strong>Nails by Brittney: {PHONE_DISPLAY} (call or text)</strong><br />{EMAIL}</p><div className="cta-row"><a href="#booking" className="btn primary">Open Scheduler</a><a href={`sms:${PHONE_LINK}`} className="btn">Text</a><a href={INSTAGRAM_URL} target="_blank" rel="noreferrer" className="btn ghost">Instagram</a></div></div></section>
+      <section id="contact" className="section alt"><div className="container"><SectionHeading title="Contact" eyebrow="Get in Touch" /><p className="contact-blurb"><strong>Phone:</strong> {PHONE_DISPLAY} (call or text)<br /><strong>Email:</strong> {EMAIL}<br /><strong>Instagram:</strong> <a href={INSTAGRAM_URL} target="_blank" rel="noreferrer">{INSTAGRAM_URL}</a></p></div></section>
       <Divider />
       <section id="location" className="section"><div className="container split"><div><SectionHeading title="Location" eyebrow="Visit" /><p>Brittney Prosser at "Bronzed and Polished"<br />139 Eastview Dr<br />Emerald Isle NC 28594<br />{PHONE_DISPLAY}<br />{EMAIL}</p></div><div className="map-shell"><iframe title="Map" className="map" loading="lazy" src="https://www.google.com/maps?q=139%20Eastview%20Dr%2C%20Emerald%20Isle%20NC%2028594&output=embed" /></div></div></section>
+      <footer className="footer" role="contentinfo"><div className="container"><p>Nails by Brittney</p><p>{PHONE_DISPLAY} • {EMAIL}</p><p>Designed, hosted, and managed by <a href="https://www.adk-digital.com" target="_blank" rel="noreferrer">ADK Digital</a></p></div></footer>
     </main>
   </>;
 }
