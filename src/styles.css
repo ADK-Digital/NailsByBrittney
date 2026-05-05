@@ -467,3 +467,5 @@ textarea{min-height:120px}
 .pill{display:inline-block;padding:.15rem .55rem;border:1px solid var(--border);border-radius:999px;font-size:.75rem;background:#fff}
 .admin-action-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.5rem;margin:.6rem 0}
 .admin-action-grid input{padding:.5rem;border-radius:8px;border:1px solid var(--border)}
+
+.about-section .container{text-align:center}
