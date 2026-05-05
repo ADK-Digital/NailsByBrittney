@@ -322,11 +322,12 @@ blockquote:last-of-type{margin-bottom:0}
   box-shadow:var(--shadow);
   position:relative;
   overflow:hidden;
+  text-align:center;
 }
 .card::before{content:'';position:absolute;inset:9px;border:1px solid rgba(26,47,95,.12);border-radius:16px;pointer-events:none}
 .card::after{content:'';position:absolute;top:14px;right:16px;width:22px;height:22px;border-top:1px solid rgba(26,47,95,.23);border-right:1px solid rgba(26,47,95,.23);border-radius:0 9px 0 0;opacity:.6}
 .nail-icon{width:32px;color:var(--accent);margin-bottom:.35rem}
-.meta{font-weight:600;color:var(--accent);display:flex;align-items:center;gap:.5rem;letter-spacing:.03em}
+.meta{font-weight:600;color:var(--accent);display:flex;align-items:center;justify-content:center;gap:.5rem;letter-spacing:.03em}
 .meta span{opacity:.75}
 
 .contact-blurb{margin-bottom:.65rem}
@@ -360,7 +361,9 @@ textarea{min-height:120px}
 .map-shell{padding:.55rem;border:1px solid var(--border);border-radius:22px;background:linear-gradient(180deg,rgba(251,248,253,.84),rgba(234,225,241,.76));box-shadow:var(--shadow);position:relative}
 .map-shell::before{content:'';position:absolute;inset:9px;border:1px solid rgba(26,47,95,.11);border-radius:16px;pointer-events:none}
 .map{width:100%;min-height:320px;border:0;border-radius:16px}
-.footer{text-align:center;padding:2.4rem 1rem;color:#253962;background:linear-gradient(180deg, transparent, rgba(26,47,95,.08));border-top:1px solid rgba(26,47,95,.12)}
+.footer{text-align:center;padding:1.4rem 1rem;color:#4b5370;font-size:.86rem;background:linear-gradient(180deg, transparent, rgba(26,47,95,.08));border-top:1px solid rgba(26,47,95,.12)}
+.footer p{margin:.2rem 0;font-size:inherit;color:inherit}
+.footer a{color:inherit}
 
 .lightbox{position:fixed;inset:0;background:rgba(16,20,35,.82);display:grid;place-items:center;padding:1rem;z-index:40}
 .lightbox-inner{background:linear-gradient(180deg,#fff,#f8f4f2);padding:1rem;border-radius:18px;width:min(720px,100%);border:1px solid rgba(255,255,255,.22)}
@@ -377,6 +380,7 @@ textarea{min-height:120px}
 .admin-message.error{background:#fff1f1;border-color:#e6b2b2;color:#7d2323}
 .danger{background:#ab1f35;color:white;border:none;padding:.5rem .7rem;border-radius:8px}
 .muted{color:#5c5268}
+.addon-disclaimer{font-size:.86rem;margin-top:.5rem}
 
 
 
