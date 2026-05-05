@@ -66,7 +66,7 @@ function BookingSection({ services }) {
   const [serviceError, setServiceError] = useState('');
 
   const selected = services.filter((s) => selectedServices.includes(s.id));
-  const isAddonService = (s) => s.type === 'addon' || (Array.isArray(s.requires_service_ids) && s.requires_service_ids.length > 0);
+  const isAddonService = (s) => s.is_addon === true;
   const selectedBaseServices = selected.filter((s) => (s.type || 'base') === 'base');
   const selectedAddonServices = selected.filter((s) => s.type === 'addon');
   const duration = selected.reduce((sum, s) => sum + (s.duration_minutes || 0), 0);
