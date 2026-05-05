@@ -67,8 +67,8 @@ function BookingSection({ services }) {
 
   const selected = services.filter((s) => selectedServices.includes(s.id));
   const isAddonService = (s) => s.is_addon === true;
-  const selectedBaseServices = selected.filter((s) => (s.type || 'base') === 'base');
-  const selectedAddonServices = selected.filter((s) => s.type === 'addon');
+  const selectedBaseServices = selected.filter((s) => !isAddonService(s));
+  const selectedAddonServices = selected.filter((s) => isAddonService(s));
   const duration = selected.reduce((sum, s) => sum + (s.duration_minutes || 0), 0);
   const totalMin = selected.reduce((sum, s) => sum + Number(s.price_min_numeric || 0), 0);
   const startsAt = selected.some((s) => s.is_variable_price);
