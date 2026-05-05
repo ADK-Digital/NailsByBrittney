@@ -74,6 +74,20 @@ function BookingSection({ services }) {
   const startsAt = selected.some((s) => s.is_variable_price);
 
   useEffect(() => {
+    const selected = services.filter((s) => selectedServices.includes(s.id));
+    const hasAddon = selected.some((s) => isAddonService(s));
+    const hasBase = selected.some((s) => !isAddonService(s));
+
+    if (hasAddon && !hasBase) {
+      setServiceError('Add-ons must be booked with a manicure or pedicure.');
+      setSelectedDate('');
+      setSelectedTime('');
+    } else {
+      setServiceError('');
+    }
+  }, [selectedServices, services]);
+
+  useEffect(() => {
     if (!selectedServices.length) {
       setAvailability([]);
       return;
@@ -85,7 +99,6 @@ function BookingSection({ services }) {
   const times = useMemo(() => availability.find((d) => d.date === selectedDate)?.times || [], [availability, selectedDate]);
 
   const toggleService = (id) => {
-    setServiceError('');
     setSelectedDate('');
     setSelectedTime('');
     setSelectedServices((curr) => curr.includes(id) ? curr.filter((x) => x !== id) : [...curr, id]);
@@ -161,9 +174,13 @@ function BookingSection({ services }) {
         {!!selected.length && <p className="muted">Estimated length: {duration} min. {startsAt ? `Estimated total starts at $${totalMin.toFixed(2)}` : `Estimated total is $${totalMin.toFixed(2)}`}</p>}
       </div>
       <div>
-        <h3>2. Choose date</h3>
-        <div className="date-list">{availability.map((d) => <button key={d.date} className={`date-pill ${d.available ? 'available' : 'unavailable'} ${selectedDate === d.date ? 'selected' : ''}`} disabled={!d.available} onClick={() => { setSelectedDate(d.date); setSelectedTime(''); }}>{d.date}</button>)}</div>
-        {selectedDate && <><h3>3. Choose time</h3><div className="date-list">{times.map((t) => <button key={t} className={`time-pill ${selectedTime === t ? 'selected' : ''}`} onClick={() => setSelectedTime(t)}>{t}</button>)}</div></>}
+        {!serviceError && selectedServices.length > 0 && (
+          <>
+            <h3>2. Choose date</h3>
+            <div className="date-list">{availability.map((d) => <button key={d.date} className={`date-pill ${d.available ? 'available' : 'unavailable'} ${selectedDate === d.date ? 'selected' : ''}`} disabled={!d.available} onClick={() => { setSelectedDate(d.date); setSelectedTime(''); }}>{d.date}</button>)}</div>
+            {selectedDate && <><h3>3. Choose time</h3><div className="date-list">{times.map((t) => <button key={t} className={`time-pill ${selectedTime === t ? 'selected' : ''}`} onClick={() => setSelectedTime(t)}>{t}</button>)}</div></>}
+          </>
+        )}
       </div>
     </div>
     <form onSubmit={submit} className="booking-form">
