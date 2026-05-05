@@ -66,6 +66,7 @@ function BookingSection({ services }) {
   const [serviceError, setServiceError] = useState('');
 
   const selected = services.filter((s) => selectedServices.includes(s.id));
+  const isAddonService = (s) => s.type === 'addon' || (Array.isArray(s.requires_service_ids) && s.requires_service_ids.length > 0);
   const selectedBaseServices = selected.filter((s) => (s.type || 'base') === 'base');
   const selectedAddonServices = selected.filter((s) => s.type === 'addon');
   const duration = selected.reduce((sum, s) => sum + (s.duration_minutes || 0), 0);
@@ -154,8 +155,7 @@ function BookingSection({ services }) {
     <div className="booking-grid">
       <div>
         <h3>1. Select service(s)</h3>
-        {services.filter((s) => s.active !== false && (s.type || 'base') === 'base').map((s) => <label key={s.id} className="service-check"><input type="checkbox" checked={selectedServices.includes(s.id)} onChange={() => toggleService(s.id)} /> {s.name} — {s.price_text} • {s.duration_minutes || 0} min</label>)}
-        {services.filter((s) => s.active !== false && s.type === 'addon').map((s) => <label key={s.id} className="service-check"><input type="checkbox" checked={selectedServices.includes(s.id)} onChange={() => toggleService(s.id)} /> * {s.name} — {s.price_text} • {s.duration_minutes || 0} min</label>)}
+        {services.filter((s) => s.active !== false).map((s) => <label key={s.id} className="service-check"><input type="checkbox" checked={selectedServices.includes(s.id)} onChange={() => toggleService(s.id)} /> {isAddonService(s) ? '* ' : ''}{s.name} — {s.price_text} • {s.duration_minutes || 0} min</label>)}
         <p className="muted addon-disclaimer">Services marked with * must be added with a pedicure or manicure</p>
         {serviceError && <p className="form-error" role="alert">{serviceError}</p>}
         {!!selected.length && <p className="muted">Estimated length: {duration} min. {startsAt ? `Estimated total starts at $${totalMin.toFixed(2)}` : `Estimated total is $${totalMin.toFixed(2)}`}</p>}
@@ -235,7 +235,7 @@ export default function App() {
       <Divider />
       <BookingSection services={services} />
       <Divider />
-      <section id="contact" className="section alt"><div className="container"><SectionHeading title="Contact" eyebrow="Get in Touch" /><p className="contact-blurb"><strong>Phone:</strong> {PHONE_DISPLAY} (call or text)<br /><strong>Email:</strong> {EMAIL}<br /><strong>Instagram:</strong> <a href={INSTAGRAM_URL} target="_blank" rel="noreferrer">{INSTAGRAM_URL}</a></p></div></section>
+      <section id="contact" className="section alt"><div className="container"><SectionHeading title="Contact" eyebrow="Get in Touch" /><p className="contact-blurb"><strong>Phone:</strong> {PHONE_DISPLAY} (call or text)<br /><strong>Email:</strong> {EMAIL}<br /><strong>Instagram:</strong> <a href={INSTAGRAM_URL} target="_blank" rel="noreferrer">Instagram</a></p></div></section>
       <Divider />
       <section id="location" className="section"><div className="container split"><div><SectionHeading title="Location" eyebrow="Visit" /><p>Brittney Prosser at "Bronzed and Polished"<br />139 Eastview Dr<br />Emerald Isle NC 28594<br />{PHONE_DISPLAY}<br />{EMAIL}</p></div><div className="map-shell"><iframe title="Map" className="map" loading="lazy" src="https://www.google.com/maps?q=139%20Eastview%20Dr%2C%20Emerald%20Isle%20NC%2028594&output=embed" /></div></div></section>
       <footer className="footer" role="contentinfo"><div className="container"><p>Nails by Brittney</p><p>{PHONE_DISPLAY} • {EMAIL}</p><p>Designed, hosted, and managed by <a href="https://www.adk-digital.com" target="_blank" rel="noreferrer">ADK Digital</a></p></div></footer>
