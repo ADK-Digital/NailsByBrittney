@@ -116,13 +116,40 @@ function BookingSection({ services }) {
   const times = useMemo(() => {
     return availabilityMap.get(selectedDate)?.times || [];
   }, [availabilityMap, selectedDate]);
-  const calendarNow = new Date();
-  const calendarYear = calendarNow.getFullYear();
-  const calendarMonth = calendarNow.getMonth();
+  const [calendarDate, setCalendarDate] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
+  const availableMonthRange = useMemo(() => {
+    const availableDates = availability.filter((d) => d.available && d.date);
+
+    if (!availableDates.length) {
+      return { min: null, max: null };
+    }
+
+    const monthIndexes = availableDates.map((d) => {
+      const [year, month] = d.date.split('-').map(Number);
+      return (year * 12) + (month - 1);
+    });
+
+    return {
+      min: Math.min(...monthIndexes),
+      max: Math.max(...monthIndexes),
+    };
+  }, [availability]);
+  const calendarYear = calendarDate.getFullYear();
+  const calendarMonth = calendarDate.getMonth();
+  const calendarMonthIndex = (calendarYear * 12) + calendarMonth;
   const daysInMonth = new Date(calendarYear, calendarMonth + 1, 0).getDate();
   const firstWeekday = new Date(calendarYear, calendarMonth, 1).getDay();
   const todayIso = new Date().toISOString().slice(0, 10);
   const weekdayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const monthLabel = calendarDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  const isPreviousMonthDisabled = availableMonthRange.min === null || calendarMonthIndex <= availableMonthRange.min;
+  const isNextMonthDisabled = availableMonthRange.max === null || calendarMonthIndex >= availableMonthRange.max;
+  const changeCalendarMonth = (delta) => {
+    setCalendarDate((current) => new Date(current.getFullYear(), current.getMonth() + delta, 1));
+  };
 
   const toggleService = (id) => {
     setSelectedDate('');
@@ -203,8 +230,13 @@ function BookingSection({ services }) {
         {!serviceError && selectedServices.length > 0 && (
           <>
             <h3>2. Choose date</h3>
+            <div className="calendar-nav" aria-label="Calendar month navigation">
+              <button type="button" className="calendar-nav-button" onClick={() => changeCalendarMonth(-1)} disabled={isPreviousMonthDisabled} aria-label="Previous month">‹</button>
+              <div className="calendar-month-label" aria-live="polite">{monthLabel}</div>
+              <button type="button" className="calendar-nav-button" onClick={() => changeCalendarMonth(1)} disabled={isNextMonthDisabled} aria-label="Next month">›</button>
+            </div>
             <div className="calendar-grid">
-              {weekdayLabels.map((label) => <div key={label} className="calendar-empty">{label}</div>)}
+              {weekdayLabels.map((label) => <div key={label} className="calendar-header">{label}</div>)}
               {Array.from({ length: firstWeekday }).map((_, idx) => <div key={`empty-${idx}`} className="calendar-empty" aria-hidden="true" />)}
               {Array.from({ length: daysInMonth }).map((_, idx) => {
                 const day = idx + 1;
@@ -214,8 +246,9 @@ function BookingSection({ services }) {
                 const isSelected = selectedDate === isoDate;
                 const isToday = isoDate === todayIso;
                 const isPast = isoDate < todayIso;
+                const showToday = isToday && isAvailable && !isSelected && !isPast;
 
-                return <button key={isoDate} className={`calendar-day ${isAvailable ? 'available' : 'unavailable'} ${isSelected ? 'selected' : ''} ${isToday ? 'today' : ''} ${isPast ? 'past' : ''}`} disabled={!isAvailable || isPast} onClick={() => { setSelectedDate(isoDate); setSelectedTime(''); }}>{day}</button>;
+                return <button key={isoDate} className={`calendar-day ${isAvailable ? 'available' : 'unavailable'} ${isSelected ? 'selected' : ''} ${showToday ? 'today' : ''} ${isPast ? 'past' : ''}`} disabled={!isAvailable || isPast} onClick={() => { setSelectedDate(isoDate); setSelectedTime(''); }}>{day}</button>;
               })}
             </div>
             {selectedDate && <div ref={timeRef}><h3>3. Choose time</h3><select value={selectedTime} onChange={(e) => setSelectedTime(e.target.value)}><option value="">Select a time</option>{times.map((t) => <option key={t} value={t}>{formatTime12Hour(t)}</option>)}</select></div>}
