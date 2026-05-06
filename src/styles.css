@@ -380,3 +380,315 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
   min-height: 40px;
   opacity: 0.15;
 }
+
+.admin-wrap{
+  width:min(1180px,92%);
+  margin:0 auto;
+  padding:3rem 0 4rem;
+  position:relative;
+  z-index:1;
+}
+
+.admin-wrap > h1{
+  margin-bottom:.85rem;
+  text-align:center;
+}
+
+.admin-section{
+  width:100%;
+  max-width:960px;
+  margin:2rem auto 0;
+}
+
+.admin-section > h2{
+  margin-bottom:.75rem;
+  text-align:center;
+}
+
+.admin-section-appointments{max-width:1040px}
+.admin-section-customers{max-width:980px}
+.admin-section-testimonials,
+.admin-section-services{max-width:860px}
+.admin-section-gallery{max-width:920px}
+
+.admin-list,
+.admin-edit-list{
+  display:grid;
+  gap:1rem;
+  margin:1rem 0 0;
+  padding:0;
+  list-style:none;
+}
+
+.admin-card-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(260px,320px));
+  gap:1rem;
+  justify-content:center;
+  margin-top:1rem;
+}
+
+.admin-item{
+  display:grid;
+  gap:.85rem;
+  padding:1rem;
+  border:1px solid var(--border);
+  border-radius:20px;
+  background:linear-gradient(180deg,rgba(252,250,254,.92),rgba(239,232,244,.78));
+  box-shadow:0 12px 24px rgba(17,32,69,.08);
+}
+
+.admin-section-testimonials .admin-item,
+.admin-section-services .admin-item{
+  max-width:760px;
+  margin-inline:auto;
+  width:100%;
+}
+
+.admin-wrap form,
+.gallery-upload-panel{
+  width:min(100%,640px);
+  margin:1.15rem auto 0;
+}
+
+.gallery-upload-panel{
+  display:grid;
+  gap:.75rem;
+  padding:1.2rem;
+  border:1px solid var(--border);
+  border-radius:20px;
+  background:linear-gradient(180deg,rgba(250,247,252,.84),rgba(241,233,247,.8));
+  box-shadow:var(--shadow);
+}
+
+.admin-wrap input,
+.admin-wrap textarea,
+.admin-wrap select{
+  width:100%;
+  max-width:100%;
+}
+
+.admin-section-services .admin-item label,
+.admin-section-testimonials .admin-item input,
+.admin-section-testimonials .admin-item textarea{
+  max-width:620px;
+  width:100%;
+}
+
+.admin-section-services .admin-item textarea,
+.admin-section-testimonials .admin-item textarea{
+  min-height:96px;
+  resize:vertical;
+}
+
+.admin-secondary-button{
+  justify-self:start;
+  border:1px solid var(--accent);
+  border-radius:999px;
+  padding:.5rem .75rem;
+  background:rgba(255,255,255,.68);
+  color:var(--accent);
+  cursor:pointer;
+  font:inherit;
+  font-weight:600;
+}
+
+.admin-secondary-button.danger{
+  border-color:rgba(126,37,49,.38);
+  color:#7e2531;
+}
+
+.appointment-card{
+  text-align:left;
+}
+
+.appointment-head{
+  display:flex;
+  flex-wrap:wrap;
+  gap:.85rem 1rem;
+  align-items:flex-start;
+  justify-content:space-between;
+  margin-bottom:.9rem;
+}
+
+.appointment-title{
+  display:grid;
+  gap:.1rem;
+  min-width:120px;
+}
+
+.appointment-title strong{
+  color:var(--heading);
+  font-family:'Cormorant Garamond', Georgia, serif;
+  font-size:1.55rem;
+  line-height:1;
+}
+
+.appointment-label{
+  color:#5c5268;
+  font-size:.72rem;
+  font-weight:700;
+  letter-spacing:.16em;
+  line-height:1;
+  text-transform:uppercase;
+}
+
+.appointment-meta{
+  display:flex;
+  flex:1 1 560px;
+  flex-wrap:wrap;
+  gap:.55rem;
+  justify-content:flex-end;
+}
+
+.admin-wrap .pill{
+  display:inline-flex;
+  align-items:center;
+  gap:.38rem;
+  min-height:32px;
+  padding:.34rem .7rem;
+  border:1px solid rgba(26,47,95,.18);
+  border-radius:999px;
+  background:rgba(255,255,255,.72);
+  color:var(--heading);
+  font-size:.86rem;
+  font-weight:700;
+  line-height:1.1;
+  white-space:nowrap;
+}
+
+.admin-wrap .pill span{
+  color:#5c5268;
+  font-size:.68rem;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+}
+
+.meta-pill{
+  background:rgba(255,255,255,.62);
+}
+
+.status-confirmed{
+  border-color:rgba(67,119,82,.3);
+  background:#e7f0e8;
+  color:#315f3e;
+}
+
+.status-declined{
+  border-color:rgba(126,37,49,.34);
+  background:#f3e1e4;
+  color:#7e2531;
+}
+
+.status-cancelled{
+  border-color:rgba(163,82,91,.25);
+  background:#f6e8ea;
+  color:#9b5059;
+}
+
+.status-completed{
+  border-color:rgba(54,90,139,.3);
+  background:#e4ebf5;
+  color:#365a8b;
+}
+
+.status-no-show{
+  border-color:rgba(102,28,40,.38);
+  background:#ead5d9;
+  color:#661c28;
+}
+
+.admin-action-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+  gap:.65rem;
+  margin-top:.85rem;
+  align-items:center;
+}
+
+.admin-action-grid input{
+  min-width:0;
+}
+
+.customer-card{
+  width:100%;
+  text-align:left;
+  overflow-wrap:anywhere;
+}
+
+.customer-card h4{
+  margin:.1rem 0 .55rem;
+  color:var(--heading);
+  font-family:'Cormorant Garamond', Georgia, serif;
+  font-size:1.45rem;
+  line-height:1.1;
+}
+
+.customer-card ul{
+  margin:.5rem 0 0;
+  padding-left:1.1rem;
+}
+
+.gallery-admin-item{
+  display:grid;
+  grid-template-columns:minmax(120px,160px) minmax(180px,1fr) repeat(2,max-content);
+  gap:.75rem;
+  align-items:center;
+}
+
+.gallery-admin-item img,
+.gallery-admin-item .missing-image{
+  width:160px;
+  height:120px;
+  max-width:100%;
+  border-radius:16px;
+  border:1px solid rgba(26,47,95,.14);
+  background:rgba(255,255,255,.55);
+  box-shadow:0 8px 16px rgba(17,32,69,.08);
+}
+
+.gallery-admin-item img{
+  display:block;
+  object-fit:cover;
+}
+
+.gallery-admin-item .missing-image{
+  display:grid;
+  place-items:center;
+  color:#5c5268;
+  font-size:.9rem;
+  text-align:center;
+}
+
+.admin-message{
+  margin:.25rem 0 0;
+  font-weight:700;
+}
+
+.admin-message.success{color:#315f3e}
+.admin-message.error{color:#7e2531}
+
+@media (max-width:960px){
+  .gallery-admin-item{grid-template-columns:140px minmax(180px,1fr) repeat(2,max-content)}
+}
+
+@media (max-width:820px){
+  .admin-wrap{width:min(94%,720px);padding:2.25rem 0 3rem}
+  .admin-section{margin-top:1.6rem}
+  .appointment-meta{justify-content:flex-start;flex-basis:100%}
+  .gallery-admin-item{grid-template-columns:140px 1fr}
+  .gallery-admin-item .admin-secondary-button{justify-self:start}
+}
+
+@media (max-width:560px){
+  .admin-wrap{width:min(94%,420px)}
+  .admin-item{padding:.85rem}
+  .appointment-head{display:grid}
+  .appointment-meta{display:grid;grid-template-columns:1fr;gap:.45rem}
+  .admin-wrap .pill{white-space:normal;justify-content:space-between;width:100%}
+  .admin-action-grid{grid-template-columns:1fr}
+  .admin-card-grid{grid-template-columns:1fr}
+  .gallery-admin-item{grid-template-columns:1fr}
+  .gallery-admin-item img,
+  .gallery-admin-item .missing-image{width:140px;height:112px}
+}
