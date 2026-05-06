@@ -6,6 +6,7 @@ async function runExpiry() {
     .from('appointments')
     .select('id')
     .eq('status', 'pending_confirmation')
+    .is('archived_at', null)
     .lte('confirmation_deadline_at', new Date().toISOString());
 
   for (const row of data || []) {

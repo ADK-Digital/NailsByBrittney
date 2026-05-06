@@ -8,6 +8,7 @@ async function runExpiry() {
     .from('appointments')
     .select('id')
     .eq('status', 'pending')
+    .is('archived_at', null)
     .lt('created_at', cutoffIso)
     .limit(100);
 

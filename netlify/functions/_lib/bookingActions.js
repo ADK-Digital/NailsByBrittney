@@ -32,6 +32,12 @@ function finiteNumber(value) {
   return Number.isFinite(n) ? n : 0;
 }
 
+function formatBookingNumber(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return '---';
+  return String(numeric).padStart(3, '0').slice(-3);
+}
+
 function parseStatus(s) {
   return s || 'unpaid';
 }
@@ -284,7 +290,7 @@ export async function chargeAppointment({
     squareCustomerId: appointment.customers.square_customer_id,
     squareCardId: appointment.customers.square_card_id,
     amountCents,
-    note: note || `${type.chargeType} for appointment #${appointment.booking_request_number}`,
+    note: note || `${type.chargeType} for appointment #${formatBookingNumber(appointment.booking_request_number)}`,
     idempotencyKey,
   });
 
@@ -405,6 +411,7 @@ export async function getAppointmentStatusSummaryByRequestNumber(requestNumber) 
     .from('appointments')
     .select('*, customers(*)')
     .eq('booking_request_number', requestNumber)
+    .is('archived_at', null)
     .maybeSingle();
 
   if (!appointment) return null;
@@ -423,7 +430,7 @@ export async function getAppointmentStatusSummaryByRequestNumber(requestNumber) 
 
   return {
     appointmentId: appointment.id,
-    requestNumber: appointment.booking_request_number,
+    requestNumber: formatBookingNumber(appointment.booking_request_number),
     customerName: `${appointment.customers.first_name} ${appointment.customers.last_name}`,
     dateTime: when,
     appointmentStatus: appointment.status,

@@ -29,9 +29,16 @@ function centsToDollarsText(cents) {
   return `$${(Number(cents || 0) / 100).toFixed(2)}`;
 }
 
+function formatBookingNumber(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return '---';
+  return String(numeric).padStart(3, '0').slice(-3);
+}
+
 function createAppointmentSummary({ appointment, services }) {
   const serviceList = services?.length ? services.join(', ') : 'Service details unavailable';
   return {
+    bookingNumber: formatBookingNumber(appointment.booking_request_number),
     dateTime: formatAppointmentDateTime(appointment.start_at),
     serviceList,
     estimatedTotal: appointment.estimated_total_text || 'Estimated total unavailable',
@@ -145,7 +152,7 @@ export async function sendBookingCreatedEmail({ customer, appointment, services 
     subject: 'Your Nails by Brittney booking request is pending',
     heading: 'Thanks for your request!',
     introLine: `Your appointment for ${details.dateTime} is pending confirmation.`,
-    detailLines: [`Services: ${details.serviceList}.`, `Date/time: ${details.dateTime}.`, `Estimated total: ${details.estimatedTotal}.`, `Estimated duration: ${details.estimatedDuration}.`],
+    detailLines: [`Booking #: ${details.bookingNumber}.`, `Services: ${details.serviceList}.`, `Date/time: ${details.dateTime}.`, `Estimated total: ${details.estimatedTotal}.`, `Estimated duration: ${details.estimatedDuration}.`],
     closingLine: 'We will follow up as soon as your appointment is reviewed.',
   });
 }
@@ -159,7 +166,7 @@ export async function sendBookingConfirmedEmail({ customer, appointment, service
     subject: 'Your Nails by Brittney Appointment is Confirmed',
     heading: "You're all set!",
     introLine: `Your appointment has been confirmed for ${details.dateTime}.`,
-    detailLines: [`Services: ${details.serviceList}.`, `Date/time: ${details.dateTime}.`, `Estimated total: ${details.estimatedTotal}.`, `Estimated duration: ${details.estimatedDuration}.`],
+    detailLines: [`Booking #: ${details.bookingNumber}.`, `Services: ${details.serviceList}.`, `Date/time: ${details.dateTime}.`, `Estimated total: ${details.estimatedTotal}.`, `Estimated duration: ${details.estimatedDuration}.`],
   });
 }
 
@@ -172,7 +179,7 @@ export async function sendBookingDeclinedEmail({ customer, appointment, services
     subject: 'Your Appointment Request Could Not Be Confirmed',
     heading: 'We need a new time',
     introLine: 'Unfortunately, your requested time is not available. Please choose another time.',
-    detailLines: [`Services: ${details.serviceList}.`, `Date/time: ${details.dateTime}.`, `Estimated total: ${details.estimatedTotal}.`, `Estimated duration: ${details.estimatedDuration}.`, BOOKING_LINK ? `Book a new time here: ${BOOKING_LINK}` : ''],
+    detailLines: [`Booking #: ${details.bookingNumber}.`, `Services: ${details.serviceList}.`, `Date/time: ${details.dateTime}.`, `Estimated total: ${details.estimatedTotal}.`, `Estimated duration: ${details.estimatedDuration}.`, BOOKING_LINK ? `Book a new time here: ${BOOKING_LINK}` : ''],
   });
 }
 
@@ -185,7 +192,7 @@ export async function sendBookingCancelledEmail({ customer, appointment, service
     subject: 'Your Nails by Brittney appointment was cancelled',
     heading: 'Appointment cancelled',
     introLine: 'Your appointment has been cancelled.',
-    detailLines: [`Services: ${details.serviceList}.`, `Date/time: ${details.dateTime}.`, `Estimated total: ${details.estimatedTotal}.`, `Estimated duration: ${details.estimatedDuration}.`, BOOKING_LINK ? `Need a new time? Book here: ${BOOKING_LINK}` : ''],
+    detailLines: [`Booking #: ${details.bookingNumber}.`, `Services: ${details.serviceList}.`, `Date/time: ${details.dateTime}.`, `Estimated total: ${details.estimatedTotal}.`, `Estimated duration: ${details.estimatedDuration}.`, BOOKING_LINK ? `Need a new time? Book here: ${BOOKING_LINK}` : ''],
   });
 }
 
@@ -198,7 +205,7 @@ export async function sendChargeAppliedEmail({ customer, appointment, services, 
     subject: 'Payment update for your Nails by Brittney appointment',
     heading: 'Payment received',
     introLine: `Your card was charged ${centsToDollarsText(amountCents)} for your appointment.`,
-    detailLines: [`Services: ${details.serviceList}.`, `Date/time: ${details.dateTime}.`, `Estimated total: ${details.estimatedTotal}.`, `Estimated duration: ${details.estimatedDuration}.`],
+    detailLines: [`Booking #: ${details.bookingNumber}.`, `Services: ${details.serviceList}.`, `Date/time: ${details.dateTime}.`, `Estimated total: ${details.estimatedTotal}.`, `Estimated duration: ${details.estimatedDuration}.`],
   });
 }
 
@@ -211,7 +218,7 @@ export async function sendRefundIssuedEmail({ customer, appointment, services, a
     subject: 'Refund update for your Nails by Brittney appointment',
     heading: 'Refund issued',
     introLine: `A refund of ${centsToDollarsText(amountCents)} was issued to your card.`,
-    detailLines: [`Services: ${details.serviceList}.`, `Date/time: ${details.dateTime}.`, `Estimated total: ${details.estimatedTotal}.`, `Estimated duration: ${details.estimatedDuration}.`],
+    detailLines: [`Booking #: ${details.bookingNumber}.`, `Services: ${details.serviceList}.`, `Date/time: ${details.dateTime}.`, `Estimated total: ${details.estimatedTotal}.`, `Estimated duration: ${details.estimatedDuration}.`],
   });
 }
 
@@ -224,6 +231,6 @@ export async function sendBookingExpiredEmail({ customer, appointment, services 
     subject: 'Your Appointment Request Has Expired',
     heading: 'Booking request expired',
     introLine: 'Your appointment request could not be confirmed before the hold window ended, so it has now expired.',
-    detailLines: [`Services: ${details.serviceList}.`, `Date/time: ${details.dateTime}.`, `Estimated total: ${details.estimatedTotal}.`, `Estimated duration: ${details.estimatedDuration}.`, BOOKING_LINK ? `Please choose another available time here: ${BOOKING_LINK}` : ''],
+    detailLines: [`Booking #: ${details.bookingNumber}.`, `Services: ${details.serviceList}.`, `Date/time: ${details.dateTime}.`, `Estimated total: ${details.estimatedTotal}.`, `Estimated duration: ${details.estimatedDuration}.`, BOOKING_LINK ? `Please choose another available time here: ${BOOKING_LINK}` : ''],
   });
 }

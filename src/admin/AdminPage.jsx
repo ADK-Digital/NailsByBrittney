@@ -15,12 +15,15 @@ import {
   adminRefundAppointment,
   createBlockedTime,
   deleteBlockedTime,
+  archivedAppointmentDownloadUrl,
   fetchAdminAppointments,
+  fetchArchivedAppointments,
   setAppointmentStatus,
 } from '../lib/bookingApi';
 import { hasSupabaseConfig, supabase } from '../lib/supabase';
 
 const APPOINTMENTS_PER_PAGE = 20;
+const CUSTOMERS_PER_PAGE = 20;
 
 const appointmentDateFormatter = new Intl.DateTimeFormat('en-US', {
   month: 'long',
@@ -37,6 +40,12 @@ function formatAppointmentDateTime(value) {
   const appointmentDate = new Date(value);
   if (!Number.isFinite(appointmentDate.getTime())) return 'Date unavailable';
   return `${appointmentDateFormatter.format(appointmentDate)} • ${appointmentTimeFormatter.format(appointmentDate)}`;
+}
+
+function formatBookingNumber(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return '---';
+  return String(numeric).padStart(3, '0').slice(-3);
 }
 
 function DraggableList({ items, renderFields }) {
@@ -105,6 +114,14 @@ function sortAppointmentsForAdmin(items) {
   });
 }
 
+function sortCustomersAlphabetically(items) {
+  return [...items].sort((a, b) => {
+    const lastDelta = String(a.last_name || '').localeCompare(String(b.last_name || ''), undefined, { sensitivity: 'base' });
+    if (lastDelta !== 0) return lastDelta;
+    return String(a.first_name || '').localeCompare(String(b.first_name || ''), undefined, { sensitivity: 'base' });
+  });
+}
+
 function AdminSecondaryButton({ className = '', ...props }) {
   return <button type="button" className={`admin-secondary-button${className ? ` ${className}` : ''}`} {...props} />;
 }
@@ -136,7 +153,7 @@ function AppointmentCard({ appointment, onRefresh }) {
       <span className="appointment-title">
         <strong>{appointmentDateTime}</strong>
         <span className="appointment-customer">{customerName}</span>
-        <span className="appointment-booking-number">Booking #{appointment.booking_request_number}</span>
+        <span className="appointment-booking-number">Booking #{formatBookingNumber(appointment.booking_request_number)}</span>
       </span>
       <span className="appointment-toggle-status">
         <span className={statusClassName(appointment.status)}><span>Status</span>{formatAdminStatus(appointment.status)}</span>
@@ -149,7 +166,7 @@ function AppointmentCard({ appointment, onRefresh }) {
         <div className="appointment-title appointment-title-expanded">
           <strong>{appointmentDateTime}</strong>
           <span className="appointment-customer">{customerName}</span>
-          <span className="appointment-booking-number">Booking #{appointment.booking_request_number}</span>
+          <span className="appointment-booking-number">Booking #{formatBookingNumber(appointment.booking_request_number)}</span>
         </div>
         <div className="appointment-meta" aria-label="Booking status details">
           <span className={statusClassName(appointment.status)}><span>Status</span>{formatAdminStatus(appointment.status)}</span>
@@ -199,6 +216,75 @@ function AppointmentCard({ appointment, onRefresh }) {
   </article>;
 }
 
+
+function CustomerCard({ customer, appointments }) {
+  const [expanded, setExpanded] = useState(false);
+  const customerName = `${customer.first_name || ''} ${customer.last_name || ''}`.trim() || 'Customer';
+  const sortedCustomerAppointments = useMemo(() => [...appointments].sort((a, b) => {
+    const aStart = new Date(a.start_at).getTime();
+    const bStart = new Date(b.start_at).getTime();
+    return (Number.isFinite(bStart) ? bStart : 0) - (Number.isFinite(aStart) ? aStart : 0);
+  }), [appointments]);
+
+  return <article className={`card appointment-card customer-card${expanded ? ' expanded' : ''}`}>
+    {!expanded && <button type="button" className="appointment-toggle customer-toggle" onClick={() => setExpanded(true)} aria-expanded={expanded}>
+      <span className="appointment-title customer-title">
+        <strong>{customerName}</strong>
+        <span className="appointment-customer">{customer.phone || 'No phone on file'}</span>
+        <span className="appointment-booking-number">{customer.email || 'No email on file'}</span>
+      </span>
+      <span className="appointment-toggle-status">
+        <span className="pill meta-pill"><span>Appointments</span>{sortedCustomerAppointments.length}</span>
+        <span className="appointment-arrow" aria-hidden="true">⌄</span>
+      </span>
+    </button>}
+
+    {expanded && <div className="appointment-details customer-details">
+      <div className="appointment-head">
+        <div className="appointment-title appointment-title-expanded customer-title">
+          <strong>{customerName}</strong>
+          <span className="appointment-customer">{customer.phone || 'No phone on file'}</span>
+          <span className="appointment-booking-number">{customer.email || 'No email on file'}</span>
+        </div>
+        <div className="appointment-meta">
+          <span className="pill meta-pill"><span>Preference</span>{formatCommunicationPreference(customer.communication_preference)}</span>
+          <span className="pill meta-pill"><span>Card</span>{customer.card_on_file_status || 'missing'}</span>
+          <button type="button" className="appointment-arrow appointment-collapse-button" onClick={() => setExpanded(false)} aria-label="Collapse customer" aria-expanded={expanded}>⌃</button>
+        </div>
+      </div>
+
+      <p className="muted">Card: {customer.card_on_file_status || 'missing'} {customer.card_brand ? `(${customer.card_brand} ••••${customer.card_last4 || ''})` : ''}</p>
+
+      <div className="customer-appointment-list">
+        <h4>Scheduled appointments</h4>
+        {sortedCustomerAppointments.length ? <ul>{sortedCustomerAppointments.map((appointment) => <li key={appointment.id}>
+          <span>{formatAppointmentDateTime(appointment.start_at)}</span>
+          <span className="appointment-booking-number">Booking #{formatBookingNumber(appointment.booking_request_number)}</span>
+          <span className={statusClassName(appointment.status)}><span>Status</span>{formatAdminStatus(appointment.status)}</span>
+        </li>)}</ul> : <p className="muted">No appointments on file.</p>}
+      </div>
+
+      {!!(customer.customer_notes || []).length && <div className="customer-notes-list">
+        <h4>Notes</h4>
+        <ul>{(customer.customer_notes || []).map((note) => <li key={note.id}>{new Date(note.created_at).toLocaleDateString()} - {note.note_text}</li>)}</ul>
+      </div>}
+    </div>}
+  </article>;
+}
+
+function AppointmentArchivePanel({ open, archives, onToggle, onLoad }) {
+  return <div className="appointment-archive-panel">
+    <button type="button" className="admin-secondary-button" onClick={async () => { await onLoad(); onToggle(); }}>Archived appointments</button>
+    {open && <div className="archive-list card">
+      <h3>Archived appointments</h3>
+      {archives.length ? <ul>{archives.map((archive) => <li key={archive.id || archive.file_name}>
+        <a href={archivedAppointmentDownloadUrl(archive.file_name)}>{archive.file_name}</a>
+        <span>{archive.appointment_count || 0} appointment(s)</span>
+      </li>)}</ul> : <p className="muted">No archived appointment CSV files yet.</p>}
+    </div>}
+  </div>;
+}
+
 export default function AdminPage() {
   const [session, setSession] = useState(null);
   const [services, setServices] = useState([]);
@@ -212,6 +298,9 @@ export default function AdminPage() {
   const [galleryUploadBusy, setGalleryUploadBusy] = useState(false);
   const [galleryMessage, setGalleryMessage] = useState({ type: '', text: '' });
   const [appointmentPage, setAppointmentPage] = useState(0);
+  const [customerPage, setCustomerPage] = useState(0);
+  const [archivesOpen, setArchivesOpen] = useState(false);
+  const [appointmentArchives, setAppointmentArchives] = useState([]);
 
   const sortedAppointments = useMemo(() => sortAppointmentsForAdmin(appointments), [appointments]);
   const appointmentPageCount = Math.max(1, Math.ceil(sortedAppointments.length / APPOINTMENTS_PER_PAGE));
@@ -219,16 +308,39 @@ export default function AdminPage() {
   const appointmentPageStart = currentAppointmentPage * APPOINTMENTS_PER_PAGE;
   const appointmentPageEnd = Math.min(appointmentPageStart + APPOINTMENTS_PER_PAGE, sortedAppointments.length);
   const pagedAppointments = sortedAppointments.slice(appointmentPageStart, appointmentPageEnd);
+  const sortedCustomers = useMemo(() => sortCustomersAlphabetically(customers), [customers]);
+  const customerPageCount = Math.max(1, Math.ceil(sortedCustomers.length / CUSTOMERS_PER_PAGE));
+  const currentCustomerPage = Math.min(customerPage, customerPageCount - 1);
+  const customerPageStart = currentCustomerPage * CUSTOMERS_PER_PAGE;
+  const customerPageEnd = Math.min(customerPageStart + CUSTOMERS_PER_PAGE, sortedCustomers.length);
+  const pagedCustomers = sortedCustomers.slice(customerPageStart, customerPageEnd);
+  const appointmentsByCustomerId = useMemo(() => {
+    const grouped = new Map();
+    appointments.forEach((appointment) => {
+      if (!appointment.customer_id) return;
+      grouped.set(appointment.customer_id, [...(grouped.get(appointment.customer_id) || []), appointment]);
+    });
+    return grouped;
+  }, [appointments]);
 
   useEffect(() => {
     if (appointmentPage > appointmentPageCount - 1) setAppointmentPage(Math.max(0, appointmentPageCount - 1));
   }, [appointmentPage, appointmentPageCount]);
+
+  useEffect(() => {
+    if (customerPage > customerPageCount - 1) setCustomerPage(Math.max(0, customerPageCount - 1));
+  }, [customerPage, customerPageCount]);
 
   const refreshBookingAdmin = async () => {
     const data = await fetchAdminAppointments();
     setAppointments(data.appointments || []);
     setCustomers(data.customers || []);
     setBlockedTimes(data.blockedTimes || []);
+  };
+
+  const refreshAppointmentArchives = async () => {
+    const data = await fetchArchivedAppointments();
+    setAppointmentArchives(data.archives || []);
   };
 
   const refreshServiceList = async () => setServices(await fetchServices());
@@ -341,6 +453,7 @@ export default function AdminPage() {
         <span>{appointmentPageStart + 1}-{appointmentPageEnd} of {sortedAppointments.length}</span>
         <button className="admin-secondary-button" type="button" onClick={() => setAppointmentPage((page) => Math.min(appointmentPageCount - 1, page + 1))} disabled={currentAppointmentPage >= appointmentPageCount - 1}>›</button>
       </div>}
+      <AppointmentArchivePanel open={archivesOpen} archives={appointmentArchives} onToggle={() => setArchivesOpen((value) => !value)} onLoad={refreshAppointmentArchives} />
     </section>
 
     <section className="admin-section"><h2>Blocked Times</h2><div className="admin-section-actions"><button className="btn" onClick={async () => {
@@ -351,7 +464,13 @@ export default function AdminPage() {
       refreshBookingAdmin();
     }}>Add Block</button></div>{blockedTimes.map((block) => <div key={block.id}>{new Date(block.start_at).toLocaleString()} - {new Date(block.end_at).toLocaleString()} ({block.reason}) <AdminSecondaryButton onClick={async () => { await deleteBlockedTime(block.id); refreshBookingAdmin(); }}>Delete</AdminSecondaryButton></div>)}</section>
 
-    <section className="admin-section admin-section-customers"><h2>Customers</h2><div className="admin-card-grid">{customers.map((customer) => <article key={customer.id} className="card customer-card"><h4>{customer.first_name} {customer.last_name}</h4><p>{customer.phone} • {customer.email} • pref: {formatCommunicationPreference(customer.communication_preference)}</p><p>Card: {customer.card_on_file_status || 'missing'} {customer.card_brand ? `(${customer.card_brand} ••••${customer.card_last4 || ''})` : ''}</p><ul>{(customer.customer_notes || []).map((note) => <li key={note.id}>{new Date(note.created_at).toLocaleDateString()} - {note.note_text}</li>)}</ul></article>)}</div></section>
+    <section className="admin-section admin-section-customers"><h2>Customers</h2><div className="admin-list customer-list">{pagedCustomers.map((customer) => <CustomerCard key={customer.id} customer={customer} appointments={appointmentsByCustomerId.get(customer.id) || []} />)}</div>
+      {sortedCustomers.length > CUSTOMERS_PER_PAGE && <div className="appointment-pagination" aria-label="Customer pagination">
+        <button className="admin-secondary-button" type="button" onClick={() => setCustomerPage((page) => Math.max(0, page - 1))} disabled={currentCustomerPage === 0}>‹</button>
+        <span>{customerPageStart + 1}-{customerPageEnd} of {sortedCustomers.length}</span>
+        <button className="admin-secondary-button" type="button" onClick={() => setCustomerPage((page) => Math.min(customerPageCount - 1, page + 1))} disabled={currentCustomerPage >= customerPageCount - 1}>›</button>
+      </div>}
+    </section>
 
     <section className="admin-section admin-section-testimonials"><h2>Testimonials</h2><div className="admin-section-actions"><button className="btn" onClick={async () => { const item = { customer: 'Customer Name', quote: 'Editable testimonial quote.', display_order: testimonials.length + 1 }; const created = hasSupabaseConfig ? await createRecord('testimonials', item) : { ...item, id: crypto.randomUUID() }; setTestimonials((previous) => [...previous, created]); }}>Add Testimonial</button></div>
       <DraggableList items={testimonials} renderFields={(testimonial) => <><input value={testimonial.customer} onChange={(e) => setTestimonials((previous) => previous.map((item) => item.id === testimonial.id ? { ...item, customer: e.target.value } : item))} /><textarea value={testimonial.quote} onChange={(e) => setTestimonials((previous) => previous.map((item) => item.id === testimonial.id ? { ...item, quote: e.target.value } : item))} /><AdminSecondaryButton onClick={async () => hasSupabaseConfig && updateRecord('testimonials', testimonial.id, { customer: testimonial.customer, quote: testimonial.quote })}>Save</AdminSecondaryButton><AdminSecondaryButton className="danger" onClick={async () => { if (hasSupabaseConfig) await deleteRecord('testimonials', testimonial.id); setTestimonials((previous) => previous.filter((item) => item.id !== testimonial.id)); }}>Delete</AdminSecondaryButton></>} />
