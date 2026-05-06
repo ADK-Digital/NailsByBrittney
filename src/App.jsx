@@ -65,6 +65,7 @@ function BookingSection({ services }) {
   const [busy, setBusy] = useState(false);
   const [serviceError, setServiceError] = useState('');
   const timeRef = useRef(null);
+  const shouldSyncAvailabilityRef = useRef(false);
 
   const selected = services.filter((s) => selectedServices.includes(s.id));
   const isAddonService = (s) => s.is_addon === true;
@@ -90,11 +91,25 @@ function BookingSection({ services }) {
 
   useEffect(() => {
     if (!selectedServices.length) {
+      shouldSyncAvailabilityRef.current = false;
       setAvailability([]);
-      return;
+      setSelectedDate('');
+      setSelectedTime('');
+      return undefined;
     }
 
-    fetchAvailability(selectedServices).then((data) => setAvailability(data.dates || []));
+    let cancelled = false;
+
+    fetchAvailability(selectedServices).then((data) => {
+      if (cancelled) return;
+
+      shouldSyncAvailabilityRef.current = true;
+      setAvailability(data.dates || []);
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [selectedServices.join(',')]);
 
   useEffect(() => {
@@ -120,6 +135,27 @@ function BookingSection({ services }) {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
+
+  useEffect(() => {
+    if (!shouldSyncAvailabilityRef.current) return;
+
+    shouldSyncAvailabilityRef.current = false;
+
+    const availableDates = availability.filter((d) => d.available && d.date);
+    const selectedAvailability = selectedDate ? availability.find((d) => d.date === selectedDate) : null;
+
+    if (selectedDate && !selectedAvailability?.available) {
+      setSelectedDate('');
+      setSelectedTime('');
+    }
+
+    if (!availableDates.length) return;
+
+    const earliestAvailableDate = availableDates.reduce((earliest, current) => (current.date < earliest.date ? current : earliest));
+    const [year, month] = earliestAvailableDate.date.split('-').map(Number);
+
+    setCalendarDate(new Date(year, month - 1, 1));
+  }, [availability, selectedDate]);
   const availableMonthRange = useMemo(() => {
     const availableDates = availability.filter((d) => d.available && d.date);
 
@@ -152,8 +188,6 @@ function BookingSection({ services }) {
   };
 
   const toggleService = (id) => {
-    setSelectedDate('');
-    setSelectedTime('');
     setSelectedServices((curr) => curr.includes(id) ? curr.filter((x) => x !== id) : [...curr, id]);
   };
 
