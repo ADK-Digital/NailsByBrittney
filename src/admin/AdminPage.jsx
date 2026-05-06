@@ -132,7 +132,7 @@ function AppointmentCard({ appointment, onRefresh }) {
   const call = async (fn) => { await fn(); await onRefresh(); };
 
   return <article className={`card appointment-card${expanded ? ' expanded' : ''}`}>
-    <button type="button" className="appointment-toggle" onClick={() => setExpanded((current) => !current)} aria-expanded={expanded}>
+    {!expanded && <button type="button" className="appointment-toggle" onClick={() => setExpanded(true)} aria-expanded={expanded}>
       <span className="appointment-title">
         <strong>{appointmentDateTime}</strong>
         <span className="appointment-customer">{customerName}</span>
@@ -140,9 +140,9 @@ function AppointmentCard({ appointment, onRefresh }) {
       </span>
       <span className="appointment-toggle-status">
         <span className={statusClassName(appointment.status)}><span>Status</span>{formatAdminStatus(appointment.status)}</span>
-        <span className="appointment-arrow" aria-hidden="true">{expanded ? '⌃' : '⌄'}</span>
+        <span className="appointment-arrow" aria-hidden="true">⌄</span>
       </span>
-    </button>
+    </button>}
 
     {expanded && <div className="appointment-details">
       <div className="appointment-head">
@@ -156,6 +156,7 @@ function AppointmentCard({ appointment, onRefresh }) {
           <span className="pill meta-pill"><span>Service payment</span>{appointment.service_payment_status || 'unpaid'}</span>
           <span className="pill meta-pill"><span>Late fee</span>{appointment.late_fee_status || 'unpaid'}</span>
           <span className="pill meta-pill"><span>No-show fee</span>{appointment.no_show_fee_status || 'unpaid'}</span>
+          <button type="button" className="appointment-arrow appointment-collapse-button" onClick={() => setExpanded(false)} aria-label="Collapse appointment" aria-expanded={expanded}>⌃</button>
         </div>
       </div>
       <p className="muted">Communication preference: {formatCommunicationPreference(appointment.customers?.communication_preference)} • Card: {appointment.customers?.card_on_file_status || 'missing'} {appointment.customers?.card_brand ? `(${appointment.customers.card_brand} ••••${appointment.customers.card_last4 || ''})` : ''}</p>

@@ -1,5 +1,5 @@
 import { json, ensureServerConfig, supabaseAdmin } from './_lib/supabaseAdmin.js';
-import { dateRangeWithinBookingWindow, dayOfWeekFromIsoDate } from './_lib/time.js';
+import { dateRangeWithinBookingWindow, dayOfWeekFromIsoDate, localDateTimeToUtcIso, zonedParts } from './_lib/time.js';
 
 function toMinutes(t) {
   const [h, m] = t.split(':').map(Number);
@@ -8,6 +8,11 @@ function toMinutes(t) {
 
 function formatTime(mins) {
   return `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
+}
+
+function localMinutesFromUtc(value) {
+  const parts = zonedParts(value);
+  return (parts.hour * 60) + parts.minute;
 }
 
 export const handler = async (event) => {
@@ -54,24 +59,28 @@ export const handler = async (event) => {
         continue;
       }
 
+      const dayStartUtc = localDateTimeToUtcIso(date, '00:00');
+      const nextDay = new Date(`${date}T00:00:00Z`);
+      nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+      const nextDate = `${nextDay.getUTCFullYear()}-${String(nextDay.getUTCMonth() + 1).padStart(2, '0')}-${String(nextDay.getUTCDate()).padStart(2, '0')}`;
+      const dayEndUtc = localDateTimeToUtcIso(nextDate, '00:00');
+
       const { data: conflicts } = await supabaseAdmin
         .from('appointments')
-        .select('start_at,end_at,status,confirmation_deadline_at')
-        .gte('start_at', `${date}T00:00:00Z`)
-        .lte('start_at', `${date}T23:59:59Z`)
+        .select('start_at,end_at,status')
+        .lt('start_at', dayEndUtc)
+        .gt('end_at', dayStartUtc)
         .in('status', ['pending_confirmation', 'confirmed', 'completed', 'no_show']);
-
-      const activeConflicts = (conflicts || []).filter((c) => c.status !== 'pending_confirmation' || new Date(c.confirmation_deadline_at) > new Date());
 
       const { data: blocks } = await supabaseAdmin
         .from('blocked_times')
         .select('start_at,end_at')
-        .lte('start_at', `${date}T23:59:59Z`)
-        .gte('end_at', `${date}T00:00:00Z`);
+        .lt('start_at', dayEndUtc)
+        .gt('end_at', dayStartUtc);
 
       const spans = [
-        ...activeConflicts.map((c) => [new Date(c.start_at).getUTCHours() * 60 + new Date(c.start_at).getUTCMinutes(), new Date(c.end_at).getUTCHours() * 60 + new Date(c.end_at).getUTCMinutes()]),
-        ...(blocks || []).map((b) => [new Date(b.start_at).getUTCHours() * 60 + new Date(b.start_at).getUTCMinutes(), new Date(b.end_at).getUTCHours() * 60 + new Date(b.end_at).getUTCMinutes()]),
+        ...(conflicts || []).map((c) => [localMinutesFromUtc(c.start_at), localMinutesFromUtc(c.end_at)]),
+        ...(blocks || []).map((b) => [localMinutesFromUtc(b.start_at), localMinutesFromUtc(b.end_at)]),
       ];
 
       const times = [];
