@@ -316,7 +316,7 @@ export async function chargeAppointment({
   return event;
 }
 
-export async function refundAppointment({ appointmentId, target, percentOverride, initiatedBy = 'dashboard', note, commandText }) {
+export async function refundAppointment({ appointmentId, target, percentOverride, amountDollars, initiatedBy = 'dashboard', note, commandText }) {
   const type = PAYMENT_TARGET[target];
   if (!type) throw new Error('Invalid refund target.');
 
@@ -344,11 +344,14 @@ export async function refundAppointment({ appointmentId, target, percentOverride
   if (refundable <= 0) throw new Error('This target has already been fully refunded.');
 
   let refundCents = refundable;
-  if (percentOverride !== undefined && percentOverride !== null) {
+  if (amountDollars !== undefined && amountDollars !== null && amountDollars !== '') {
+    refundCents = Math.round(finiteNumber(amountDollars) * 100);
+  } else if (percentOverride !== undefined && percentOverride !== null) {
     refundCents = Math.round(refundable * (finiteNumber(percentOverride) / 100));
   }
 
   if (refundCents <= 0) throw new Error('Refund amount must be greater than zero.');
+  if (refundCents > refundable) throw new Error('Refund amount cannot exceed the refundable balance.');
 
   const latestCharge = [...chargeEvents].reverse().find((item) => item.processor_reference);
   if (!latestCharge) throw new Error('Cannot refund because no processor payment reference was stored for the original charge.');

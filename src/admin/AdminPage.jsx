@@ -20,7 +20,11 @@ import {
 } from '../lib/bookingApi';
 import { hasSupabaseConfig, supabase } from '../lib/supabase';
 
-function DraggableList({ items, renderFields }) { return <ul className="admin-edit-list">{items.map((item, idx) => <li key={item.id} className="admin-item">{renderFields(item, idx)}</li>)}</ul>; }
+const APPOINTMENTS_PER_PAGE = 20;
+
+function DraggableList({ items, renderFields }) {
+  return <ul className="admin-edit-list">{items.map((item, idx) => <li key={item.id} className="admin-item">{renderFields(item, idx)}</li>)}</ul>;
+}
 
 function formatAdminStatus(status) {
   return String(status || 'unknown').replace(/_/g, ' ');
@@ -30,63 +34,150 @@ function statusClassName(status) {
   return `pill status-pill status-${String(status || 'unknown').replace(/_/g, '-')}`;
 }
 
+function formatServicePrice(service) {
+  const priceNumber = getServicePriceNumber(service);
+  const formattedPrice = Number.isInteger(priceNumber) ? String(priceNumber) : priceNumber.toFixed(2);
+  return `$${formattedPrice}${service.is_variable_price ? '+' : ''}`;
+}
+
+function getServicePriceNumber(service) {
+  const numeric = Number(service.price_min_numeric);
+  if (Number.isFinite(numeric)) return numeric;
+
+  const parsed = Number(String(service.price_text || '').replace(/[^0-9.]/g, ''));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function parseCurrencyInput(value) {
+  return value.replace(/[^0-9.]/g, '');
+}
+
+function formatCommunicationPreference(preference) {
+  if (!preference || preference === 'both') return 'SMS + email';
+  return preference;
+}
+
+function centsToDollars(cents) {
+  return (Number(cents || 0) / 100).toFixed(2);
+}
+
+function getSucceededEventTotal(events, eventType) {
+  return events
+    .filter((event) => event.event_type === eventType && event.status === 'succeeded')
+    .reduce((sum, event) => sum + Number(event.amount_cents || 0), 0);
+}
+
+function getAppointmentSortPriority(status) {
+  const normalizedStatus = String(status || '').toLowerCase();
+  if (normalizedStatus === 'pending') return 0;
+  if (normalizedStatus === 'confirmed') return 1;
+  if (normalizedStatus === 'no_show') return 2;
+  if (normalizedStatus === 'completed') return 3;
+  if (normalizedStatus === 'cancelled' || normalizedStatus === 'declined') return 4;
+  return 2;
+}
+
+function sortAppointmentsForAdmin(items) {
+  return [...items].sort((a, b) => {
+    const priorityDelta = getAppointmentSortPriority(a.status) - getAppointmentSortPriority(b.status);
+    if (priorityDelta !== 0) return priorityDelta;
+
+    const aStart = new Date(a.start_at).getTime();
+    const bStart = new Date(b.start_at).getTime();
+    return (Number.isFinite(aStart) ? aStart : 0) - (Number.isFinite(bStart) ? bStart : 0);
+  });
+}
+
 function AdminSecondaryButton({ className = '', ...props }) {
   return <button type="button" className={`admin-secondary-button${className ? ` ${className}` : ''}`} {...props} />;
 }
 
 function AppointmentCard({ appointment, onRefresh }) {
+  const [expanded, setExpanded] = useState(false);
   const [serviceAmount, setServiceAmount] = useState('');
   const [latePct, setLatePct] = useState('25');
   const [noShowPct, setNoShowPct] = useState('50');
-  const [refundPct, setRefundPct] = useState('50');
 
   const events = appointment.appointment_financial_events || [];
   const sortedEvents = [...events].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  const serviceChargedCents = getSucceededEventTotal(events, 'service_charge');
+  const serviceRefundedCents = getSucceededEventTotal(events, 'refund_service');
+  const serviceRefundableCents = Math.max(0, serviceChargedCents - serviceRefundedCents);
+  const serviceRefundableDollars = centsToDollars(serviceRefundableCents);
+  const [serviceRefundAmount, setServiceRefundAmount] = useState(serviceRefundableDollars);
+  const customerName = `${appointment.customers?.first_name || ''} ${appointment.customers?.last_name || ''}`.trim() || 'Customer';
+  const appointmentDateTime = new Date(appointment.start_at).toLocaleString();
+
+  useEffect(() => {
+    setServiceRefundAmount(serviceRefundableDollars);
+  }, [appointment.id, serviceRefundableDollars]);
 
   const call = async (fn) => { await fn(); await onRefresh(); };
 
-  return <article className="card appointment-card">
-    <div className="appointment-head">
-      <div className="appointment-title">
-        <span className="appointment-label">Booking</span>
-        <strong>#{appointment.booking_request_number}</strong>
-      </div>
-      <div className="appointment-meta" aria-label="Booking status details">
+  return <article className={`card appointment-card${expanded ? ' expanded' : ''}`}>
+    <button type="button" className="appointment-toggle" onClick={() => setExpanded((current) => !current)} aria-expanded={expanded}>
+      <span className="appointment-title">
+        <strong>{appointmentDateTime}</strong>
+        <span className="appointment-customer">{customerName}</span>
+        <span className="appointment-booking-number">Booking #{appointment.booking_request_number}</span>
+      </span>
+      <span className="appointment-toggle-status">
         <span className={statusClassName(appointment.status)}><span>Status</span>{formatAdminStatus(appointment.status)}</span>
-        <span className="pill meta-pill"><span>Service payment</span>{appointment.service_payment_status || 'unpaid'}</span>
-        <span className="pill meta-pill"><span>Late fee</span>{appointment.late_fee_status || 'unpaid'}</span>
-        <span className="pill meta-pill"><span>No-show fee</span>{appointment.no_show_fee_status || 'unpaid'}</span>
+        <span className="appointment-arrow" aria-hidden="true">{expanded ? '⌃' : '⌄'}</span>
+      </span>
+    </button>
+
+    {expanded && <div className="appointment-details">
+      <div className="appointment-head">
+        <div className="appointment-title appointment-title-expanded">
+          <strong>{appointmentDateTime}</strong>
+          <span className="appointment-customer">{customerName}</span>
+          <span className="appointment-booking-number">Booking #{appointment.booking_request_number}</span>
+        </div>
+        <div className="appointment-meta" aria-label="Booking status details">
+          <span className={statusClassName(appointment.status)}><span>Status</span>{formatAdminStatus(appointment.status)}</span>
+          <span className="pill meta-pill"><span>Service payment</span>{appointment.service_payment_status || 'unpaid'}</span>
+          <span className="pill meta-pill"><span>Late fee</span>{appointment.late_fee_status || 'unpaid'}</span>
+          <span className="pill meta-pill"><span>No-show fee</span>{appointment.no_show_fee_status || 'unpaid'}</span>
+        </div>
       </div>
-    </div>
-    <p><strong>{appointment.customers?.first_name} {appointment.customers?.last_name}</strong> • {new Date(appointment.start_at).toLocaleString()}</p>
-    <p className="muted">Comm pref: {appointment.customers?.communication_preference || 'both'} • Card: {appointment.customers?.card_on_file_status || 'missing'} {appointment.customers?.card_brand ? `(${appointment.customers.card_brand} ••••${appointment.customers.card_last4 || ''})` : ''}</p>
+      <p className="muted">Communication preference: {formatCommunicationPreference(appointment.customers?.communication_preference)} • Card: {appointment.customers?.card_on_file_status || 'missing'} {appointment.customers?.card_brand ? `(${appointment.customers.card_brand} ••••${appointment.customers.card_last4 || ''})` : ''}</p>
 
-    <div className="admin-action-grid">
-      {['confirmed', 'declined', 'cancelled', 'completed', 'no_show'].map((status) => <button key={status} className="btn" onClick={() => call(() => setAppointmentStatus(appointment.id, status))}>{formatAdminStatus(status)}</button>)}
-    </div>
+      <div className="admin-action-grid">
+        {['confirmed', 'declined', 'cancelled', 'completed', 'no_show'].map((status) => <button key={status} className="btn" onClick={() => call(() => setAppointmentStatus(appointment.id, status))}>{formatAdminStatus(status)}</button>)}
+      </div>
 
-    <div className="admin-action-grid">
-      <button className="btn" onClick={() => call(() => adminChargeAppointment({ appointmentId: appointment.id, target: 'late', percent: Number(latePct || 25) }))}>Charge late fee</button>
-      <input value={latePct} onChange={(e) => setLatePct(e.target.value.replace(/[^0-9.]/g, ''))} placeholder="25" />
-      <button className="btn" onClick={() => call(() => adminChargeAppointment({ appointmentId: appointment.id, target: 'no_show', percent: Number(noShowPct || 50) }))}>Charge no-show fee</button>
-      <input value={noShowPct} onChange={(e) => setNoShowPct(e.target.value.replace(/[^0-9.]/g, ''))} placeholder="50" />
-      <button className="btn" onClick={() => call(() => adminChargeAppointment({ appointmentId: appointment.id, target: 'service', amount: Number(serviceAmount || 0) }))}>Charge services</button>
-      <input
-        value={serviceAmount}
-        onChange={(e) => setServiceAmount(e.target.value.replace(/[^0-9.]/g, ''))}
-        placeholder="Type service amount (e.g. 85.00)"
-      />
-    </div>
+      <div className="admin-action-grid">
+        <button className="btn" onClick={() => call(() => adminChargeAppointment({ appointmentId: appointment.id, target: 'late', percent: Number(latePct || 25) }))}>Charge late fee</button>
+        <input value={latePct} onChange={(e) => setLatePct(parseCurrencyInput(e.target.value))} placeholder="25" />
+        <button className="btn" onClick={() => call(() => adminChargeAppointment({ appointmentId: appointment.id, target: 'no_show', percent: Number(noShowPct || 50) }))}>Charge no-show fee</button>
+        <input value={noShowPct} onChange={(e) => setNoShowPct(parseCurrencyInput(e.target.value))} placeholder="50" />
+        <button className="btn" onClick={() => call(() => adminChargeAppointment({ appointmentId: appointment.id, target: 'service', amount: Number(serviceAmount || 0) }))}>Charge services</button>
+        <input
+          value={serviceAmount}
+          onChange={(e) => setServiceAmount(parseCurrencyInput(e.target.value))}
+          placeholder="Type service amount (e.g. 85.00)"
+        />
+      </div>
 
-    <div className="admin-action-grid">
-      <button className="btn" onClick={() => call(() => adminRefundAppointment({ appointmentId: appointment.id, target: 'late' }))}>Refund late fee</button>
-      <button className="btn" onClick={() => call(() => adminRefundAppointment({ appointmentId: appointment.id, target: 'no_show' }))}>Refund no-show fee</button>
-      <button className="btn" onClick={() => call(() => adminRefundAppointment({ appointmentId: appointment.id, target: 'service' }))}>Refund services full</button>
-      <button className="btn" onClick={() => call(() => adminRefundAppointment({ appointmentId: appointment.id, target: 'service', percent: Number(refundPct || 50) }))}>Refund services %</button>
-      <input value={refundPct} onChange={(e) => setRefundPct(e.target.value.replace(/[^0-9.]/g, ''))} placeholder="50" />
-    </div>
+      <div className="admin-action-grid">
+        <button className="btn" onClick={() => call(() => adminRefundAppointment({ appointmentId: appointment.id, target: 'late' }))}>Refund late fee</button>
+        <button className="btn" onClick={() => call(() => adminRefundAppointment({ appointmentId: appointment.id, target: 'no_show' }))}>Refund no-show fee</button>
+        <button className="btn" onClick={() => call(() => adminRefundAppointment({ appointmentId: appointment.id, target: 'service' }))}>Refund services full</button>
+        <button className="btn" onClick={() => call(() => adminRefundAppointment({ appointmentId: appointment.id, target: 'service', amount: Number(serviceRefundAmount || 0) }))}>Refund services</button>
+        <input
+          type="text"
+          inputMode="decimal"
+          value={serviceRefundAmount}
+          onChange={(e) => setServiceRefundAmount(parseCurrencyInput(e.target.value))}
+          placeholder={serviceRefundableDollars}
+          aria-label="Service refund dollar amount"
+        />
+      </div>
+      <p className="muted refund-helper">Refundable service amount: ${serviceRefundableDollars} of ${centsToDollars(serviceChargedCents)} charged.</p>
 
-    {!!sortedEvents.length && <details><summary>Payment history ({sortedEvents.length})</summary><ul>{sortedEvents.map((event) => <li key={event.id}>{new Date(event.created_at).toLocaleString()} • {event.event_type} • ${(Number(event.amount_cents || 0) / 100).toFixed(2)} • {event.status} • {event.initiated_by}</li>)}</ul></details>}
+      {!!sortedEvents.length && <details><summary>Payment history ({sortedEvents.length})</summary><ul>{sortedEvents.map((event) => <li key={event.id}>{new Date(event.created_at).toLocaleString()} • {event.event_type} • ${centsToDollars(event.amount_cents)} • {event.status} • {event.initiated_by}</li>)}</ul></details>}
+    </div>}
   </article>;
 }
 
@@ -102,6 +193,18 @@ export default function AdminPage() {
   const [galleryCaptionDraft, setGalleryCaptionDraft] = useState('');
   const [galleryUploadBusy, setGalleryUploadBusy] = useState(false);
   const [galleryMessage, setGalleryMessage] = useState({ type: '', text: '' });
+  const [appointmentPage, setAppointmentPage] = useState(0);
+
+  const sortedAppointments = useMemo(() => sortAppointmentsForAdmin(appointments), [appointments]);
+  const appointmentPageCount = Math.max(1, Math.ceil(sortedAppointments.length / APPOINTMENTS_PER_PAGE));
+  const currentAppointmentPage = Math.min(appointmentPage, appointmentPageCount - 1);
+  const appointmentPageStart = currentAppointmentPage * APPOINTMENTS_PER_PAGE;
+  const appointmentPageEnd = Math.min(appointmentPageStart + APPOINTMENTS_PER_PAGE, sortedAppointments.length);
+  const pagedAppointments = sortedAppointments.slice(appointmentPageStart, appointmentPageEnd);
+
+  useEffect(() => {
+    if (appointmentPage > appointmentPageCount - 1) setAppointmentPage(Math.max(0, appointmentPageCount - 1));
+  }, [appointmentPage, appointmentPageCount]);
 
   const refreshBookingAdmin = async () => {
     const data = await fetchAdminAppointments();
@@ -130,7 +233,11 @@ export default function AdminPage() {
   }, []);
 
   const signedIn = useMemo(() => (!hasSupabaseConfig ? true : Boolean(session)), [session]);
-  const signIn = async (e) => { e.preventDefault(); const fd = new FormData(e.currentTarget); await supabase.auth.signInWithPassword({ email: fd.get('email'), password: fd.get('password') }); };
+  const signIn = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    await supabase.auth.signInWithPassword({ email: fd.get('email'), password: fd.get('password') });
+  };
 
   const uploadSelectedGalleryPhotos = async () => {
     if (!selectedGalleryFiles.length) return setGalleryMessage({ type: 'error', text: 'Please choose at least one photo to upload.' });
@@ -140,7 +247,7 @@ export default function AdminPage() {
       setSelectedGalleryFiles([]);
       setGalleryCaptionDraft('');
       setGalleryMessage({ type: 'success', text: `Added ${mockRows.length} local sample photo(s).` });
-      return;
+      return undefined;
     }
 
     setGalleryUploadBusy(true);
@@ -165,41 +272,83 @@ export default function AdminPage() {
     } finally {
       setGalleryUploadBusy(false);
     }
+    return undefined;
   };
 
-  if (!signedIn) return <main className="admin-wrap"><h1>Admin Login</h1><form onSubmit={signIn} className="admin-form"><label>Email<input name="email" type="email" required /></label><label>Password<input name="password" type="password" required /></label><button className="btn primary" type="submit">Sign in</button></form></main>;
+  const updateServicePrice = (serviceId, nextValue) => {
+    const numericText = parseCurrencyInput(nextValue);
+    const numericValue = Number(numericText || 0);
+    setServices((previous) => previous.map((service) => (service.id === serviceId ? {
+      ...service,
+      price_min_numeric: numericValue,
+      price_text: formatServicePrice({ ...service, price_min_numeric: numericValue }),
+    } : service)));
+  };
+
+  const updateServiceVariablePrice = (serviceId, checked) => {
+    setServices((previous) => previous.map((service) => (service.id === serviceId ? {
+      ...service,
+      is_variable_price: checked,
+      price_text: formatServicePrice({ ...service, is_variable_price: checked }),
+    } : service)));
+  };
+
+  const saveService = async (service, idx) => {
+    if (!hasSupabaseConfig) return;
+    const priceText = formatServicePrice(service);
+    await updateRecord('services', service.id, {
+      name: service.name,
+      price_text: priceText,
+      price_min_numeric: getServicePriceNumber(service),
+      duration: `${service.duration_minutes} min`,
+      duration_minutes: service.duration_minutes,
+      is_variable_price: service.is_variable_price,
+      description: service.description,
+      type: service.type || 'base',
+      requires_service_ids: service.requires_service_ids || [],
+      display_order: idx + 1,
+    });
+    await refreshServiceList();
+  };
+
+  if (!signedIn) return <main className="admin-wrap"><h1>Admin Login</h1><form onSubmit={signIn} className="admin-form"><label>Email<input name="email" type="email" required /></label><label>Password<input name="password" type="password" required /></label><button className="btn primary">Sign in</button></form></main>;
 
   return <main className="admin-wrap"><h1>Nails by Brittney Admin</h1>
     {hasSupabaseConfig && <button className="btn" onClick={() => supabase.auth.signOut()}>Sign out</button>}
 
-    <section className="admin-section admin-section-appointments"><h2>Appointments</h2><button className="btn" onClick={refreshBookingAdmin}>Refresh</button>
-      <div className="admin-list">{appointments.map((a) => <AppointmentCard key={a.id} appointment={a} onRefresh={refreshBookingAdmin} />)}</div>
+    <section className="admin-section admin-section-appointments"><h2>Appointments</h2><div className="admin-section-actions"><button className="btn" onClick={refreshBookingAdmin}>Refresh</button></div>
+      <div className="admin-list">{pagedAppointments.map((appointment) => <AppointmentCard key={appointment.id} appointment={appointment} onRefresh={refreshBookingAdmin} />)}</div>
+      {sortedAppointments.length > APPOINTMENTS_PER_PAGE && <div className="appointment-pagination" aria-label="Appointment pagination">
+        <button className="admin-secondary-button" type="button" onClick={() => setAppointmentPage((page) => Math.max(0, page - 1))} disabled={currentAppointmentPage === 0}>‹</button>
+        <span>{appointmentPageStart + 1}-{appointmentPageEnd} of {sortedAppointments.length}</span>
+        <button className="admin-secondary-button" type="button" onClick={() => setAppointmentPage((page) => Math.min(appointmentPageCount - 1, page + 1))} disabled={currentAppointmentPage >= appointmentPageCount - 1}>›</button>
+      </div>}
     </section>
 
-    <section className="admin-section"><h2>Blocked Times</h2><button className="btn" onClick={async () => {
+    <section className="admin-section"><h2>Blocked Times</h2><div className="admin-section-actions"><button className="btn" onClick={async () => {
       const startAt = prompt('Start ISO datetime (e.g. 2026-04-17T16:00:00Z)');
       const endAt = prompt('End ISO datetime (e.g. 2026-04-17T18:00:00Z)');
       if (!startAt || !endAt) return;
       await createBlockedTime({ startAt, endAt, reason: 'Admin block' });
       refreshBookingAdmin();
-    }}>Add Block</button>{blockedTimes.map((b) => <div key={b.id}>{new Date(b.start_at).toLocaleString()} - {new Date(b.end_at).toLocaleString()} ({b.reason}) <AdminSecondaryButton onClick={async () => { await deleteBlockedTime(b.id); refreshBookingAdmin(); }}>Delete</AdminSecondaryButton></div>)}</section>
+    }}>Add Block</button></div>{blockedTimes.map((block) => <div key={block.id}>{new Date(block.start_at).toLocaleString()} - {new Date(block.end_at).toLocaleString()} ({block.reason}) <AdminSecondaryButton onClick={async () => { await deleteBlockedTime(block.id); refreshBookingAdmin(); }}>Delete</AdminSecondaryButton></div>)}</section>
 
-    <section className="admin-section admin-section-customers"><h2>Customers</h2><div className="admin-card-grid">{customers.map((c) => <article key={c.id} className="card customer-card"><h4>{c.first_name} {c.last_name}</h4><p>{c.phone} • {c.email} • pref: {c.communication_preference || 'both'}</p><p>Card: {c.card_on_file_status || 'missing'} {c.card_brand ? `(${c.card_brand} ••••${c.card_last4 || ''})` : ''}</p><ul>{(c.customer_notes || []).map((n) => <li key={n.id}>{new Date(n.created_at).toLocaleDateString()} - {n.note_text}</li>)}</ul></article>)}</div></section>
+    <section className="admin-section admin-section-customers"><h2>Customers</h2><div className="admin-card-grid">{customers.map((customer) => <article key={customer.id} className="card customer-card"><h4>{customer.first_name} {customer.last_name}</h4><p>{customer.phone} • {customer.email} • pref: {formatCommunicationPreference(customer.communication_preference)}</p><p>Card: {customer.card_on_file_status || 'missing'} {customer.card_brand ? `(${customer.card_brand} ••••${customer.card_last4 || ''})` : ''}</p><ul>{(customer.customer_notes || []).map((note) => <li key={note.id}>{new Date(note.created_at).toLocaleDateString()} - {note.note_text}</li>)}</ul></article>)}</div></section>
 
-    <section className="admin-section admin-section-testimonials"><h2>Testimonials</h2><button className="btn" onClick={async () => { const item = { customer: 'Customer Name', quote: 'Editable testimonial quote.', display_order: testimonials.length + 1 }; const created = hasSupabaseConfig ? await createRecord('testimonials', item) : { ...item, id: crypto.randomUUID() }; setTestimonials((p) => [...p, created]); }}>Add Testimonial</button>
-      <DraggableList items={testimonials} renderFields={(t) => <><input value={t.customer} onChange={(e) => setTestimonials((p) => p.map((i) => i.id === t.id ? { ...i, customer: e.target.value } : i))} /><textarea value={t.quote} onChange={(e) => setTestimonials((p) => p.map((i) => i.id === t.id ? { ...i, quote: e.target.value } : i))} /><AdminSecondaryButton onClick={async () => hasSupabaseConfig && updateRecord('testimonials', t.id, { customer: t.customer, quote: t.quote })}>Save</AdminSecondaryButton><AdminSecondaryButton className="danger" onClick={async () => { if (hasSupabaseConfig) await deleteRecord('testimonials', t.id); setTestimonials((p) => p.filter((i) => i.id !== t.id)); }}>Delete</AdminSecondaryButton></>} />
+    <section className="admin-section admin-section-testimonials"><h2>Testimonials</h2><div className="admin-section-actions"><button className="btn" onClick={async () => { const item = { customer: 'Customer Name', quote: 'Editable testimonial quote.', display_order: testimonials.length + 1 }; const created = hasSupabaseConfig ? await createRecord('testimonials', item) : { ...item, id: crypto.randomUUID() }; setTestimonials((previous) => [...previous, created]); }}>Add Testimonial</button></div>
+      <DraggableList items={testimonials} renderFields={(testimonial) => <><input value={testimonial.customer} onChange={(e) => setTestimonials((previous) => previous.map((item) => item.id === testimonial.id ? { ...item, customer: e.target.value } : item))} /><textarea value={testimonial.quote} onChange={(e) => setTestimonials((previous) => previous.map((item) => item.id === testimonial.id ? { ...item, quote: e.target.value } : item))} /><AdminSecondaryButton onClick={async () => hasSupabaseConfig && updateRecord('testimonials', testimonial.id, { customer: testimonial.customer, quote: testimonial.quote })}>Save</AdminSecondaryButton><AdminSecondaryButton className="danger" onClick={async () => { if (hasSupabaseConfig) await deleteRecord('testimonials', testimonial.id); setTestimonials((previous) => previous.filter((item) => item.id !== testimonial.id)); }}>Delete</AdminSecondaryButton></>} />
     </section>
 
-    <section className="admin-section admin-section-services"><h2>Services</h2><button className="btn" onClick={async () => {
+    <section className="admin-section admin-section-services"><h2>Services</h2><div className="admin-section-actions"><button className="btn" onClick={async () => {
       const item = { name: 'New Service', price_text: '$0', price_min_numeric: 0, duration: '30 min', duration_minutes: 30, is_variable_price: false, description: 'Service details', type: 'base', requires_service_ids: [], display_order: services.length + 1, active: true };
       const created = hasSupabaseConfig ? await createRecord('services', item) : { ...item, id: crypto.randomUUID() };
-      if (hasSupabaseConfig) await refreshServiceList(); else setServices((p) => [...p, created]);
-    }}>Add Service</button>
-      <DraggableList items={services} renderFields={(s, idx) => <><label>Service name<input value={s.name} onChange={(e) => setServices((p) => p.map((i) => i.id === s.id ? { ...i, name: e.target.value } : i))} /></label><label>Price (display)<input value={s.price_text} onChange={(e) => setServices((p) => p.map((i) => i.id === s.id ? { ...i, price_text: e.target.value } : i))} /></label><label>Base Price for Estimates<input type="number" value={s.price_min_numeric || 0} onChange={(e) => setServices((p) => p.map((i) => i.id === s.id ? { ...i, price_min_numeric: Number(e.target.value) } : i))} /></label><label>Duration (minutes)<input type="number" value={s.duration_minutes || 0} onChange={(e) => setServices((p) => p.map((i) => i.id === s.id ? { ...i, duration_minutes: Number(e.target.value), duration: `${e.target.value} min` } : i))} /></label><label><input type="checkbox" checked={Boolean(s.is_variable_price)} onChange={(e) => setServices((p) => p.map((i) => i.id === s.id ? { ...i, is_variable_price: e.target.checked } : i))} /> Variable price</label><label>Description<textarea value={s.description} onChange={(e) => setServices((p) => p.map((i) => i.id === s.id ? { ...i, description: e.target.value } : i))} /></label><AdminSecondaryButton onClick={async () => { if (!hasSupabaseConfig) return; await updateRecord('services', s.id, { name: s.name, price_text: s.price_text, price_min_numeric: s.price_min_numeric, duration: `${s.duration_minutes} min`, duration_minutes: s.duration_minutes, is_variable_price: s.is_variable_price, description: s.description, type: s.type || 'base', requires_service_ids: s.requires_service_ids || [], display_order: idx + 1 }); await refreshServiceList(); }}>Save</AdminSecondaryButton><AdminSecondaryButton className="danger" onClick={async () => { if (hasSupabaseConfig) { await deleteRecord('services', s.id); await refreshServiceList(); return; } setServices((p) => p.filter((i) => i.id !== s.id)); }}>Delete</AdminSecondaryButton><AdminSecondaryButton onClick={async () => { if (!hasSupabaseConfig) return; await updateOrder('services', services); await refreshServiceList(); }}>Save Order</AdminSecondaryButton></>} />
+      if (hasSupabaseConfig) await refreshServiceList(); else setServices((previous) => [...previous, created]);
+    }}>Add Service</button></div>
+      <DraggableList items={services} renderFields={(service, idx) => <><label>Service name<input value={service.name} onChange={(e) => setServices((previous) => previous.map((item) => item.id === service.id ? { ...item, name: e.target.value } : item))} /></label><label>Price<input type="number" min="0" step="0.01" value={getServicePriceNumber(service)} onChange={(e) => updateServicePrice(service.id, e.target.value)} /></label><label>Duration (minutes)<input type="number" value={service.duration_minutes || 0} onChange={(e) => setServices((previous) => previous.map((item) => item.id === service.id ? { ...item, duration_minutes: Number(e.target.value), duration: `${e.target.value} min` } : item))} /></label><label className="variable-price-row"><span>Variable price?</span><input type="checkbox" checked={Boolean(service.is_variable_price)} onChange={(e) => updateServiceVariablePrice(service.id, e.target.checked)} /></label><label>Description<textarea value={service.description} onChange={(e) => setServices((previous) => previous.map((item) => item.id === service.id ? { ...item, description: e.target.value } : item))} /></label><AdminSecondaryButton onClick={() => saveService(service, idx)}>Save</AdminSecondaryButton><AdminSecondaryButton className="danger" onClick={async () => { if (hasSupabaseConfig) { await deleteRecord('services', service.id); await refreshServiceList(); return; } setServices((previous) => previous.filter((item) => item.id !== service.id)); }}>Delete</AdminSecondaryButton><AdminSecondaryButton onClick={async () => { if (!hasSupabaseConfig) return; await updateOrder('services', services); await refreshServiceList(); }}>Save Order</AdminSecondaryButton></>} />
     </section>
 
     <section className="admin-section admin-section-gallery"><h2>Gallery</h2><div className="gallery-upload-panel"><label htmlFor="gallery-file-picker">Select photo(s) to upload</label><input id="gallery-file-picker" type="file" accept="image/*" multiple onChange={(e) => { setSelectedGalleryFiles(Array.from(e.target.files || [])); setGalleryMessage({ type: '', text: '' }); }} /><label htmlFor="gallery-caption-input">Caption (optional)</label><input id="gallery-caption-input" placeholder="Caption for selected photo(s)" value={galleryCaptionDraft} onChange={(e) => setGalleryCaptionDraft(e.target.value)} /><button className="btn primary" onClick={uploadSelectedGalleryPhotos} disabled={galleryUploadBusy}>{galleryUploadBusy ? 'Uploading...' : 'Upload Selected Photos'}</button>{!!selectedGalleryFiles.length && <p className="muted">{selectedGalleryFiles.length} file(s) selected.</p>}{!!galleryMessage.text && <p className={galleryMessage.type === 'error' ? 'admin-message error' : 'admin-message success'}>{galleryMessage.text}</p>}</div>
-      <DraggableList items={gallery} renderFields={(g) => <div className="gallery-admin-item">{(g.imageUrl || g.local_path) ? <img src={g.imageUrl || g.local_path} alt="Gallery" /> : <div className="missing-image">No image</div>}<input placeholder="Caption" value={g.caption || ''} onChange={(e) => setGallery((p) => p.map((i) => i.id === g.id ? { ...i, caption: e.target.value } : i))} /><AdminSecondaryButton onClick={async () => { if (!hasSupabaseConfig) return; await updateRecord('gallery_items', g.id, { caption: g.caption || '' }); await refreshGalleryList(); }}>Save</AdminSecondaryButton><AdminSecondaryButton className="danger" onClick={async () => { if (hasSupabaseConfig) { await deleteGalleryImage(g.storage_key); await deleteRecord('gallery_items', g.id); await refreshGalleryList(); return; } setGallery((p) => p.filter((i) => i.id !== g.id)); }}>Delete</AdminSecondaryButton></div>} />
+      <DraggableList items={gallery} renderFields={(galleryItem) => <div className="gallery-admin-item">{(galleryItem.imageUrl || galleryItem.local_path) ? <img src={galleryItem.imageUrl || galleryItem.local_path} alt="Gallery" /> : <div className="missing-image">No image</div>}<input placeholder="Caption" value={galleryItem.caption || ''} onChange={(e) => setGallery((previous) => previous.map((item) => item.id === galleryItem.id ? { ...item, caption: e.target.value } : item))} /><AdminSecondaryButton onClick={async () => { if (!hasSupabaseConfig) return; await updateRecord('gallery_items', galleryItem.id, { caption: galleryItem.caption || '' }); await refreshGalleryList(); }}>Save</AdminSecondaryButton><AdminSecondaryButton className="danger" onClick={async () => { if (hasSupabaseConfig) { await deleteGalleryImage(galleryItem.storage_key); await deleteRecord('gallery_items', galleryItem.id); await refreshGalleryList(); return; } setGallery((previous) => previous.filter((item) => item.id !== galleryItem.id)); }}>Delete</AdminSecondaryButton></div>} />
       <AdminSecondaryButton onClick={async () => { if (!hasSupabaseConfig) return; await updateOrder('gallery_items', gallery); await refreshGalleryList(); }}>Save Gallery Order</AdminSecondaryButton>
     </section>
   </main>;
