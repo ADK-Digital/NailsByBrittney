@@ -22,6 +22,23 @@ import { hasSupabaseConfig, supabase } from '../lib/supabase';
 
 const APPOINTMENTS_PER_PAGE = 20;
 
+const appointmentDateFormatter = new Intl.DateTimeFormat('en-US', {
+  month: 'long',
+  day: 'numeric',
+  year: 'numeric',
+});
+
+const appointmentTimeFormatter = new Intl.DateTimeFormat('en-US', {
+  hour: 'numeric',
+  minute: '2-digit',
+});
+
+function formatAppointmentDateTime(value) {
+  const appointmentDate = new Date(value);
+  if (!Number.isFinite(appointmentDate.getTime())) return 'Date unavailable';
+  return `${appointmentDateFormatter.format(appointmentDate)} • ${appointmentTimeFormatter.format(appointmentDate)}`;
+}
+
 function DraggableList({ items, renderFields }) {
   return <ul className="admin-edit-list">{items.map((item, idx) => <li key={item.id} className="admin-item">{renderFields(item, idx)}</li>)}</ul>;
 }
@@ -106,7 +123,7 @@ function AppointmentCard({ appointment, onRefresh }) {
   const serviceRefundableDollars = centsToDollars(serviceRefundableCents);
   const [serviceRefundAmount, setServiceRefundAmount] = useState(serviceRefundableDollars);
   const customerName = `${appointment.customers?.first_name || ''} ${appointment.customers?.last_name || ''}`.trim() || 'Customer';
-  const appointmentDateTime = new Date(appointment.start_at).toLocaleString();
+  const appointmentDateTime = formatAppointmentDateTime(appointment.start_at);
 
   useEffect(() => {
     setServiceRefundAmount(serviceRefundableDollars);
