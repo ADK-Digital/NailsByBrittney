@@ -31,6 +31,7 @@ async function handleAppointmentAction(payload) {
       appointmentId: payload.appointmentId,
       target: payload.target,
       percentOverride: payload.percent,
+      amountDollars: payload.amount,
       initiatedBy,
       note: payload.note,
     });

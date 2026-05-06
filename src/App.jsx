@@ -8,6 +8,21 @@ import logo from '../Images/logo.png';
 
 const navItems = [['home', 'Home'], ['about', 'About'], ['examples', 'Examples'], ['services', 'Services'], ['booking', 'Booking'], ['contact', 'Contact'], ['location', 'Location']];
 
+
+function getServicePriceNumber(service) {
+  const numeric = Number(service.price_min_numeric);
+  if (Number.isFinite(numeric)) return numeric;
+
+  const parsed = Number(String(service.price_text || '').replace(/[^0-9.]/g, ''));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatServicePrice(service) {
+  const priceNumber = getServicePriceNumber(service);
+  const formattedPrice = Number.isInteger(priceNumber) ? String(priceNumber) : priceNumber.toFixed(2);
+  return `$${formattedPrice}${service.is_variable_price ? '+' : ''}`;
+}
+
 function Divider() {
   return <div className="section-separator" aria-hidden="true"><svg viewBox="0 0 600 80" role="presentation" focusable="false" className="flourish-svg"><path className="flourish-line" d="M12 40H204" /><path className="flourish-main" d="M300 40C286 40 279 29 270 22C260 14 246 14 236 22C227 30 227 43 236 51C246 59 260 59 270 51C279 44 286 40 300 40C282 40 268 52 252 60C236 68 216 66 205 53C194 40 196 21 210 12C224 3 245 6 259 16C273 26 285 40 300 40" /><path className="flourish-detail" d="M300 40C289 40 283 34 277 29C271 24 263 24 258 30C253 35 253 44 258 49C263 55 271 55 277 50C283 45 289 40 300 40" /><path className="flourish-cap" d="M20 40L16 36L12 40L16 44Z" /><g transform="translate(600 0) scale(-1 1)"><path className="flourish-line" d="M12 40H204" /><path className="flourish-main" d="M300 40C286 40 279 29 270 22C260 14 246 14 236 22C227 30 227 43 236 51C246 59 260 59 270 51C279 44 286 40 300 40C282 40 268 52 252 60C236 68 216 66 205 53C194 40 196 21 210 12C224 3 245 6 259 16C273 26 285 40 300 40" /><path className="flourish-detail" d="M300 40C289 40 283 34 277 29C271 24 263 24 258 30C253 35 253 44 258 49C263 55 271 55 277 50C283 45 289 40 300 40" /><path className="flourish-cap" d="M20 40L16 36L12 40L16 44Z" /></g><path className="flourish-center" d="M300 33L307 40L300 47L293 40Z" /><circle className="flourish-center-dot" cx="300" cy="40" r="1.7" /></svg></div>;
 }
@@ -68,7 +83,7 @@ function BookingSection({ services }) {
   const shouldSyncAvailabilityRef = useRef(false);
 
   const selected = services.filter((s) => selectedServices.includes(s.id));
-  const isAddonService = (s) => s.is_addon === true;
+  const isAddonService = (s) => s.is_addon === true || s.type === 'addon';
   const selectedBaseServices = selected.filter((s) => !isAddonService(s));
   const selectedAddonServices = selected.filter((s) => isAddonService(s));
   const duration = selected.reduce((sum, s) => sum + (s.duration_minutes || 0), 0);
@@ -255,7 +270,7 @@ function BookingSection({ services }) {
     <div className="booking-grid">
       <div>
         <h3>1. Select service(s)</h3>
-        {services.filter((s) => s.active !== false).map((s) => <label key={s.id} className="service-check"><input type="checkbox" checked={selectedServices.includes(s.id)} onChange={() => toggleService(s.id)} /> {isAddonService(s) ? '* ' : ''}{s.name} — {s.price_text} • {s.duration_minutes || 0} min</label>)}
+        {services.filter((s) => s.active !== false).map((s) => <label key={s.id} className="service-check"><input type="checkbox" checked={selectedServices.includes(s.id)} onChange={() => toggleService(s.id)} /> {isAddonService(s) ? '* ' : ''}{s.name} — {formatServicePrice(s)} • {s.duration_minutes || 0} min</label>)}
         <p className="muted addon-disclaimer">Services marked with * must be added with a pedicure or manicure</p>
         {serviceError && <p className="form-error" role="alert">{serviceError}</p>}
         {!!selected.length && <p className="muted">Estimated length: {duration} min. {startsAt ? `Estimated total starts at $${totalMin.toFixed(2)}` : `Estimated total is $${totalMin.toFixed(2)}`}</p>}
@@ -355,7 +370,7 @@ export default function App() {
       <Divider />
       <section id="examples" className="section alt"><div className="container"><h3>Testimonials</h3>{testimonials.map((item) => <blockquote key={item.id}>"{item.quote}" <span>- {item.customer}</span></blockquote>)}<h3>Gallery</h3><GalleryCarousel items={gallery} />{!hasImages && <p className="muted">Upload images in admin.</p>}</div></section>
       <Divider />
-      <section id="services" className="section"><div className="container"><SectionHeading title="Services and Pricing" eyebrow="Signature Menu" /><div className="service-grid">{services.map((service) => <article key={service.id} className="card"><h3>{service.name}</h3><p className="meta">{service.price_text} • {service.duration || `${service.duration_minutes} min`}</p><p>{service.description}</p></article>)}</div></div></section>
+      <section id="services" className="section"><div className="container"><SectionHeading title="Services and Pricing" eyebrow="Signature Menu" /><div className="service-grid">{services.map((service) => <article key={service.id} className="card"><h3>{service.name}</h3><p className="meta">{formatServicePrice(service)} • {service.duration || `${service.duration_minutes} min`}</p><p>{service.description}</p></article>)}</div></div></section>
       <Divider />
       <BookingSection services={services} />
       <Divider />

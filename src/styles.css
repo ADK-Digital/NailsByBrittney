@@ -405,6 +405,15 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
   text-align:center;
 }
 
+.admin-section-actions{
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  gap:.75rem;
+  margin:.35rem 0 1rem;
+}
+
+
 .admin-section-appointments{max-width:1040px}
 .admin-section-customers{max-width:980px}
 .admin-section-testimonials,
@@ -481,6 +490,21 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
   resize:vertical;
 }
 
+.variable-price-row{
+  display:inline-flex;
+  width:max-content;
+  max-width:100%;
+  gap:.6rem;
+  align-items:center;
+}
+
+.admin-section-services .admin-item .variable-price-row input[type='checkbox']{
+  width:auto;
+  margin:0;
+  transform:scale(1.08);
+}
+
+
 .admin-secondary-button{
   justify-self:start;
   border:1px solid var(--accent);
@@ -500,7 +524,59 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
 
 .appointment-card{
   text-align:left;
+  padding:0;
+  overflow:hidden;
 }
+
+.appointment-toggle{
+  display:flex;
+  width:100%;
+  gap:1rem;
+  align-items:center;
+  justify-content:space-between;
+  padding:1.05rem 1.15rem;
+  border:0;
+  background:transparent;
+  color:inherit;
+  text-align:left;
+  cursor:pointer;
+  font:inherit;
+}
+
+.appointment-toggle:hover{
+  background:rgba(255,255,255,.36);
+}
+
+.appointment-toggle-status{
+  display:inline-flex;
+  flex-shrink:0;
+  gap:.65rem;
+  align-items:center;
+}
+
+.appointment-arrow{
+  display:inline-grid;
+  width:2rem;
+  height:2rem;
+  place-items:center;
+  border:1px solid rgba(26,47,95,.16);
+  border-radius:999px;
+  background:rgba(255,255,255,.64);
+  color:var(--accent);
+  font-size:1.15rem;
+  line-height:1;
+}
+
+.appointment-details{
+  padding:0 1.15rem 1.15rem;
+  animation:appointment-expand .18s ease-out;
+}
+
+@keyframes appointment-expand{
+  from{opacity:0;transform:translateY(-4px)}
+  to{opacity:1;transform:translateY(0)}
+}
+
 
 .appointment-head{
   display:flex;
@@ -521,8 +597,22 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
   color:var(--heading);
   font-family:'Cormorant Garamond', Georgia, serif;
   font-size:1.55rem;
-  line-height:1;
+  line-height:1.08;
 }
+
+.appointment-customer{
+  color:#5c5268;
+  font-weight:700;
+}
+
+.appointment-booking-number{
+  color:#766d80;
+  font-size:.78rem;
+  font-weight:700;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+}
+
 
 .appointment-label{
   color:#5c5268;
@@ -568,6 +658,12 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
   background:rgba(255,255,255,.62);
 }
 
+.status-pending{
+  border-color:rgba(154,119,36,.3);
+  background:#f6edcf;
+  color:#7a5c18;
+}
+
 .status-confirmed{
   border-color:rgba(67,119,82,.3);
   background:#e7f0e8;
@@ -609,6 +705,32 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
 .admin-action-grid input{
   min-width:0;
 }
+
+.refund-helper{
+  margin-top:.5rem;
+}
+
+.appointment-pagination{
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  gap:.85rem;
+  margin-top:1rem;
+  color:#5c5268;
+  font-weight:700;
+}
+
+.appointment-pagination .admin-secondary-button{
+  justify-self:center;
+  min-width:2.35rem;
+  padding:.4rem .7rem;
+}
+
+.appointment-pagination .admin-secondary-button:disabled{
+  opacity:.45;
+  cursor:not-allowed;
+}
+
 
 .customer-card{
   width:100%;
@@ -676,6 +798,8 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
   .admin-wrap{width:min(94%,720px);padding:2.25rem 0 3rem}
   .admin-section{margin-top:1.6rem}
   .appointment-meta{justify-content:flex-start;flex-basis:100%}
+  .appointment-toggle{align-items:flex-start}
+  .appointment-toggle-status{align-items:flex-end;flex-direction:column}
   .gallery-admin-item{grid-template-columns:140px 1fr}
   .gallery-admin-item .admin-secondary-button{justify-self:start}
 }
@@ -684,6 +808,8 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
   .admin-wrap{width:min(94%,420px)}
   .admin-item{padding:.85rem}
   .appointment-head{display:grid}
+  .appointment-toggle{display:grid}
+  .appointment-toggle-status{display:flex;flex-direction:row;align-items:center;justify-content:space-between}
   .appointment-meta{display:grid;grid-template-columns:1fr;gap:.45rem}
   .admin-wrap .pill{white-space:normal;justify-content:space-between;width:100%}
   .admin-action-grid{grid-template-columns:1fr}
