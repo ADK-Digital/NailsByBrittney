@@ -51,6 +51,12 @@ function parseRequestNumber(token) {
   return Number(m[1]);
 }
 
+function formatBookingNumber(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return '---';
+  return String(numeric).padStart(3, '0').slice(-3);
+}
+
 function parseMoney(token) {
   const m = String(token || '').trim().match(/^\$?(\d+(?:\.\d{1,2})?)$/);
   if (!m) return null;
@@ -103,8 +109,8 @@ function parseLeadCommand(text = '') {
 
 const COMMAND_HELP = {
   default: 'Commands: yes/no <id>, status, balance, offer, charge, late, no show, refund, text/reply, block/unblock, today/tomorrow/day, find, undo, remind, help',
-  payments: 'Payments: charge 123 $85 | late 123 [50%] | no show 123 [40%] | refund late 123 | refund services 123 [50%]',
-  scheduling: 'Scheduling: offer 123 MM/DD/YYYY time | block MM/DD/YYYY start end reason | today | tomorrow | day MM/DD/YYYY',
+  payments: 'Payments: charge 001 $85 | late 001 [50%] | no show 001 [40%] | refund late 001 | refund services 001 [50%]',
+  scheduling: 'Scheduling: offer 001 MM/DD/YYYY time | block MM/DD/YYYY start end reason | today | tomorrow | day MM/DD/YYYY',
 };
 
 const commandSpecs = [
@@ -144,6 +150,7 @@ async function findAppointmentByRequestNumber(requestNumber) {
     .from('appointments')
     .select('*, customers(*)')
     .eq('booking_request_number', requestNumber)
+    .is('archived_at', null)
     .maybeSingle();
   return data;
 }
@@ -153,6 +160,7 @@ async function findMostRecentAppointmentForCustomer(customerId, statuses = null)
     .from('appointments')
     .select('*, customers(*)')
     .eq('customer_id', customerId)
+    .is('archived_at', null)
     .order('start_at', { ascending: false })
     .limit(1);
 
@@ -214,6 +222,7 @@ async function listDay(isoDate) {
   const { data } = await supabaseAdmin
     .from('appointments')
     .select('booking_request_number,start_at,status,customers(first_name,last_name)')
+    .is('archived_at', null)
     .gte('start_at', start)
     .lte('start_at', end)
     .order('start_at', { ascending: true });
@@ -229,6 +238,7 @@ async function findClientResponseAppointment(customerId) {
     .from('appointments')
     .select('*, customers(*)')
     .eq('customer_id', customerId)
+    .is('archived_at', null)
     .eq('status', 'pending_confirmation')
     .order('created_at', { ascending: false })
     .limit(5);
@@ -240,6 +250,7 @@ async function findClientResponseAppointment(customerId) {
     .from('appointments')
     .select('*, customers(*)')
     .eq('customer_id', customerId)
+    .is('archived_at', null)
     .eq('status', 'confirmed')
     .order('start_at', { ascending: false })
     .limit(1);
@@ -299,7 +310,7 @@ const handlers = {
     }
 
     if (appointment.status !== 'pending_confirmation' && isBrittney) {
-      return `Appointment ${appointment.booking_request_number} is currently ${appointment.status}.`;
+      return `Appointment ${formatBookingNumber(appointment.booking_request_number)} is currently ${appointment.status}.`;
     }
 
     if (appointment.status === 'pending_confirmation') {
@@ -312,10 +323,10 @@ const handlers = {
 
     if (!isBrittney) {
       const customerName = `${appointment.customers?.first_name || ''} ${appointment.customers?.last_name || ''}`.trim() || 'Unknown client';
-      await notifyBrittney(`Client confirmed Appointment ${appointment.booking_request_number} (${customerName}).`);
+      await notifyBrittney(`Client confirmed Appointment ${formatBookingNumber(appointment.booking_request_number)} (${customerName}).`);
     }
 
-    return `Appointment ${appointment.booking_request_number} confirmed.`;
+    return `Appointment ${formatBookingNumber(appointment.booking_request_number)} confirmed.`;
   },
 
   async no({ command, from, body, isBrittney }) {
@@ -345,26 +356,26 @@ const handlers = {
     if (appointment.status === 'pending_confirmation') {
       await transitionAppointment(appointment.id, 'declined', { initiatedBy: 'twilio', commandText: body });
     }
-    return `Appointment ${appointment.booking_request_number} declined.`;
+    return `Appointment ${formatBookingNumber(appointment.booking_request_number)} declined.`;
   },
 
   async status({ command }) {
     const requestNumber = parseRequestNumber(command.groups[0]);
     const summary = await getAppointmentStatusSummaryByRequestNumber(requestNumber);
-    if (!summary) return `Appointment ${requestNumber} not found.`;
+    if (!summary) return `Appointment ${formatBookingNumber(requestNumber)} not found.`;
     return `Appointment ${summary.requestNumber} ${summary.customerName} | Status: ${summary.appointmentStatus} | Service: ${summary.servicePaymentStatus} | Late: ${summary.lateFeeStatus} | No-show: ${summary.noShowFeeStatus}`;
   },
 
   async balance({ command }) {
     const requestNumber = parseRequestNumber(command.groups[0]);
     const summary = await getAppointmentStatusSummaryByRequestNumber(requestNumber);
-    if (!summary) return `Appointment ${requestNumber} not found.`;
+    if (!summary) return `Appointment ${formatBookingNumber(requestNumber)} not found.`;
     const charged = Number(summary.totalCharged || 0);
     const refunded = Number(summary.totalRefunded || 0);
     const paid = Math.max(0, charged - refunded);
     const total = Number(String(summary.estimatedTotal || '0').replace(/[^0-9.]/g, ''));
     const remaining = Math.max(0, total - paid);
-    return `Appointment ${requestNumber} balance | Total estimate: $${total.toFixed(2)} | Amount paid: $${paid.toFixed(2)} | Remaining balance: $${remaining.toFixed(2)}`;
+    return `Appointment ${formatBookingNumber(requestNumber)} balance | Total estimate: $${total.toFixed(2)} | Amount paid: $${paid.toFixed(2)} | Remaining balance: $${remaining.toFixed(2)}`;
   },
 
   async offer({ command }) {
@@ -375,7 +386,7 @@ const handlers = {
     if (!hhmm) return 'Invalid time format. Use HH:MM, 2:00pm, or 14:00.';
 
     const appointment = await findAppointmentByRequestNumber(requestNumber);
-    if (!appointment) return `Appointment ${requestNumber} not found.`;
+    if (!appointment) return `Appointment ${formatBookingNumber(requestNumber)} not found.`;
 
     const proposedStartAt = localDateTimeToUtcIso(dateIso, hhmm);
 
@@ -387,36 +398,36 @@ const handlers = {
       command_text: command.raw,
     });
 
-    await sendToAppointmentCustomer(appointment, `Proposed time for your Appointment ${requestNumber}: ${formatDateTime(proposedStartAt)}. Reply YES to accept or NO to decline.`);
-    return `Appointment ${requestNumber} offer sent. Waiting for client confirmation.`;
+    await sendToAppointmentCustomer(appointment, `Proposed time for your Appointment ${formatBookingNumber(requestNumber)}: ${formatDateTime(proposedStartAt)}. Reply YES to accept or NO to decline.`);
+    return `Appointment ${formatBookingNumber(requestNumber)} offer sent. Waiting for client confirmation.`;
   },
 
   async charge({ command }) {
     const requestNumber = parseRequestNumber(command.groups[0]);
     const amount = parseMoney(command.groups[1]);
-    if (!amount) return 'Invalid amount. Example: charge 123 $85';
+    if (!amount) return 'Invalid amount. Example: charge 001 $85';
     const appointment = await findAppointmentByRequestNumber(requestNumber);
-    if (!appointment) return `Appointment ${requestNumber} not found.`;
+    if (!appointment) return `Appointment ${formatBookingNumber(requestNumber)} not found.`;
     const event = await chargeAppointment({ appointmentId: appointment.id, target: 'service', amountDollars: amount, initiatedBy: 'twilio', commandText: command.raw });
-    return `${formatMoneyFromCents(event?.amount_cents ?? amount * 100)} service charge applied to Appointment ${requestNumber}.`;
+    return `${formatMoneyFromCents(event?.amount_cents ?? amount * 100)} service charge applied to Appointment ${formatBookingNumber(requestNumber)}.`;
   },
 
   async late({ command }) {
     const requestNumber = parseRequestNumber(command.groups[0]);
     const percent = parsePercent(command.groups[1]) ?? 25;
     const appointment = await findAppointmentByRequestNumber(requestNumber);
-    if (!appointment) return `Appointment ${requestNumber} not found.`;
+    if (!appointment) return `Appointment ${formatBookingNumber(requestNumber)} not found.`;
     const event = await chargeAppointment({ appointmentId: appointment.id, target: 'late', percentOverride: percent, initiatedBy: 'twilio', commandText: command.raw });
-    return `Late fee (${percent}%) applied to Appointment ${requestNumber} ($${formatMoneyFromCents(event?.amount_cents)}).`;
+    return `Late fee (${percent}%) applied to Appointment ${formatBookingNumber(requestNumber)} ($${formatMoneyFromCents(event?.amount_cents)}).`;
   },
 
   async no_show({ command }) {
     const requestNumber = parseRequestNumber(command.groups[0]);
     const percent = parsePercent(command.groups[1]) ?? 50;
     const appointment = await findAppointmentByRequestNumber(requestNumber);
-    if (!appointment) return `Appointment ${requestNumber} not found.`;
+    if (!appointment) return `Appointment ${formatBookingNumber(requestNumber)} not found.`;
     const event = await chargeAppointment({ appointmentId: appointment.id, target: 'no_show', percentOverride: percent, initiatedBy: 'twilio', commandText: command.raw });
-    return `No-show fee (${percent}%) applied to Appointment ${requestNumber} ($${formatMoneyFromCents(event?.amount_cents)}).`;
+    return `No-show fee (${percent}%) applied to Appointment ${formatBookingNumber(requestNumber)} ($${formatMoneyFromCents(event?.amount_cents)}).`;
   },
 
   async refund({ command }) {
@@ -425,19 +436,19 @@ const handlers = {
     const requestNumber = parseRequestNumber(command.groups[1]);
     const percent = parsePercent(command.groups[2]);
     const appointment = await findAppointmentByRequestNumber(requestNumber);
-    if (!appointment) return `Appointment ${requestNumber} not found.`;
+    if (!appointment) return `Appointment ${formatBookingNumber(requestNumber)} not found.`;
     await refundAppointment({ appointmentId: appointment.id, target, percentOverride: percent ?? undefined, initiatedBy: 'twilio', commandText: command.raw });
-    return `Appointment ${requestNumber} refund processed for ${target.replace('_', ' ')}.`;
+    return `Appointment ${formatBookingNumber(requestNumber)} refund processed for ${target.replace('_', ' ')}.`;
   },
 
   async text({ command }) {
     const requestNumber = parseRequestNumber(command.groups[0]);
     const message = command.groups[1].trim();
     const appointment = await findAppointmentByRequestNumber(requestNumber);
-    if (!appointment) return `Appointment ${requestNumber} not found.`;
+    if (!appointment) return `Appointment ${formatBookingNumber(requestNumber)} not found.`;
     await sendToAppointmentCustomer(appointment, message);
     const customerName = `${appointment.customers?.first_name || ''} ${appointment.customers?.last_name || ''}`.trim() || 'client';
-    return `Message sent to ${customerName} for Appointment ${requestNumber}: "${message}"`;
+    return `Message sent to ${customerName} for Appointment ${formatBookingNumber(requestNumber)}: "${message}"`;
   },
 
   async block({ command }) {
@@ -465,7 +476,7 @@ const handlers = {
     const iso = toIsoDate(new Date());
     const items = await listDay(iso);
     if (!items.length) return 'No appointments today.';
-    return items.map((a) => `Appointment ${a.booking_request_number} ${formatDateTime(a.start_at)} ${a.customers?.first_name || ''} ${a.customers?.last_name || ''} (${a.status})`).join(' | ');
+    return items.map((a) => `Appointment ${formatBookingNumber(a.booking_request_number)} ${formatDateTime(a.start_at)} ${a.customers?.first_name || ''} ${a.customers?.last_name || ''} (${a.status})`).join(' | ');
   },
 
   async tomorrow() {
@@ -474,7 +485,7 @@ const handlers = {
     const iso = toIsoDate(now);
     const items = await listDay(iso);
     if (!items.length) return 'No appointments tomorrow.';
-    return items.map((a) => `Appointment ${a.booking_request_number} ${formatDateTime(a.start_at)} ${a.customers?.first_name || ''} ${a.customers?.last_name || ''} (${a.status})`).join(' | ');
+    return items.map((a) => `Appointment ${formatBookingNumber(a.booking_request_number)} ${formatDateTime(a.start_at)} ${a.customers?.first_name || ''} ${a.customers?.last_name || ''} (${a.status})`).join(' | ');
   },
 
   async day({ command }) {
@@ -482,7 +493,7 @@ const handlers = {
     if (!iso) return 'Invalid date format. Use MM/DD/YYYY.';
     const items = await listDay(iso);
     if (!items.length) return `No appointments for ${command.groups[0]}.`;
-    return items.map((a) => `Appointment ${a.booking_request_number} ${formatDateTime(a.start_at)} ${a.customers?.first_name || ''} ${a.customers?.last_name || ''} (${a.status})`).join(' | ');
+    return items.map((a) => `Appointment ${formatBookingNumber(a.booking_request_number)} ${formatDateTime(a.start_at)} ${a.customers?.first_name || ''} ${a.customers?.last_name || ''} (${a.status})`).join(' | ');
   },
 
   async find({ command }) {
@@ -501,6 +512,7 @@ const handlers = {
       .from('appointments')
       .select('customer_id,booking_request_number,start_at,status')
       .in('customer_id', customerIds)
+      .is('archived_at', null)
       .order('start_at', { ascending: false });
 
     const nowMs = Date.now();
@@ -513,8 +525,8 @@ const handlers = {
         .filter((a) => ['confirmed', 'pending_confirmation'].includes(a.status) && new Date(a.start_at).getTime() > nowMs)
         .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())[0];
       const name = `${c.first_name || ''} ${c.last_name || ''}`.trim() || 'Unknown';
-      const lastPart = last ? `Last: ${formatDate(last.start_at)} (ID ${last.booking_request_number})` : 'Last: none';
-      const nextPart = next ? `Next: ${formatDate(next.start_at)} (ID ${next.booking_request_number})` : 'Next: none';
+      const lastPart = last ? `Last: ${formatDate(last.start_at)} (ID ${formatBookingNumber(last.booking_request_number)})` : 'Last: none';
+      const nextPart = next ? `Next: ${formatDate(next.start_at)} (ID ${formatBookingNumber(next.booking_request_number)})` : 'Next: none';
       const contact = c.phone || c.email || 'No contact';
       return `${name} | ${lastPart} | ${nextPart} | ${contact}`;
     });
@@ -524,7 +536,7 @@ const handlers = {
   async undo({ command }) {
     const requestNumber = parseRequestNumber(command.groups[0]);
     const appointment = await findAppointmentByRequestNumber(requestNumber);
-    if (!appointment) return `Appointment ${requestNumber} not found.`;
+    if (!appointment) return `Appointment ${formatBookingNumber(requestNumber)} not found.`;
 
     const { data: audit } = await supabaseAdmin
       .from('appointment_action_audit')
@@ -535,14 +547,14 @@ const handlers = {
       .limit(1);
 
     const last = audit?.[0];
-    if (!last) return `Appointment ${requestNumber}: no reversible action found.`;
+    if (!last) return `Appointment ${formatBookingNumber(requestNumber)}: no reversible action found.`;
     if (last.action_type === 'status_confirmed' && appointment.status === 'confirmed') {
       await transitionAppointment(appointment.id, 'pending_confirmation', { initiatedBy: 'twilio', commandText: command.raw });
-      return `Appointment ${requestNumber} confirmation undone.`;
+      return `Appointment ${formatBookingNumber(requestNumber)} confirmation undone.`;
     }
     if (last.action_type === 'status_declined' && appointment.status === 'declined') {
       await transitionAppointment(appointment.id, 'pending_confirmation', { initiatedBy: 'twilio', commandText: command.raw });
-      return `Appointment ${requestNumber} decline undone.`;
+      return `Appointment ${formatBookingNumber(requestNumber)} decline undone.`;
     }
     if (last.action_type.startsWith('charge_')) {
       const target = last.action_type.replace('charge_', '');
@@ -552,7 +564,7 @@ const handlers = {
         no_show: { chargeType: 'no_show_fee', refundType: 'refund_no_show' },
       };
       const type = typeMap[target];
-      if (!type) return `Appointment ${requestNumber}: undo is not available for this charge type.`;
+      if (!type) return `Appointment ${formatBookingNumber(requestNumber)}: undo is not available for this charge type.`;
       const { data: latestFinancial } = await supabaseAdmin
         .from('appointment_financial_events')
         .select('event_type,status')
@@ -562,21 +574,21 @@ const handlers = {
         .order('created_at', { ascending: false })
         .limit(1);
       if (!latestFinancial?.length || latestFinancial[0].event_type !== type.chargeType) {
-        return `Appointment ${requestNumber}: undo blocked because that charge was already refunded or superseded.`;
+        return `Appointment ${formatBookingNumber(requestNumber)}: undo blocked because that charge was already refunded or superseded.`;
       }
       await refundAppointment({ appointmentId: appointment.id, target, initiatedBy: 'twilio', commandText: command.raw });
-      return `Appointment ${requestNumber} ${target.replace('_', ' ')} charge undone.`;
+      return `Appointment ${formatBookingNumber(requestNumber)} ${target.replace('_', ' ')} charge undone.`;
     }
-    return `Appointment ${requestNumber}: undo is not available for the latest action.`;
+    return `Appointment ${formatBookingNumber(requestNumber)}: undo is not available for the latest action.`;
   },
 
   async remind({ command }) {
     const requestNumber = parseRequestNumber(command.groups[0]);
     const hours = Number(command.groups[1] || 24);
     const appointment = await findAppointmentByRequestNumber(requestNumber);
-    if (!appointment) return `Appointment ${requestNumber} not found.`;
-    await sendToAppointmentCustomer(appointment, `Reminder: your Nails By Brittney Appointment ${requestNumber} is scheduled for ${formatDateTime(appointment.start_at)}. Please reply if you have questions.`);
-    return `Appointment ${requestNumber} reminder (${hours}h template) sent.`;
+    if (!appointment) return `Appointment ${formatBookingNumber(requestNumber)} not found.`;
+    await sendToAppointmentCustomer(appointment, `Reminder: your Nails By Brittney Appointment ${formatBookingNumber(requestNumber)} is scheduled for ${formatDateTime(appointment.start_at)}. Please reply if you have questions.`);
+    return `Appointment ${formatBookingNumber(requestNumber)} reminder (${hours}h template) sent.`;
   },
 };
 
@@ -587,7 +599,7 @@ async function forwardClientMessage(from, body) {
     appointment = await findMostRecentAppointmentForCustomer(customer.id);
   }
 
-  const request = appointment?.booking_request_number ? `Appointment ${appointment.booking_request_number}` : 'Unknown appointment';
+  const request = appointment?.booking_request_number ? `Appointment ${formatBookingNumber(appointment.booking_request_number)}` : 'Unknown appointment';
   const customerName = customer ? `${customer.first_name} ${customer.last_name}` : from;
   const forwarded = `Client MSG (${request} - ${customerName}): ${body}`;
   await notifyBrittney(forwarded);

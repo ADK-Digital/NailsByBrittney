@@ -68,6 +68,7 @@ export const handler = async (event) => {
       const { data: conflicts } = await supabaseAdmin
         .from('appointments')
         .select('start_at,end_at,status')
+        .is('archived_at', null)
         .lt('start_at', dayEndUtc)
         .gt('end_at', dayStartUtc)
         .in('status', ['pending_confirmation', 'confirmed', 'completed', 'no_show']);

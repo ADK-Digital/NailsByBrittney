@@ -34,6 +34,7 @@ async function findAppointmentByIdempotencyKey(idempotencyKey) {
       )
     `)
     .eq('idempotency_key', idempotencyKey)
+    .is('archived_at', null)
     .maybeSingle();
 
   if (error) throw error;
@@ -49,10 +50,16 @@ async function fetchAppointmentServices(appointmentId) {
   return (appointmentServices || []).map((service) => service.service_name_snapshot);
 }
 
+function formatBookingNumber(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return '---';
+  return String(numeric).padStart(3, '0').slice(-3);
+}
+
 async function buildBookingResponse(appointment) {
   return {
     appointmentId: appointment.id,
-    requestNumber: appointment.booking_request_number,
+    requestNumber: formatBookingNumber(appointment.booking_request_number),
     pendingMessage:
       'Your appointment request is pending for your selected time. You will be notified based on your communication preference once your appointment is confirmed or canceled.',
     estimatedTotalText: appointment.estimated_total_text,
@@ -247,7 +254,8 @@ export const handler = async (event) => {
 
     const responseBody = await buildBookingResponse(appointment);
     const serviceList = (await fetchAppointmentServices(appointment.id)).join(', ');
-    const body = `appointment request #${appointment.booking_request_number}: Customer ${appointment.customers.first_name} ${appointment.customers.last_name}. Phone number ${appointment.customers.phone}. Service(s): ${serviceList}. Estimated revenue: ${appointment.estimated_total_text}. Reply "yes ${appointment.booking_request_number}" to confirm or "no ${appointment.booking_request_number}" to cancel.`;
+    const formattedBookingNumber = formatBookingNumber(appointment.booking_request_number);
+    const body = `appointment request #${formattedBookingNumber}: Customer ${appointment.customers.first_name} ${appointment.customers.last_name}. Phone number ${appointment.customers.phone}. Service(s): ${serviceList}. Estimated revenue: ${appointment.estimated_total_text}. Reply "yes ${formattedBookingNumber}" to confirm or "no ${formattedBookingNumber}" to cancel.`;
     await notifyBrittney(body);
 
     await sendBookingCreatedEmail({

@@ -29,6 +29,15 @@ export async function fetchAdminAppointments() {
   return res.json();
 }
 
+export async function fetchArchivedAppointments() {
+  const res = await fetch('/.netlify/functions/admin-appointments?archives=1');
+  return res.json();
+}
+
+export function archivedAppointmentDownloadUrl(fileName) {
+  return `/.netlify/functions/admin-appointments?archive=${encodeURIComponent(fileName)}`;
+}
+
 export async function setAppointmentStatus(appointmentId, status, note) {
   const res = await fetch('/.netlify/functions/admin-appointments', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'set_status', appointmentId, status, note }),

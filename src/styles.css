@@ -834,3 +834,72 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
   .gallery-admin-item img,
   .gallery-admin-item .missing-image{width:140px;height:112px}
 }
+
+.customer-list{
+  max-width:880px;
+  margin-inline:auto;
+}
+
+.customer-toggle .appointment-title strong,
+.customer-title strong{
+  font-size:1.45rem;
+}
+
+.customer-details h4{
+  margin:.85rem 0 .4rem;
+  color:var(--heading);
+  font-family:'Cormorant Garamond', Georgia, serif;
+  font-size:1.25rem;
+  line-height:1.1;
+}
+
+.customer-appointment-list ul,
+.customer-notes-list ul,
+.archive-list ul{
+  display:grid;
+  gap:.55rem;
+  margin:.5rem 0 0;
+  padding:0;
+  list-style:none;
+}
+
+.customer-appointment-list li,
+.archive-list li{
+  display:flex;
+  flex-wrap:wrap;
+  gap:.45rem .7rem;
+  align-items:center;
+  justify-content:space-between;
+  padding:.65rem .75rem;
+  border:1px solid rgba(26,47,95,.12);
+  border-radius:14px;
+  background:rgba(255,255,255,.48);
+}
+
+.customer-notes-list li{
+  padding:.35rem 0;
+  color:#2e3757;
+}
+
+.appointment-archive-panel{
+  display:grid;
+  justify-items:center;
+  gap:.85rem;
+  margin-top:1.1rem;
+}
+
+.archive-list{
+  width:min(100%,720px);
+  padding:1rem;
+  text-align:left;
+}
+
+.archive-list h3{
+  margin:0 0 .5rem;
+  text-align:center;
+}
+
+.archive-list a{
+  color:var(--accent);
+  font-weight:700;
+}

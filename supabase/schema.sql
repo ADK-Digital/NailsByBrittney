@@ -96,12 +96,16 @@ create table if not exists blocked_times (
 
 create table if not exists request_counter (
   singleton boolean primary key default true,
-  current_value int not null default 119,
-  check (current_value between 119 and 950)
+  current_value int not null default 0,
+  check (current_value between 0 and 999)
 );
 
+alter table request_counter alter column current_value set default 0;
+alter table request_counter drop constraint if exists request_counter_current_value_check;
+alter table request_counter add constraint request_counter_current_value_check check (current_value between 0 and 999);
+
 insert into request_counter (singleton, current_value)
-values (true, 119)
+values (true, 0)
 on conflict (singleton) do nothing;
 
 do $$
@@ -133,10 +137,13 @@ create table if not exists appointments (
   total_duration_minutes int not null,
   confirmation_deadline_at timestamptz,
   idempotency_key text not null unique,
+  archived_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   check (end_at > start_at)
 );
+
+alter table appointments add column if not exists archived_at timestamptz;
 
 create table if not exists appointment_services (
   id uuid primary key default gen_random_uuid(),
@@ -159,7 +166,8 @@ begin
   update appointments
   set status = 'expired',
       updated_at = now()
-  where status = 'pending_confirmation'
+  where archived_at is null
+    and status = 'pending_confirmation'
     and coalesce(confirmation_deadline_at, created_at + interval '48 hours') <= now();
 
   get diagnostics v_count = row_count;
@@ -175,7 +183,7 @@ alter table appointments
   exclude using gist (
     tstzrange(start_at, end_at, '[)') with &&
   )
-  where (status in ('pending_confirmation', 'confirmed', 'completed', 'no_show'));
+  where (archived_at is null and status in ('pending_confirmation', 'confirmed', 'completed', 'no_show'));
 
 create or replace function normalize_email(p_email text)
 returns text
@@ -208,9 +216,141 @@ as $$
     select now() at time zone 'America/New_York' as ts
   )
   select
-    date_trunc('day', ts) - make_interval(days => extract(dow from ts)::int),
-    (date_trunc('day', ts) - make_interval(days => extract(dow from ts)::int)) + interval '5 weeks'
+    date_trunc('day', ts),
+    date_trunc('day', ts) + interval '90 days'
   from now_et
+$$;
+
+
+create table if not exists appointment_archives (
+  id uuid primary key default gen_random_uuid(),
+  file_name text not null,
+  first_appointment_date date not null,
+  last_appointment_date date not null,
+  appointment_count int not null,
+  csv_content text not null,
+  source_appointment_ids uuid[] not null default '{}'::uuid[],
+  created_at timestamptz not null default now()
+);
+
+alter table appointment_archives add column if not exists source_appointment_ids uuid[] not null default '{}'::uuid[];
+create unique index if not exists appointment_archives_file_name_key on appointment_archives(file_name);
+
+create or replace function csv_cell(value text)
+returns text
+language sql
+immutable
+as $$
+  select '"' || replace(coalesce(value, ''), '"', '""') || '"'
+$$;
+
+create or replace function archive_rollover_appointments()
+returns int
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_first_date date;
+  v_last_date date;
+  v_file_name text;
+  v_csv text;
+  v_count int;
+  v_candidate_ids uuid[];
+  v_archive_id uuid;
+begin
+  with candidates as (
+    select id, start_at, booking_request_number
+    from appointments
+    where archived_at is null
+      and start_at < now()
+      and status in ('completed', 'cancelled', 'declined', 'no_show', 'expired')
+    order by start_at, booking_request_number, id
+    for update
+  )
+  select min((start_at at time zone 'America/New_York')::date),
+         max((start_at at time zone 'America/New_York')::date),
+         count(*),
+         coalesce(array_agg(id order by start_at, booking_request_number, id), '{}'::uuid[])
+  into v_first_date, v_last_date, v_count, v_candidate_ids
+  from candidates;
+
+  if coalesce(v_count, 0) = 0 then
+    return 0;
+  end if;
+
+  v_file_name := 'appointments_' || to_char(v_first_date, 'MMDDYYYY') || '_' || to_char(v_last_date, 'MMDDYYYY') || '.csv';
+
+  with rows as (
+    select
+      a.id,
+      (a.start_at at time zone 'America/New_York')::date as appointment_date,
+      a.start_at,
+      a.end_at,
+      a.booking_request_number,
+      a.status::text as status,
+      c.first_name,
+      c.last_name,
+      c.email,
+      c.phone,
+      a.estimated_total_text,
+      a.total_duration_minutes,
+      coalesce(a.service_payment_status::text, '') as service_payment_status,
+      coalesce(a.late_fee_status::text, '') as late_fee_status,
+      coalesce(a.no_show_fee_status::text, '') as no_show_fee_status,
+      coalesce((select string_agg(aps.service_name_snapshot, '; ' order by aps.service_name_snapshot) from appointment_services aps where aps.appointment_id = a.id), '') as services
+    from appointments a
+    join customers c on c.id = a.customer_id
+    where a.id = any(v_candidate_ids)
+    order by a.start_at, a.booking_request_number, a.id
+  ), csv_lines as (
+    select string_agg(
+      csv_cell(id::text) || ',' ||
+      csv_cell(lpad(booking_request_number::text, 3, '0')) || ',' ||
+      csv_cell(to_char(start_at at time zone 'America/New_York', 'YYYY-MM-DD HH24:MI')) || ',' ||
+      csv_cell(to_char(end_at at time zone 'America/New_York', 'YYYY-MM-DD HH24:MI')) || ',' ||
+      csv_cell(status) || ',' ||
+      csv_cell(first_name) || ',' ||
+      csv_cell(last_name) || ',' ||
+      csv_cell(email) || ',' ||
+      csv_cell(phone) || ',' ||
+      csv_cell(services) || ',' ||
+      csv_cell(estimated_total_text) || ',' ||
+      csv_cell(total_duration_minutes::text) || ',' ||
+      csv_cell(service_payment_status) || ',' ||
+      csv_cell(late_fee_status) || ',' ||
+      csv_cell(no_show_fee_status),
+      E'\n'
+    ) as body
+    from rows
+  )
+  select 'appointment_id,booking_number,start_at_et,end_at_et,status,first_name,last_name,email,phone,services,estimated_total,total_duration_minutes,service_payment_status,late_fee_status,no_show_fee_status' || E'\n' || coalesce(body, '')
+  into v_csv
+  from csv_lines;
+
+  insert into appointment_archives(file_name, first_appointment_date, last_appointment_date, appointment_count, csv_content, source_appointment_ids)
+  values (v_file_name, v_first_date, v_last_date, v_count, v_csv, v_candidate_ids)
+  on conflict (file_name) do update
+  set first_appointment_date = excluded.first_appointment_date,
+      last_appointment_date = excluded.last_appointment_date,
+      appointment_count = excluded.appointment_count,
+      csv_content = excluded.csv_content,
+      source_appointment_ids = excluded.source_appointment_ids
+  where appointment_archives.source_appointment_ids = excluded.source_appointment_ids
+  returning id into v_archive_id;
+
+  if v_archive_id is null then
+    raise exception 'Archive filename collision for %', v_file_name;
+  end if;
+
+  update appointments
+  set archived_at = now(),
+      updated_at = now()
+  where archived_at is null
+    and id = any(v_candidate_ids);
+
+  return v_count;
+end;
 $$;
 
 create or replace function next_request_number()
@@ -218,21 +358,45 @@ returns int
 language plpgsql
 as $$
 declare
+  current_val int;
   next_val int;
+  attempts int := 0;
 begin
-  update request_counter
-  set current_value = case
-    when current_value >= 950 then 120
-    else current_value + 1
-  end
+  select current_value
+  into current_val
+  from request_counter
   where singleton = true
-  returning current_value into next_val;
+  for update;
 
-  if next_val is null then
+  if current_val is null then
     raise exception 'request_counter is not initialized';
   end if;
 
-  return next_val;
+  if current_val >= 999 then
+    perform archive_rollover_appointments();
+  end if;
+
+  next_val := case when current_val >= 999 then 1 else current_val + 1 end;
+
+  while attempts < 999 loop
+    if not exists (
+      select 1
+      from appointments
+      where archived_at is null
+        and booking_request_number = next_val
+    ) then
+      update request_counter
+      set current_value = next_val
+      where singleton = true;
+
+      return next_val;
+    end if;
+
+    next_val := case when next_val >= 999 then 1 else next_val + 1 end;
+    attempts := attempts + 1;
+  end loop;
+
+  raise exception 'No reusable booking numbers are available';
 end;
 $$;
 
@@ -356,7 +520,8 @@ begin
     )
   into existing
   from appointments
-  where idempotency_key = p_idempotency_key;
+  where idempotency_key = p_idempotency_key
+    and archived_at is null;
 
   if existing is not null then
     return existing;
@@ -442,7 +607,8 @@ begin
   if exists (
     select 1
     from appointments a
-    where tstzrange(a.start_at, a.end_at, '[)') && tstzrange(p_start_at, v_end_at, '[)')
+    where a.archived_at is null
+      and tstzrange(a.start_at, a.end_at, '[)') && tstzrange(p_start_at, v_end_at, '[)')
       and (
         a.status in ('confirmed', 'completed', 'no_show')
         or (
@@ -653,6 +819,7 @@ alter table appointments add column if not exists service_payment_status payment
 alter table appointments add column if not exists late_fee_status payment_status not null default 'unpaid';
 alter table appointments add column if not exists no_show_fee_status payment_status not null default 'unpaid';
 alter table appointments add column if not exists policy_acknowledged boolean not null default false;
+alter table appointments add column if not exists archived_at timestamptz;
 
 create table if not exists appointment_financial_events (
   id uuid primary key default gen_random_uuid(),
@@ -805,7 +972,7 @@ begin
   if p_idempotency_key is null or btrim(p_idempotency_key) = '' then raise exception 'Idempotency key is required'; end if;
 
   select jsonb_build_object('appointment_id', id, 'booking_request_number', booking_request_number, 'estimated_total_text', estimated_total_text, 'estimated_total_min', estimated_total_min, 'total_duration_minutes', total_duration_minutes, 'idempotent', true)
-  into existing from appointments where idempotency_key = p_idempotency_key;
+  into existing from appointments where idempotency_key = p_idempotency_key and archived_at is null;
   if existing is not null then return existing; end if;
 
   if p_service_ids is null or cardinality(p_service_ids) = 0 then raise exception 'At least one service is required'; end if;
@@ -837,7 +1004,7 @@ begin
 
   if exists (select 1 from blocked_times b where tstzrange(b.start_at, b.end_at, '[)') && tstzrange(p_start_at, v_end_at, '[)')) then raise exception 'Requested time is blocked'; end if;
 
-  if exists (select 1 from appointments a where tstzrange(a.start_at, a.end_at, '[)') && tstzrange(p_start_at, v_end_at, '[)') and (a.status in ('confirmed', 'completed', 'no_show') or (a.status = 'pending_confirmation' and coalesce(a.confirmation_deadline_at, a.created_at + interval '48 hours') > now()))) then
+  if exists (select 1 from appointments a where a.archived_at is null and tstzrange(a.start_at, a.end_at, '[)') && tstzrange(p_start_at, v_end_at, '[)') and (a.status in ('confirmed', 'completed', 'no_show') or (a.status = 'pending_confirmation' and coalesce(a.confirmation_deadline_at, a.created_at + interval '48 hours') > now()))) then
     raise exception 'Requested time overlaps another appointment';
   end if;
 

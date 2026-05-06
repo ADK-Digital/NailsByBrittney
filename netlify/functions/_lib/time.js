@@ -37,16 +37,20 @@ export function startOfWeekSunday(input = new Date()) {
   return local;
 }
 
+export const BOOKING_WINDOW_DAYS = 90;
+
 export function dateRangeWithinBookingWindow() {
-  const weekStart = startOfWeekSunday(new Date());
   const today = toIsoDate(new Date());
+  const [year, month, day] = today.split('-').map(Number);
+  const todayDate = new Date(Date.UTC(year, month - 1, day));
   const days = [];
-  for (let i = 0; i < 35; i += 1) {
-    const date = new Date(weekStart);
-    date.setUTCDate(weekStart.getUTCDate() + i);
-    const iso = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
-    if (iso >= today) days.push(iso);
+
+  for (let i = 0; i < BOOKING_WINDOW_DAYS; i += 1) {
+    const date = new Date(todayDate);
+    date.setUTCDate(todayDate.getUTCDate() + i);
+    days.push(`${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`);
   }
+
   return days;
 }
 
