@@ -295,3 +295,45 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
 @media (min-width:821px){.split{grid-template-columns:1fr 1fr}}
 @media (max-width:1100px){.service-grid{grid-template-columns:repeat(3,minmax(0,1fr));}}
 @media (max-width:680px){.service-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.5rem;
+}
+
+.calendar-day {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.5rem;
+  text-align: center;
+  cursor: pointer;
+}
+
+.calendar-day.available {
+  border-color: #9a6f82;
+}
+
+.calendar-day.unavailable {
+  opacity: 0.4;
+}
+
+.calendar-day.selected {
+  background: #9a6f82;
+  color: white;
+}
+
+.calendar-day.today {
+  border-color: var(--accent);
+  background: rgba(154,111,130,.08);
+}
+
+.calendar-day.past {
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+.calendar-empty {
+  min-height: 40px;
+  opacity: 0.15;
+}
