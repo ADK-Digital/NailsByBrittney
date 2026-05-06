@@ -567,9 +567,25 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
   line-height:1;
 }
 
+
+.appointment-collapse-button{
+  flex:0 0 auto;
+  padding:0;
+  cursor:pointer;
+  font:inherit;
+}
+
+.appointment-collapse-button:hover{
+  background:white;
+}
+
 .appointment-details{
   padding:0 1.15rem 1.15rem;
   animation:appointment-expand .18s ease-out;
+}
+
+.appointment-card.expanded .appointment-details{
+  padding-top:1.15rem;
 }
 
 @keyframes appointment-expand{

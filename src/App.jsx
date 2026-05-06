@@ -79,6 +79,7 @@ function BookingSection({ services }) {
   const [devSquareToken, setDevSquareToken] = useState('');
   const [busy, setBusy] = useState(false);
   const [serviceError, setServiceError] = useState('');
+  const [bookingFlowError, setBookingFlowError] = useState('');
   const timeRef = useRef(null);
   const shouldSyncAvailabilityRef = useRef(false);
 
@@ -97,6 +98,7 @@ function BookingSection({ services }) {
 
     if (hasAddon && !hasBase) {
       setServiceError('Add-ons must be booked with a manicure or pedicure.');
+      setBookingFlowError('');
       setSelectedDate('');
       setSelectedTime('');
     } else {
@@ -146,6 +148,12 @@ function BookingSection({ services }) {
   const times = useMemo(() => {
     return availabilityMap.get(selectedDate)?.times || [];
   }, [availabilityMap, selectedDate]);
+
+  useEffect(() => {
+    if (selectedTime && !times.includes(selectedTime)) {
+      setSelectedTime('');
+    }
+  }, [selectedTime, times]);
   const [calendarDate, setCalendarDate] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -203,6 +211,7 @@ function BookingSection({ services }) {
   };
 
   const toggleService = (id) => {
+    setBookingFlowError('');
     setSelectedServices((curr) => curr.includes(id) ? curr.filter((x) => x !== id) : [...curr, id]);
   };
 
@@ -210,12 +219,30 @@ function BookingSection({ services }) {
     e.preventDefault();
     setPendingMessage('');
     setCardError('');
+    setBookingFlowError('');
     setServiceError('');
+
+    if (!selectedServices.length) {
+      setBookingFlowError('Please select a service from above.');
+      return;
+    }
+
+    if (!selectedDate) {
+      setBookingFlowError('Please select an available date from above.');
+      return;
+    }
+
+    if (!selectedTime) {
+      setBookingFlowError('Please select an available time from above.');
+      return;
+    }
 
     if (selectedAddonServices.length && !selectedBaseServices.length) {
       setServiceError('Add-ons must be booked with a manicure or pedicure.');
       return;
     }
+
+    if (!e.currentTarget.reportValidity()) return;
 
     let squareCardToken = '';
     if (showDevSquareTokenInput) {
@@ -272,6 +299,7 @@ function BookingSection({ services }) {
         <h3>1. Select service(s)</h3>
         {services.filter((s) => s.active !== false).map((s) => <label key={s.id} className="service-check"><input type="checkbox" checked={selectedServices.includes(s.id)} onChange={() => toggleService(s.id)} /> {isAddonService(s) ? '* ' : ''}{s.name} — {formatServicePrice(s)} • {s.duration_minutes || 0} min</label>)}
         <p className="muted addon-disclaimer">Services marked with * must be added with a pedicure or manicure</p>
+        {bookingFlowError === 'Please select a service from above.' && <p className="form-error" role="alert">{bookingFlowError}</p>}
         {serviceError && <p className="form-error" role="alert">{serviceError}</p>}
         {!!selected.length && <p className="muted">Estimated length: {duration} min. {startsAt ? `Estimated total starts at $${totalMin.toFixed(2)}` : `Estimated total is $${totalMin.toFixed(2)}`}</p>}
       </div>
@@ -297,15 +325,16 @@ function BookingSection({ services }) {
                 const isPast = isoDate < todayIso;
                 const showToday = isToday && isAvailable && !isSelected && !isPast;
 
-                return <button key={isoDate} className={`calendar-day ${isAvailable ? 'available' : 'unavailable'} ${isSelected ? 'selected' : ''} ${showToday ? 'today' : ''} ${isPast ? 'past' : ''}`} disabled={!isAvailable || isPast} onClick={() => { setSelectedDate(isoDate); setSelectedTime(''); }}>{day}</button>;
+                return <button key={isoDate} className={`calendar-day ${isAvailable ? 'available' : 'unavailable'} ${isSelected ? 'selected' : ''} ${showToday ? 'today' : ''} ${isPast ? 'past' : ''}`} disabled={!isAvailable || isPast} onClick={() => { setBookingFlowError(''); setSelectedDate(isoDate); setSelectedTime(''); }}>{day}</button>;
               })}
             </div>
-            {selectedDate && <div ref={timeRef}><h3>3. Choose time</h3><select value={selectedTime} onChange={(e) => setSelectedTime(e.target.value)}><option value="">Select a time</option>{times.map((t) => <option key={t} value={t}>{formatTime12Hour(t)}</option>)}</select></div>}
+            {bookingFlowError === 'Please select an available date from above.' && <p className="form-error" role="alert">{bookingFlowError}</p>}
+            {selectedDate && <div ref={timeRef}><h3>3. Choose time</h3>{times.length > 0 ? <select value={selectedTime} onChange={(e) => { setBookingFlowError(''); setSelectedTime(e.target.value); }}><option value="">Select a time</option>{times.map((t) => <option key={t} value={t}>{formatTime12Hour(t)}</option>)}</select> : <p className="muted">No remaining times are available for this date.</p>}{bookingFlowError === 'Please select an available time from above.' && <p className="form-error" role="alert">{bookingFlowError}</p>}</div>}
           </>
         )}
       </div>
     </div>
-    <form onSubmit={submit} className="booking-form">
+    <form onSubmit={submit} className="booking-form" noValidate>
       <h3>4. Your details</h3>
       <div className="split"><label>First name<input required value={form.firstName} onChange={(e) => setForm((f) => ({ ...f, firstName: e.target.value }))} /></label><label>Last name<input required value={form.lastName} onChange={(e) => setForm((f) => ({ ...f, lastName: e.target.value }))} /></label></div>
       <div className="split"><label>Phone<input required pattern="[0-9]{10}" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value.replace(/\D/g, '').slice(0, 10) }))} /></label><label>Email<input required type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} /></label></div>
@@ -346,7 +375,7 @@ function BookingSection({ services }) {
         <label className="service-check"><input type="checkbox" required checked={form.policyAcknowledged} onChange={(e) => setForm((f) => ({ ...f, policyAcknowledged: e.target.checked }))} /> I understand and agree to the card-on-file, late cancellation, and no-show policy.</label>
       </div>
 
-      <button className="btn primary" disabled={busy || !selectedTime || !selectedServices.length || !form.policyAcknowledged || (!showDevSquareTokenInput && !isSquareReady)}>{busy ? 'Submitting...' : 'Submit booking request'}</button>
+      <button className="btn primary" disabled={busy}>{busy ? 'Submitting...' : 'Submit booking request'}</button>
       {!showDevSquareTokenInput && !isSquareReady && <p className="muted">Secure card entry must finish loading before you can submit your booking request.</p>}
       {pendingMessage && <p className="muted">{pendingMessage}</p>}
     </form>
