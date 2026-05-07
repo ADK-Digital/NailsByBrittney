@@ -24,6 +24,8 @@ import { hasSupabaseConfig, supabase } from '../lib/supabase';
 
 const APPOINTMENTS_PER_PAGE = 20;
 const CUSTOMERS_PER_PAGE = 20;
+const DEFAULT_APPOINTMENT_STATUSES = new Set(['pending_confirmation', 'pending', 'confirmed']);
+const OPTIONAL_APPOINTMENT_STATUSES = ['completed', 'cancelled', 'declined', 'no_show', 'expired'];
 
 const appointmentDateFormatter = new Intl.DateTimeFormat('en-US', {
   month: 'long',
@@ -48,8 +50,49 @@ function formatBookingNumber(value) {
   return String(numeric).padStart(3, '0').slice(-3);
 }
 
-function DraggableList({ items, renderFields }) {
-  return <ul className="admin-edit-list">{items.map((item, idx) => <li key={item.id} className="admin-item">{renderFields(item, idx)}</li>)}</ul>;
+function reorderItems(items, fromIndex, toIndex) {
+  if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0 || fromIndex >= items.length || toIndex >= items.length) return items;
+  const nextItems = [...items];
+  const [movedItem] = nextItems.splice(fromIndex, 1);
+  nextItems.splice(toIndex, 0, movedItem);
+  return nextItems.map((item, index) => ({ ...item, display_order: index + 1 }));
+}
+
+function DraggableList({ items, renderFields, onReorder, getItemLabel = (item, idx) => `Item ${idx + 1}` }) {
+  const canReorder = typeof onReorder === 'function';
+  const moveItem = (fromIndex, toIndex) => {
+    if (!canReorder) return;
+    onReorder(reorderItems(items, fromIndex, toIndex));
+  };
+
+  return <ul className={`admin-edit-list${canReorder ? ' reorderable-list' : ''}`}>{items.map((item, idx) => <li
+    key={item.id}
+    className={`admin-item${canReorder ? ' reorderable-item' : ''}`}
+    draggable={canReorder}
+    onDragStart={(event) => {
+      if (!canReorder) return;
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', String(idx));
+    }}
+    onDragOver={(event) => {
+      if (!canReorder) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'move';
+    }}
+    onDrop={(event) => {
+      if (!canReorder) return;
+      event.preventDefault();
+      moveItem(Number(event.dataTransfer.getData('text/plain')), idx);
+    }}
+  >
+    {canReorder && <div className="reorder-strip" aria-label={`Reorder ${getItemLabel(item, idx)}`}>
+      <span className="drag-handle" aria-hidden="true">⋮⋮</span>
+      <span className="reorder-position">#{idx + 1}</span>
+      <button type="button" className="reorder-arrow" onClick={() => moveItem(idx, idx - 1)} disabled={idx === 0} aria-label={`Move ${getItemLabel(item, idx)} up`}>↑</button>
+      <button type="button" className="reorder-arrow" onClick={() => moveItem(idx, idx + 1)} disabled={idx === items.length - 1} aria-label={`Move ${getItemLabel(item, idx)} down`}>↓</button>
+    </div>}
+    <div className="admin-item-fields">{renderFields(item, idx)}</div>
+  </li>)}</ul>;
 }
 
 function formatAdminStatus(status) {
@@ -95,7 +138,7 @@ function getSucceededEventTotal(events, eventType) {
 
 function getAppointmentSortPriority(status) {
   const normalizedStatus = String(status || '').toLowerCase();
-  if (normalizedStatus === 'pending') return 0;
+  if (normalizedStatus === 'pending_confirmation' || normalizedStatus === 'pending') return 0;
   if (normalizedStatus === 'confirmed') return 1;
   if (normalizedStatus === 'no_show') return 2;
   if (normalizedStatus === 'completed') return 3;
@@ -112,6 +155,11 @@ function sortAppointmentsForAdmin(items) {
     const bStart = new Date(b.start_at).getTime();
     return (Number.isFinite(aStart) ? aStart : 0) - (Number.isFinite(bStart) ? bStart : 0);
   });
+}
+
+function shouldShowAppointment(appointment, visibleOptionalStatuses) {
+  const normalizedStatus = String(appointment.status || '').toLowerCase();
+  return DEFAULT_APPOINTMENT_STATUSES.has(normalizedStatus) || visibleOptionalStatuses.has(normalizedStatus);
 }
 
 function sortCustomersAlphabetically(items) {
@@ -301,8 +349,10 @@ export default function AdminPage() {
   const [customerPage, setCustomerPage] = useState(0);
   const [archivesOpen, setArchivesOpen] = useState(false);
   const [appointmentArchives, setAppointmentArchives] = useState([]);
+  const [visibleOptionalAppointmentStatuses, setVisibleOptionalAppointmentStatuses] = useState(() => new Set());
 
-  const sortedAppointments = useMemo(() => sortAppointmentsForAdmin(appointments), [appointments]);
+  const filteredAppointments = useMemo(() => appointments.filter((appointment) => shouldShowAppointment(appointment, visibleOptionalAppointmentStatuses)), [appointments, visibleOptionalAppointmentStatuses]);
+  const sortedAppointments = useMemo(() => sortAppointmentsForAdmin(filteredAppointments), [filteredAppointments]);
   const appointmentPageCount = Math.max(1, Math.ceil(sortedAppointments.length / APPOINTMENTS_PER_PAGE));
   const currentAppointmentPage = Math.min(appointmentPage, appointmentPageCount - 1);
   const appointmentPageStart = currentAppointmentPage * APPOINTMENTS_PER_PAGE;
@@ -327,6 +377,16 @@ export default function AdminPage() {
     if (appointmentPage > appointmentPageCount - 1) setAppointmentPage(Math.max(0, appointmentPageCount - 1));
   }, [appointmentPage, appointmentPageCount]);
 
+  const toggleOptionalAppointmentStatus = (status) => {
+    setVisibleOptionalAppointmentStatuses((previous) => {
+      const next = new Set(previous);
+      if (next.has(status)) next.delete(status);
+      else next.add(status);
+      return next;
+    });
+    setAppointmentPage(0);
+  };
+
   useEffect(() => {
     if (customerPage > customerPageCount - 1) setCustomerPage(Math.max(0, customerPageCount - 1));
   }, [customerPage, customerPageCount]);
@@ -345,6 +405,14 @@ export default function AdminPage() {
 
   const refreshServiceList = async () => setServices(await fetchServices());
   const refreshGalleryList = async () => setGallery(await fetchGalleryItems());
+
+  const saveVisualOrder = async (table, items, setItems, refreshList) => {
+    const orderedItems = items.map((item, index) => ({ ...item, display_order: index + 1 }));
+    setItems(orderedItems);
+    if (!hasSupabaseConfig) return;
+    await updateOrder(table, orderedItems);
+    await refreshList();
+  };
 
   useEffect(() => {
     if (!hasSupabaseConfig) return;
@@ -444,13 +512,20 @@ export default function AdminPage() {
   if (!signedIn) return <main className="admin-wrap"><h1>Admin Login</h1><form onSubmit={signIn} className="admin-form"><label>Email<input name="email" type="email" required /></label><label>Password<input name="password" type="password" required /></label><button className="btn primary">Sign in</button></form></main>;
 
   return <main className="admin-wrap"><h1>Nails by Brittney Admin</h1>
-    {hasSupabaseConfig && <button className="btn" onClick={() => supabase.auth.signOut()}>Sign out</button>}
+    {hasSupabaseConfig && <div className="admin-top-actions"><button className="btn" onClick={() => supabase.auth.signOut()}>Sign out</button></div>}
 
     <section className="admin-section admin-section-appointments"><h2>Appointments</h2><div className="admin-section-actions"><button className="btn" onClick={refreshBookingAdmin}>Refresh</button></div>
+      <div className="appointment-filter-panel" aria-label="Appointment status filters">
+        <span className="appointment-filter-label">Show hidden statuses:</span>
+        {OPTIONAL_APPOINTMENT_STATUSES.map((status) => <label key={status} className={`appointment-filter-pill${visibleOptionalAppointmentStatuses.has(status) ? ' active' : ''}`}>
+          <input type="checkbox" checked={visibleOptionalAppointmentStatuses.has(status)} onChange={() => toggleOptionalAppointmentStatus(status)} />
+          {formatAdminStatus(status)}
+        </label>)}
+      </div>
       <div className="admin-list">{pagedAppointments.map((appointment) => <AppointmentCard key={appointment.id} appointment={appointment} onRefresh={refreshBookingAdmin} />)}</div>
       {sortedAppointments.length > APPOINTMENTS_PER_PAGE && <div className="appointment-pagination" aria-label="Appointment pagination">
         <button className="admin-secondary-button" type="button" onClick={() => setAppointmentPage((page) => Math.max(0, page - 1))} disabled={currentAppointmentPage === 0}>‹</button>
-        <span>{appointmentPageStart + 1}-{appointmentPageEnd} of {sortedAppointments.length}</span>
+        <span>{sortedAppointments.length ? appointmentPageStart + 1 : 0}-{appointmentPageEnd} of {sortedAppointments.length}</span>
         <button className="admin-secondary-button" type="button" onClick={() => setAppointmentPage((page) => Math.min(appointmentPageCount - 1, page + 1))} disabled={currentAppointmentPage >= appointmentPageCount - 1}>›</button>
       </div>}
       <AppointmentArchivePanel open={archivesOpen} archives={appointmentArchives} onToggle={() => setArchivesOpen((value) => !value)} onLoad={refreshAppointmentArchives} />
@@ -473,7 +548,8 @@ export default function AdminPage() {
     </section>
 
     <section className="admin-section admin-section-testimonials"><h2>Testimonials</h2><div className="admin-section-actions"><button className="btn" onClick={async () => { const item = { customer: 'Customer Name', quote: 'Editable testimonial quote.', display_order: testimonials.length + 1 }; const created = hasSupabaseConfig ? await createRecord('testimonials', item) : { ...item, id: crypto.randomUUID() }; setTestimonials((previous) => [...previous, created]); }}>Add Testimonial</button></div>
-      <DraggableList items={testimonials} renderFields={(testimonial) => <><input value={testimonial.customer} onChange={(e) => setTestimonials((previous) => previous.map((item) => item.id === testimonial.id ? { ...item, customer: e.target.value } : item))} /><textarea value={testimonial.quote} onChange={(e) => setTestimonials((previous) => previous.map((item) => item.id === testimonial.id ? { ...item, quote: e.target.value } : item))} /><AdminSecondaryButton onClick={async () => hasSupabaseConfig && updateRecord('testimonials', testimonial.id, { customer: testimonial.customer, quote: testimonial.quote })}>Save</AdminSecondaryButton><AdminSecondaryButton className="danger" onClick={async () => { if (hasSupabaseConfig) await deleteRecord('testimonials', testimonial.id); setTestimonials((previous) => previous.filter((item) => item.id !== testimonial.id)); }}>Delete</AdminSecondaryButton></>} />
+      <DraggableList items={testimonials} onReorder={setTestimonials} getItemLabel={(testimonial) => testimonial.customer || 'testimonial'} renderFields={(testimonial) => <><input value={testimonial.customer} onChange={(e) => setTestimonials((previous) => previous.map((item) => item.id === testimonial.id ? { ...item, customer: e.target.value } : item))} /><textarea value={testimonial.quote} onChange={(e) => setTestimonials((previous) => previous.map((item) => item.id === testimonial.id ? { ...item, quote: e.target.value } : item))} /><AdminSecondaryButton onClick={async () => hasSupabaseConfig && updateRecord('testimonials', testimonial.id, { customer: testimonial.customer, quote: testimonial.quote })}>Save</AdminSecondaryButton><AdminSecondaryButton className="danger" onClick={async () => { if (hasSupabaseConfig) await deleteRecord('testimonials', testimonial.id); setTestimonials((previous) => previous.filter((item) => item.id !== testimonial.id)); }}>Delete</AdminSecondaryButton></>} />
+      <div className="admin-section-actions"><AdminSecondaryButton onClick={() => saveVisualOrder('testimonials', testimonials, setTestimonials, async () => setTestimonials(await fetchTestimonials()))}>Save Order</AdminSecondaryButton></div>
     </section>
 
     <section className="admin-section admin-section-services"><h2>Services</h2><div className="admin-section-actions"><button className="btn" onClick={async () => {
@@ -485,8 +561,8 @@ export default function AdminPage() {
     </section>
 
     <section className="admin-section admin-section-gallery"><h2>Gallery</h2><div className="gallery-upload-panel"><label htmlFor="gallery-file-picker">Select photo(s) to upload</label><input id="gallery-file-picker" type="file" accept="image/*" multiple onChange={(e) => { setSelectedGalleryFiles(Array.from(e.target.files || [])); setGalleryMessage({ type: '', text: '' }); }} /><label htmlFor="gallery-caption-input">Caption (optional)</label><input id="gallery-caption-input" placeholder="Caption for selected photo(s)" value={galleryCaptionDraft} onChange={(e) => setGalleryCaptionDraft(e.target.value)} /><button className="btn primary" onClick={uploadSelectedGalleryPhotos} disabled={galleryUploadBusy}>{galleryUploadBusy ? 'Uploading...' : 'Upload Selected Photos'}</button>{!!selectedGalleryFiles.length && <p className="muted">{selectedGalleryFiles.length} file(s) selected.</p>}{!!galleryMessage.text && <p className={galleryMessage.type === 'error' ? 'admin-message error' : 'admin-message success'}>{galleryMessage.text}</p>}</div>
-      <DraggableList items={gallery} renderFields={(galleryItem) => <div className="gallery-admin-item">{(galleryItem.imageUrl || galleryItem.local_path) ? <img src={galleryItem.imageUrl || galleryItem.local_path} alt="Gallery" /> : <div className="missing-image">No image</div>}<input placeholder="Caption" value={galleryItem.caption || ''} onChange={(e) => setGallery((previous) => previous.map((item) => item.id === galleryItem.id ? { ...item, caption: e.target.value } : item))} /><AdminSecondaryButton onClick={async () => { if (!hasSupabaseConfig) return; await updateRecord('gallery_items', galleryItem.id, { caption: galleryItem.caption || '' }); await refreshGalleryList(); }}>Save</AdminSecondaryButton><AdminSecondaryButton className="danger" onClick={async () => { if (hasSupabaseConfig) { await deleteGalleryImage(galleryItem.storage_key); await deleteRecord('gallery_items', galleryItem.id); await refreshGalleryList(); return; } setGallery((previous) => previous.filter((item) => item.id !== galleryItem.id)); }}>Delete</AdminSecondaryButton></div>} />
-      <AdminSecondaryButton onClick={async () => { if (!hasSupabaseConfig) return; await updateOrder('gallery_items', gallery); await refreshGalleryList(); }}>Save Gallery Order</AdminSecondaryButton>
+      <DraggableList items={gallery} onReorder={setGallery} getItemLabel={(galleryItem) => galleryItem.caption || 'gallery item'} renderFields={(galleryItem) => <div className="gallery-admin-item">{(galleryItem.imageUrl || galleryItem.local_path) ? <img src={galleryItem.imageUrl || galleryItem.local_path} alt="Gallery" /> : <div className="missing-image">No image</div>}<input placeholder="Caption" value={galleryItem.caption || ''} onChange={(e) => setGallery((previous) => previous.map((item) => item.id === galleryItem.id ? { ...item, caption: e.target.value } : item))} /><AdminSecondaryButton onClick={async () => { if (!hasSupabaseConfig) return; await updateRecord('gallery_items', galleryItem.id, { caption: galleryItem.caption || '' }); await refreshGalleryList(); }}>Save</AdminSecondaryButton><AdminSecondaryButton className="danger" onClick={async () => { if (hasSupabaseConfig) { await deleteGalleryImage(galleryItem.storage_key); await deleteRecord('gallery_items', galleryItem.id); await refreshGalleryList(); return; } setGallery((previous) => previous.filter((item) => item.id !== galleryItem.id)); }}>Delete</AdminSecondaryButton></div>} />
+      <div className="admin-section-actions"><AdminSecondaryButton onClick={() => saveVisualOrder('gallery_items', gallery, setGallery, refreshGalleryList)}>Save Gallery Order</AdminSecondaryButton></div>
     </section>
   </main>;
 }
