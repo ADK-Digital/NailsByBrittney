@@ -79,3 +79,22 @@ export async function deleteBlockedTime(blockId) {
   });
   return res.json();
 }
+
+
+export async function fetchClientMessages(payload) {
+  const res = await fetch('/.netlify/functions/admin-appointments', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'list_messages', ...payload }),
+  });
+  const body = await res.json();
+  if (!res.ok || body.error) throw new Error(body.error || 'Failed to load messages');
+  return body;
+}
+
+export async function sendClientMessage(payload) {
+  const res = await fetch('/.netlify/functions/admin-appointments', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'send_client_message', ...payload }),
+  });
+  const body = await res.json();
+  if (!res.ok || body.error) throw new Error(body.error || 'Failed to send message');
+  return body;
+}

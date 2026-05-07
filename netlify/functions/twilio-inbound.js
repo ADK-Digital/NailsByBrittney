@@ -6,8 +6,18 @@ import {
   getAppointmentStatusSummaryByRequestNumber,
 } from './_lib/bookingActions.js';
 import { sendSms, notifyBrittney } from './_lib/notifications.js';
+import { logClientMessage } from './_lib/clientMessages.js';
 import { APP_TIMEZONE } from './_lib/config.js';
 import { localDateTimeToUtcIso, toIsoDate } from './_lib/time.js';
+
+
+async function safeLogClientMessage(payload) {
+  try {
+    await logClientMessage(payload);
+  } catch (error) {
+    console.warn('[twilio-inbound] message log skipped', { error: error.message });
+  }
+}
 
 function escapeXml(value = '') {
   return String(value)
@@ -447,6 +457,14 @@ const handlers = {
     const appointment = await findAppointmentByRequestNumber(requestNumber);
     if (!appointment) return `Appointment ${formatBookingNumber(requestNumber)} not found.`;
     await sendToAppointmentCustomer(appointment, message);
+    await safeLogClientMessage({
+      customerId: appointment.customer_id,
+      appointmentId: appointment.id,
+      direction: 'admin_to_customer',
+      channel: 'sms',
+      body: message,
+      source: 'twilio_command',
+    });
     const customerName = `${appointment.customers?.first_name || ''} ${appointment.customers?.last_name || ''}`.trim() || 'client';
     return `Message sent to ${customerName} for Appointment ${formatBookingNumber(requestNumber)}: "${message}"`;
   },
@@ -587,7 +605,16 @@ const handlers = {
     const hours = Number(command.groups[1] || 24);
     const appointment = await findAppointmentByRequestNumber(requestNumber);
     if (!appointment) return `Appointment ${formatBookingNumber(requestNumber)} not found.`;
-    await sendToAppointmentCustomer(appointment, `Reminder: your Nails By Brittney Appointment ${formatBookingNumber(requestNumber)} is scheduled for ${formatDateTime(appointment.start_at)}. Please reply if you have questions.`);
+    const reminderMessage = `Reminder: your Nails By Brittney Appointment ${formatBookingNumber(requestNumber)} is scheduled for ${formatDateTime(appointment.start_at)}. Please reply if you have questions.`;
+    await sendToAppointmentCustomer(appointment, reminderMessage);
+    await safeLogClientMessage({
+      customerId: appointment.customer_id,
+      appointmentId: appointment.id,
+      direction: 'admin_to_customer',
+      channel: 'sms',
+      body: reminderMessage,
+      source: 'twilio_reminder',
+    });
     return `Appointment ${formatBookingNumber(requestNumber)} reminder (${hours}h template) sent.`;
   },
 };
@@ -603,6 +630,16 @@ async function forwardClientMessage(from, body) {
   const customerName = customer ? `${customer.first_name} ${customer.last_name}` : from;
   const forwarded = `Client MSG (${request} - ${customerName}): ${body}`;
   await notifyBrittney(forwarded);
+  if (customer) {
+    await safeLogClientMessage({
+      customerId: customer.id,
+      appointmentId: appointment?.id || null,
+      direction: 'customer_to_admin',
+      channel: 'sms',
+      body,
+      source: 'twilio_inbound',
+    });
+  }
 }
 
 export const handler = async (event) => {

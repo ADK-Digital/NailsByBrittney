@@ -75,6 +75,7 @@ create table if not exists customer_notes (
   created_at timestamptz not null default now()
 );
 
+
 create table if not exists business_hours (
   id uuid primary key default gen_random_uuid(),
   day_of_week int not null unique check (day_of_week between 0 and 6),
@@ -144,6 +145,23 @@ create table if not exists appointments (
 );
 
 alter table appointments add column if not exists archived_at timestamptz;
+
+
+create table if not exists client_messages (
+  id uuid primary key default gen_random_uuid(),
+  customer_id uuid not null references customers(id) on delete cascade,
+  appointment_id uuid references appointments(id) on delete set null,
+  direction text not null check (direction in ('customer_to_admin', 'admin_to_customer')),
+  channel text not null default 'sms' check (channel in ('sms', 'email', 'both', 'none', 'unknown')),
+  body text not null,
+  source text not null default 'dashboard',
+  status text not null default 'sent',
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_client_messages_customer_created on client_messages(customer_id, created_at desc);
+create index if not exists idx_client_messages_appointment_created on client_messages(appointment_id, created_at desc);
+
 
 create table if not exists appointment_services (
   id uuid primary key default gen_random_uuid(),
@@ -706,6 +724,7 @@ alter table testimonials enable row level security;
 alter table gallery_items enable row level security;
 alter table customers enable row level security;
 alter table customer_notes enable row level security;
+alter table client_messages enable row level security;
 alter table business_hours enable row level security;
 alter table blocked_times enable row level security;
 alter table appointments enable row level security;
@@ -720,6 +739,7 @@ drop policy if exists "auth manage testimonials" on testimonials;
 drop policy if exists "auth manage gallery" on gallery_items;
 drop policy if exists "auth manage booking tables" on customers;
 drop policy if exists "auth manage notes" on customer_notes;
+drop policy if exists "auth manage client messages" on client_messages;
 drop policy if exists "auth manage business hours" on business_hours;
 drop policy if exists "auth manage blocked times" on blocked_times;
 drop policy if exists "auth manage appointments" on appointments;
@@ -762,6 +782,12 @@ create policy "auth manage booking tables" on customers
   with check (true);
 
 create policy "auth manage notes" on customer_notes
+  for all to authenticated
+  using (true)
+  with check (true);
+
+
+create policy "auth manage client messages" on client_messages
   for all to authenticated
   using (true)
   with check (true);
@@ -820,6 +846,7 @@ alter table appointments add column if not exists late_fee_status payment_status
 alter table appointments add column if not exists no_show_fee_status payment_status not null default 'unpaid';
 alter table appointments add column if not exists policy_acknowledged boolean not null default false;
 alter table appointments add column if not exists archived_at timestamptz;
+
 
 create table if not exists appointment_financial_events (
   id uuid primary key default gen_random_uuid(),
