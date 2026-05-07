@@ -80,7 +80,9 @@ function BookingSection({ services }) {
   const [busy, setBusy] = useState(false);
   const [serviceError, setServiceError] = useState('');
   const [bookingFlowError, setBookingFlowError] = useState('');
+  const [submitValidationError, setSubmitValidationError] = useState('');
   const timeRef = useRef(null);
+  const timeSelectRef = useRef(null);
   const shouldSyncAvailabilityRef = useRef(false);
 
   const selected = services.filter((s) => selectedServices.includes(s.id));
@@ -131,7 +133,8 @@ function BookingSection({ services }) {
 
   useEffect(() => {
     if (selectedDate && timeRef.current) {
-      timeRef.current.scrollIntoView({ behavior: 'smooth' });
+      timeRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      timeSelectRef.current?.focus({ preventScroll: true });
     }
   }, [selectedDate]);
 
@@ -212,6 +215,7 @@ function BookingSection({ services }) {
 
   const toggleService = (id) => {
     setBookingFlowError('');
+    setSubmitValidationError('');
     setSelectedServices((curr) => curr.includes(id) ? curr.filter((x) => x !== id) : [...curr, id]);
   };
 
@@ -221,45 +225,68 @@ function BookingSection({ services }) {
     setCardError('');
     setBookingFlowError('');
     setServiceError('');
+    setSubmitValidationError('');
 
     if (!selectedServices.length) {
-      setBookingFlowError('Please select a service from above.');
+      const message = 'Please select a service from above.';
+      setBookingFlowError(message);
+      setSubmitValidationError(message);
       return;
     }
 
     if (!selectedDate) {
-      setBookingFlowError('Please select an available date from above.');
+      const message = 'Please select an available date from above.';
+      setBookingFlowError(message);
+      setSubmitValidationError(message);
       return;
     }
 
     if (!selectedTime) {
-      setBookingFlowError('Please select an available time from above.');
+      const message = 'Please select an available time from above.';
+      setBookingFlowError(message);
+      setSubmitValidationError(message);
       return;
     }
 
     if (selectedAddonServices.length && !selectedBaseServices.length) {
-      setServiceError('Add-ons must be booked with a manicure or pedicure.');
+      const message = 'Add-ons must be booked with a manicure or pedicure.';
+      setServiceError(message);
+      setSubmitValidationError(message);
       return;
     }
 
-    if (!e.currentTarget.reportValidity()) return;
+    if (!e.currentTarget.checkValidity()) {
+      const invalidLabels = Array.from(e.currentTarget.querySelectorAll(':invalid'))
+        .map((field) => field.closest('label')?.textContent?.replace(/\s+/g, ' ').trim())
+        .filter(Boolean);
+      const uniqueInvalidLabels = [...new Set(invalidLabels)];
+      const requiredDetails = uniqueInvalidLabels.length ? uniqueInvalidLabels.join(', ') : 'all required fields';
+      setSubmitValidationError(`Please complete the required booking details: ${requiredDetails}.`);
+      return;
+    }
 
     let squareCardToken = '';
     if (showDevSquareTokenInput) {
       squareCardToken = devSquareToken.trim();
       if (!squareCardToken) {
-        setCardError('Developer token input is enabled; enter a Square test token to continue.');
+        const message = 'Developer token input is enabled; enter a Square test token to continue.';
+        setCardError(message);
+        setSubmitValidationError(message);
         return;
       }
     } else {
       if (!squareCardRef.current?.isReady?.()) {
-        setCardError('Secure card entry is still loading. Please wait a moment and try again.');
+        const message = 'Secure card entry is still loading. Please wait a moment and try again.';
+        setCardError(message);
+        setSubmitValidationError(message);
         return;
       }
       try {
         squareCardToken = await squareCardRef.current.tokenize();
       } catch (error) {
-        setCardError(error.message || 'Unable to tokenize card. Please review your card details and try again.');
+        const message = error.message || 'Unable to tokenize card. Please review your card details and try again.';
+        setCardError(message);
+        setSubmitValidationError(message);
         return;
       }
     }
@@ -295,9 +322,11 @@ function BookingSection({ services }) {
 
   return <section id="booking" className="section alt"><div className="container"><SectionHeading title="Book an Appointment" eyebrow="Real-time Scheduler" />
     <div className="booking-grid">
-      <div>
+      <div className="booking-services">
         <h3>1. Select service(s)</h3>
-        {services.filter((s) => s.active !== false).map((s) => <label key={s.id} className="service-check"><input type="checkbox" checked={selectedServices.includes(s.id)} onChange={() => toggleService(s.id)} /> {isAddonService(s) ? '* ' : ''}{s.name} — {formatServicePrice(s)} • {s.duration_minutes || 0} min</label>)}
+        <div className="booking-services-list">
+          {services.filter((s) => s.active !== false).map((s) => <label key={s.id} className="service-check"><input type="checkbox" checked={selectedServices.includes(s.id)} onChange={() => toggleService(s.id)} /> <span>{isAddonService(s) ? '* ' : ''}{s.name} — {formatServicePrice(s)} • {s.duration_minutes || 0} min</span></label>)}
+        </div>
         <p className="muted addon-disclaimer">Services marked with * must be added with a pedicure or manicure</p>
         {bookingFlowError === 'Please select a service from above.' && <p className="form-error" role="alert">{bookingFlowError}</p>}
         {serviceError && <p className="form-error" role="alert">{serviceError}</p>}
@@ -325,11 +354,11 @@ function BookingSection({ services }) {
                 const isPast = isoDate < todayIso;
                 const showToday = isToday && isAvailable && !isSelected && !isPast;
 
-                return <button key={isoDate} className={`calendar-day ${isAvailable ? 'available' : 'unavailable'} ${isSelected ? 'selected' : ''} ${showToday ? 'today' : ''} ${isPast ? 'past' : ''}`} disabled={!isAvailable || isPast} onClick={() => { setBookingFlowError(''); setSelectedDate(isoDate); setSelectedTime(''); }}>{day}</button>;
+                return <button key={isoDate} className={`calendar-day ${isAvailable ? 'available' : 'unavailable'} ${isSelected ? 'selected' : ''} ${showToday ? 'today' : ''} ${isPast ? 'past' : ''}`} disabled={!isAvailable || isPast} onClick={() => { setBookingFlowError(''); setSubmitValidationError(''); setSelectedDate(isoDate); setSelectedTime(''); }}>{day}</button>;
               })}
             </div>
             {bookingFlowError === 'Please select an available date from above.' && <p className="form-error" role="alert">{bookingFlowError}</p>}
-            {selectedDate && <div ref={timeRef}><h3>3. Choose time</h3>{times.length > 0 ? <select value={selectedTime} onChange={(e) => { setBookingFlowError(''); setSelectedTime(e.target.value); }}><option value="">Select a time</option>{times.map((t) => <option key={t} value={t}>{formatTime12Hour(t)}</option>)}</select> : <p className="muted">No remaining times are available for this date.</p>}{bookingFlowError === 'Please select an available time from above.' && <p className="form-error" role="alert">{bookingFlowError}</p>}</div>}
+            {selectedDate && <div ref={timeRef} className="time-selection"><h3>3. Choose time</h3>{times.length > 0 ? <select ref={timeSelectRef} value={selectedTime} onChange={(e) => { setBookingFlowError(''); setSubmitValidationError(''); setSelectedTime(e.target.value); }}><option value="">Select a time</option>{times.map((t) => <option key={t} value={t}>{formatTime12Hour(t)}</option>)}</select> : <p className="muted">No remaining times are available for this date.</p>}{bookingFlowError === 'Please select an available time from above.' && <p className="form-error" role="alert">{bookingFlowError}</p>}</div>}
           </>
         )}
       </div>
@@ -376,6 +405,7 @@ function BookingSection({ services }) {
       </div>
 
       <button className="btn primary" disabled={busy}>{busy ? 'Submitting...' : 'Submit booking request'}</button>
+      {submitValidationError && <p className="form-error submit-error" role="alert">{submitValidationError}</p>}
       {!showDevSquareTokenInput && !isSquareReady && <p className="muted">Secure card entry must finish loading before you can submit your booking request.</p>}
       {pendingMessage && <p className="muted">{pendingMessage}</p>}
     </form>
