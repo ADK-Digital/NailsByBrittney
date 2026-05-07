@@ -1,5 +1,5 @@
 import { json, ensureServerConfig, supabaseAdmin } from './_lib/supabaseAdmin.js';
-import { dateRangeWithinBookingWindow, dayOfWeekFromIsoDate, localDateTimeToUtcIso, zonedParts } from './_lib/time.js';
+import { dateRangeWithinBookingWindow, dayOfWeekFromIsoDate, localDateTimeToUtcIso } from './_lib/time.js';
 
 function toMinutes(t) {
   const [h, m] = t.split(':').map(Number);
@@ -10,9 +10,18 @@ function formatTime(mins) {
   return `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
 }
 
-function localMinutesFromUtc(value) {
-  const parts = zonedParts(value);
-  return (parts.hour * 60) + parts.minute;
+function addDaysToIsoDate(isoDate, daysToAdd) {
+  const [year, month, day] = isoDate.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  date.setUTCDate(date.getUTCDate() + daysToAdd);
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
+}
+
+function localMinutesToUtcMs(isoDate, minutes) {
+  const daysToAdd = Math.floor(minutes / (24 * 60));
+  const minutesInDay = minutes % (24 * 60);
+  const date = addDaysToIsoDate(isoDate, daysToAdd);
+  return new Date(localDateTimeToUtcIso(date, formatTime(minutesInDay))).getTime();
 }
 
 export const handler = async (event) => {
@@ -60,9 +69,7 @@ export const handler = async (event) => {
       }
 
       const dayStartUtc = localDateTimeToUtcIso(date, '00:00');
-      const nextDay = new Date(`${date}T00:00:00Z`);
-      nextDay.setUTCDate(nextDay.getUTCDate() + 1);
-      const nextDate = `${nextDay.getUTCFullYear()}-${String(nextDay.getUTCMonth() + 1).padStart(2, '0')}-${String(nextDay.getUTCDate()).padStart(2, '0')}`;
+      const nextDate = addDaysToIsoDate(date, 1);
       const dayEndUtc = localDateTimeToUtcIso(nextDate, '00:00');
 
       const { data: conflicts } = await supabaseAdmin
@@ -80,14 +87,16 @@ export const handler = async (event) => {
         .gt('end_at', dayStartUtc);
 
       const spans = [
-        ...(conflicts || []).map((c) => [localMinutesFromUtc(c.start_at), localMinutesFromUtc(c.end_at)]),
-        ...(blocks || []).map((b) => [localMinutesFromUtc(b.start_at), localMinutesFromUtc(b.end_at)]),
+        ...(conflicts || []).map((c) => [new Date(c.start_at).getTime(), new Date(c.end_at).getTime()]),
+        ...(blocks || []).map((b) => [new Date(b.start_at).getTime(), new Date(b.end_at).getTime()]),
       ];
 
       const times = [];
       for (let t = open; t <= latestStart; t += 15) {
         const end = t + totalDuration;
-        const overlaps = spans.some(([s, e]) => t < e && end > s);
+        const startUtcMs = localMinutesToUtcMs(date, t);
+        const endUtcMs = localMinutesToUtcMs(date, end);
+        const overlaps = spans.some(([s, e]) => startUtcMs < e && endUtcMs > s);
         if (!overlaps) times.push(formatTime(t));
       }
 
