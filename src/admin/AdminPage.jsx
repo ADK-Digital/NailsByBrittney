@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   createRecord,
   deleteGalleryImage,
@@ -62,7 +62,9 @@ function DraggableList({ items, renderFields, onReorder, getItemLabel = (item, i
   const canReorder = typeof onReorder === 'function';
   const moveItem = (fromIndex, toIndex) => {
     if (!canReorder) return;
-    onReorder(reorderItems(items, fromIndex, toIndex));
+    const reorderedItems = reorderItems(items, fromIndex, toIndex);
+    if (reorderedItems === items) return;
+    onReorder(reorderedItems);
   };
 
   return <ul className={`admin-edit-list${canReorder ? ' reorderable-list' : ''}`}>{items.map((item, idx) => <li
@@ -345,6 +347,8 @@ export default function AdminPage() {
   const [galleryCaptionDraft, setGalleryCaptionDraft] = useState('');
   const [galleryUploadBusy, setGalleryUploadBusy] = useState(false);
   const [galleryMessage, setGalleryMessage] = useState({ type: '', text: '' });
+  const testimonialOrderSaveToken = useRef(0);
+  const galleryOrderSaveToken = useRef(0);
   const [appointmentPage, setAppointmentPage] = useState(0);
   const [customerPage, setCustomerPage] = useState(0);
   const [archivesOpen, setArchivesOpen] = useState(false);
@@ -406,12 +410,37 @@ export default function AdminPage() {
   const refreshServiceList = async () => setServices(await fetchServices());
   const refreshGalleryList = async () => setGallery(await fetchGalleryItems());
 
-  const saveVisualOrder = async (table, items, setItems, refreshList) => {
+  const saveVisualOrder = async (table, items, setItems, refreshList, saveTokenRef) => {
     const orderedItems = items.map((item, index) => ({ ...item, display_order: index + 1 }));
+    const saveToken = saveTokenRef.current + 1;
+    saveTokenRef.current = saveToken;
     setItems(orderedItems);
     if (!hasSupabaseConfig) return;
-    await updateOrder(table, orderedItems);
-    await refreshList();
+
+    const refreshLatestOrder = async () => {
+      if (saveTokenRef.current !== saveToken) return;
+      try {
+        await refreshList();
+      } catch {
+        // Keep the optimistic order visible if the post-save refresh cannot complete.
+      }
+    };
+
+    try {
+      await updateOrder(table, orderedItems);
+    } catch {
+      // Keep the optimistic order visible; a successful refresh below will restore server state if available.
+    } finally {
+      await refreshLatestOrder();
+    }
+  };
+
+  const saveTestimonialVisualOrder = (orderedTestimonials) => {
+    void saveVisualOrder('testimonials', orderedTestimonials, setTestimonials, async () => setTestimonials(await fetchTestimonials()), testimonialOrderSaveToken);
+  };
+
+  const saveGalleryVisualOrder = (orderedGallery) => {
+    void saveVisualOrder('gallery_items', orderedGallery, setGallery, refreshGalleryList, galleryOrderSaveToken);
   };
 
   useEffect(() => {
@@ -548,8 +577,7 @@ export default function AdminPage() {
     </section>
 
     <section className="admin-section admin-section-testimonials"><h2>Testimonials</h2><div className="admin-section-actions"><button className="btn" onClick={async () => { const item = { customer: 'Customer Name', quote: 'Editable testimonial quote.', display_order: testimonials.length + 1 }; const created = hasSupabaseConfig ? await createRecord('testimonials', item) : { ...item, id: crypto.randomUUID() }; setTestimonials((previous) => [...previous, created]); }}>Add Testimonial</button></div>
-      <DraggableList items={testimonials} onReorder={setTestimonials} getItemLabel={(testimonial) => testimonial.customer || 'testimonial'} renderFields={(testimonial) => <><input value={testimonial.customer} onChange={(e) => setTestimonials((previous) => previous.map((item) => item.id === testimonial.id ? { ...item, customer: e.target.value } : item))} /><textarea value={testimonial.quote} onChange={(e) => setTestimonials((previous) => previous.map((item) => item.id === testimonial.id ? { ...item, quote: e.target.value } : item))} /><AdminSecondaryButton onClick={async () => hasSupabaseConfig && updateRecord('testimonials', testimonial.id, { customer: testimonial.customer, quote: testimonial.quote })}>Save</AdminSecondaryButton><AdminSecondaryButton className="danger" onClick={async () => { if (hasSupabaseConfig) await deleteRecord('testimonials', testimonial.id); setTestimonials((previous) => previous.filter((item) => item.id !== testimonial.id)); }}>Delete</AdminSecondaryButton></>} />
-      <div className="admin-section-actions"><AdminSecondaryButton onClick={() => saveVisualOrder('testimonials', testimonials, setTestimonials, async () => setTestimonials(await fetchTestimonials()))}>Save Order</AdminSecondaryButton></div>
+      <DraggableList items={testimonials} onReorder={saveTestimonialVisualOrder} getItemLabel={(testimonial) => testimonial.customer || 'testimonial'} renderFields={(testimonial) => <><input value={testimonial.customer} onChange={(e) => setTestimonials((previous) => previous.map((item) => item.id === testimonial.id ? { ...item, customer: e.target.value } : item))} /><textarea value={testimonial.quote} onChange={(e) => setTestimonials((previous) => previous.map((item) => item.id === testimonial.id ? { ...item, quote: e.target.value } : item))} /><AdminSecondaryButton onClick={async () => hasSupabaseConfig && updateRecord('testimonials', testimonial.id, { customer: testimonial.customer, quote: testimonial.quote })}>Save</AdminSecondaryButton><AdminSecondaryButton className="danger" onClick={async () => { if (hasSupabaseConfig) await deleteRecord('testimonials', testimonial.id); setTestimonials((previous) => previous.filter((item) => item.id !== testimonial.id)); }}>Delete</AdminSecondaryButton></>} />
     </section>
 
     <section className="admin-section admin-section-services"><h2>Services</h2><div className="admin-section-actions"><button className="btn" onClick={async () => {
@@ -561,8 +589,7 @@ export default function AdminPage() {
     </section>
 
     <section className="admin-section admin-section-gallery"><h2>Gallery</h2><div className="gallery-upload-panel"><label htmlFor="gallery-file-picker">Select photo(s) to upload</label><input id="gallery-file-picker" type="file" accept="image/*" multiple onChange={(e) => { setSelectedGalleryFiles(Array.from(e.target.files || [])); setGalleryMessage({ type: '', text: '' }); }} /><label htmlFor="gallery-caption-input">Caption (optional)</label><input id="gallery-caption-input" placeholder="Caption for selected photo(s)" value={galleryCaptionDraft} onChange={(e) => setGalleryCaptionDraft(e.target.value)} /><button className="btn primary" onClick={uploadSelectedGalleryPhotos} disabled={galleryUploadBusy}>{galleryUploadBusy ? 'Uploading...' : 'Upload Selected Photos'}</button>{!!selectedGalleryFiles.length && <p className="muted">{selectedGalleryFiles.length} file(s) selected.</p>}{!!galleryMessage.text && <p className={galleryMessage.type === 'error' ? 'admin-message error' : 'admin-message success'}>{galleryMessage.text}</p>}</div>
-      <DraggableList items={gallery} onReorder={setGallery} getItemLabel={(galleryItem) => galleryItem.caption || 'gallery item'} renderFields={(galleryItem) => <div className="gallery-admin-item">{(galleryItem.imageUrl || galleryItem.local_path) ? <img src={galleryItem.imageUrl || galleryItem.local_path} alt="Gallery" /> : <div className="missing-image">No image</div>}<input placeholder="Caption" value={galleryItem.caption || ''} onChange={(e) => setGallery((previous) => previous.map((item) => item.id === galleryItem.id ? { ...item, caption: e.target.value } : item))} /><AdminSecondaryButton onClick={async () => { if (!hasSupabaseConfig) return; await updateRecord('gallery_items', galleryItem.id, { caption: galleryItem.caption || '' }); await refreshGalleryList(); }}>Save</AdminSecondaryButton><AdminSecondaryButton className="danger" onClick={async () => { if (hasSupabaseConfig) { await deleteGalleryImage(galleryItem.storage_key); await deleteRecord('gallery_items', galleryItem.id); await refreshGalleryList(); return; } setGallery((previous) => previous.filter((item) => item.id !== galleryItem.id)); }}>Delete</AdminSecondaryButton></div>} />
-      <div className="admin-section-actions"><AdminSecondaryButton onClick={() => saveVisualOrder('gallery_items', gallery, setGallery, refreshGalleryList)}>Save Gallery Order</AdminSecondaryButton></div>
+      <DraggableList items={gallery} onReorder={saveGalleryVisualOrder} getItemLabel={(galleryItem) => galleryItem.caption || 'gallery item'} renderFields={(galleryItem) => <div className="gallery-admin-item">{(galleryItem.imageUrl || galleryItem.local_path) ? <img src={galleryItem.imageUrl || galleryItem.local_path} alt="Gallery" /> : <div className="missing-image">No image</div>}<input placeholder="Caption" value={galleryItem.caption || ''} onChange={(e) => setGallery((previous) => previous.map((item) => item.id === galleryItem.id ? { ...item, caption: e.target.value } : item))} /><AdminSecondaryButton onClick={async () => { if (!hasSupabaseConfig) return; await updateRecord('gallery_items', galleryItem.id, { caption: galleryItem.caption || '' }); await refreshGalleryList(); }}>Save</AdminSecondaryButton><AdminSecondaryButton className="danger" onClick={async () => { if (hasSupabaseConfig) { await deleteGalleryImage(galleryItem.storage_key); await deleteRecord('gallery_items', galleryItem.id); await refreshGalleryList(); return; } setGallery((previous) => previous.filter((item) => item.id !== galleryItem.id)); }}>Delete</AdminSecondaryButton></div>} />
     </section>
   </main>;
 }
