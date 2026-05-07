@@ -534,6 +534,7 @@ export default function AdminPage() {
   const [galleryMessage, setGalleryMessage] = useState({ type: '', text: '' });
   const testimonialOrderSaveToken = useRef(0);
   const galleryOrderSaveToken = useRef(0);
+  const serviceOrderSaveToken = useRef(0);
   const [appointmentPage, setAppointmentPage] = useState(0);
   const [customerPage, setCustomerPage] = useState(0);
   const [archivesOpen, setArchivesOpen] = useState(false);
@@ -627,6 +628,10 @@ export default function AdminPage() {
 
   const saveGalleryVisualOrder = (orderedGallery) => {
     void saveVisualOrder('gallery_items', orderedGallery, setGallery, refreshGalleryList, galleryOrderSaveToken);
+  };
+
+  const saveServiceVisualOrder = (orderedServices) => {
+    void saveVisualOrder('services', orderedServices, setServices, refreshServiceList, serviceOrderSaveToken);
   };
 
   useEffect(() => {
@@ -773,7 +778,7 @@ export default function AdminPage() {
       const created = hasSupabaseConfig ? await createRecord('services', item) : { ...item, id: crypto.randomUUID() };
       if (hasSupabaseConfig) await refreshServiceList(); else setServices((previous) => [...previous, created]);
     }}>Add Service</button></div>
-      <DraggableList items={services} renderFields={(service, idx) => <><label>Service name<input value={service.name} onChange={(e) => setServices((previous) => previous.map((item) => item.id === service.id ? { ...item, name: e.target.value } : item))} /></label><label>Price<input type="number" min="0" step="0.01" value={getServicePriceNumber(service)} onChange={(e) => updateServicePrice(service.id, e.target.value)} /></label><label>Duration (minutes)<input type="number" value={service.duration_minutes || 0} onChange={(e) => setServices((previous) => previous.map((item) => item.id === service.id ? { ...item, duration_minutes: Number(e.target.value), duration: `${e.target.value} min` } : item))} /></label><label className="variable-price-row"><span>Variable price?</span><input type="checkbox" checked={Boolean(service.is_variable_price)} onChange={(e) => updateServiceVariablePrice(service.id, e.target.checked)} /></label><label>Description<textarea value={service.description} onChange={(e) => setServices((previous) => previous.map((item) => item.id === service.id ? { ...item, description: e.target.value } : item))} /></label><AdminSecondaryButton onClick={() => saveService(service, idx)}>Save</AdminSecondaryButton><AdminSecondaryButton className="danger" onClick={async () => { if (hasSupabaseConfig) { await deleteRecord('services', service.id); await refreshServiceList(); return; } setServices((previous) => previous.filter((item) => item.id !== service.id)); }}>Delete</AdminSecondaryButton><AdminSecondaryButton onClick={async () => { if (!hasSupabaseConfig) return; await updateOrder('services', services); await refreshServiceList(); }}>Save Order</AdminSecondaryButton></>} />
+      <DraggableList items={services} onReorder={saveServiceVisualOrder} getItemLabel={(service) => service.name || 'service'} renderFields={(service, idx) => <><label>Service name<input value={service.name} onChange={(e) => setServices((previous) => previous.map((item) => item.id === service.id ? { ...item, name: e.target.value } : item))} /></label><label>Price<input type="number" min="0" step="0.01" value={getServicePriceNumber(service)} onChange={(e) => updateServicePrice(service.id, e.target.value)} /></label><label>Duration (minutes)<input type="number" value={service.duration_minutes || 0} onChange={(e) => setServices((previous) => previous.map((item) => item.id === service.id ? { ...item, duration_minutes: Number(e.target.value), duration: `${e.target.value} min` } : item))} /></label><label className="variable-price-row"><span>Variable price?</span><input type="checkbox" checked={Boolean(service.is_variable_price)} onChange={(e) => updateServiceVariablePrice(service.id, e.target.checked)} /></label><label>Description<textarea value={service.description} onChange={(e) => setServices((previous) => previous.map((item) => item.id === service.id ? { ...item, description: e.target.value } : item))} /></label><AdminSecondaryButton onClick={() => saveService(service, idx)}>Save</AdminSecondaryButton><AdminSecondaryButton className="danger" onClick={async () => { if (hasSupabaseConfig) { await deleteRecord('services', service.id); await refreshServiceList(); return; } setServices((previous) => previous.filter((item) => item.id !== service.id)); }}>Delete</AdminSecondaryButton></>} />
     </section>
 
     <section className="admin-section admin-section-gallery"><h2>Gallery</h2><div className="gallery-upload-panel"><label htmlFor="gallery-file-picker">Select photo(s) to upload</label><input id="gallery-file-picker" type="file" accept="image/*" multiple onChange={(e) => { setSelectedGalleryFiles(Array.from(e.target.files || [])); setGalleryMessage({ type: '', text: '' }); }} /><label htmlFor="gallery-caption-input">Caption (optional)</label><input id="gallery-caption-input" placeholder="Caption for selected photo(s)" value={galleryCaptionDraft} onChange={(e) => setGalleryCaptionDraft(e.target.value)} /><button className="btn primary" onClick={uploadSelectedGalleryPhotos} disabled={galleryUploadBusy}>{galleryUploadBusy ? 'Uploading...' : 'Upload Selected Photos'}</button>{!!selectedGalleryFiles.length && <p className="muted">{selectedGalleryFiles.length} file(s) selected.</p>}{!!galleryMessage.text && <p className={galleryMessage.type === 'error' ? 'admin-message error' : 'admin-message success'}>{galleryMessage.text}</p>}</div>
