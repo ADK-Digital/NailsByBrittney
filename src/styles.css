@@ -174,6 +174,8 @@ p{margin:0 0 1rem;font-size:1.04rem;color:#2e3757}
 .btn.ghost{border-color:var(--accent-soft);color:var(--heading)}
 
 .section-heading{margin-bottom:1.25rem;position:relative}
+.about-section .container{text-align:center}
+.about-section p{max-width:68ch;margin-left:auto;margin-right:auto}
 .eyebrow{margin:0 0 .3rem;text-transform:uppercase;letter-spacing:.23em;color:var(--accent);font-size:.72rem;font-weight:700}
 
 .split{display:grid;gap:2rem;grid-template-columns:1fr}
@@ -228,8 +230,9 @@ blockquote:last-of-type{margin-bottom:0}
   display:flex;
   align-items:center;
   justify-content:center;
-  border-radius:16px;
+  border-radius:24px;
   overflow:hidden;
+  box-shadow:0 16px 30px rgba(17,32,69,.12);
 }
 
 .gallery-media img{
@@ -239,6 +242,11 @@ blockquote:last-of-type{margin-bottom:0}
   width:auto;
   height:auto;
   object-fit:contain;
+  border-radius:24px;
+  -webkit-mask-image:linear-gradient(to right, transparent 0%, #000 5%, #000 95%, transparent 100%), linear-gradient(to bottom, transparent 0%, #000 5%, #000 95%, transparent 100%);
+  -webkit-mask-composite:source-in;
+  mask-image:linear-gradient(to right, transparent 0%, #000 5%, #000 95%, transparent 100%), linear-gradient(to bottom, transparent 0%, #000 5%, #000 95%, transparent 100%);
+  mask-composite:intersect;
 }
 .service-grid{display:grid;gap:1.1rem;grid-template-columns:repeat(4,minmax(0,1fr))}
 .card{background:linear-gradient(180deg, rgba(252,250,254,.95), rgba(239,232,244,.88));border:1px solid var(--border);padding:1.3rem;border-radius:22px;box-shadow:var(--shadow);position:relative;overflow:hidden;text-align:center}
@@ -257,6 +265,9 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
 #examples h3,#services h3,#booking h3{text-align:center}
 #booking .booking-grid,#booking .booking-form,#contact .contact-blurb{margin-left:auto;margin-right:auto}
 #booking .service-check{text-align:left}
+#booking .booking-services-list{display:grid;gap:.35rem;justify-items:center;max-width:720px;margin:0 auto}
+#booking .booking-services-list .service-check{justify-content:center;text-align:center;width:100%}
+#booking .booking-services-list .service-check span{max-width:52ch}
 #booking .date-list{justify-content:center}
 #booking .booking-form{text-align:left}
 #booking .booking-form h3,#booking .booking-form .muted{text-align:center}
@@ -270,6 +281,8 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
 .date-pill.available{border-color:#9a6f82}
 .selected{background:#9a6f82;color:#fff}
 .booking-form{margin-top:1rem}
+.submit-error{margin:.35rem auto 0;text-align:center;max-width:56ch}
+.time-selection{scroll-margin-top:8rem}
 
 .policy-box{border:1px solid var(--border);border-radius:16px;padding:1rem;background:rgba(255,255,255,.65);margin:1rem 0}
 .policy-box h4{margin:0 0 .5rem;font-size:1.2rem}
