@@ -27,6 +27,191 @@ const CUSTOMERS_PER_PAGE = 20;
 const DEFAULT_APPOINTMENT_STATUSES = new Set(['pending_confirmation', 'pending', 'confirmed']);
 const OPTIONAL_APPOINTMENT_STATUSES = ['completed', 'cancelled', 'declined', 'no_show', 'expired'];
 
+
+const BOOKING_WINDOW_DAYS = 90;
+const BLOCK_INTERVAL_MINUTES = 15;
+
+const blockMonthFormatter = new Intl.DateTimeFormat('en-US', {
+  month: 'long',
+  year: 'numeric',
+});
+
+const blockDayFormatter = new Intl.DateTimeFormat('en-US', {
+  weekday: 'short',
+  day: 'numeric',
+});
+
+const blockTimeFormatter = new Intl.DateTimeFormat('en-US', {
+  hour: 'numeric',
+  minute: '2-digit',
+});
+
+function padTwo(value) {
+  return String(value).padStart(2, '0');
+}
+
+function toLocalIsoDate(date) {
+  return `${date.getFullYear()}-${padTwo(date.getMonth() + 1)}-${padTwo(date.getDate())}`;
+}
+
+function parseLocalIsoDate(isoDate) {
+  const [year, month, day] = isoDate.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function monthKeyFromDate(isoDate) {
+  return isoDate.slice(0, 7);
+}
+
+function formatBlockMonth(monthKey) {
+  return blockMonthFormatter.format(parseLocalIsoDate(`${monthKey}-01`));
+}
+
+function formatBlockDay(isoDate) {
+  return blockDayFormatter.format(parseLocalIsoDate(isoDate));
+}
+
+function formatTimeOption(minutes) {
+  const date = new Date(2026, 0, 1, Math.floor(minutes / 60), minutes % 60);
+  return blockTimeFormatter.format(date);
+}
+
+function buildTimeOptions() {
+  const options = [];
+  for (let minutes = 0; minutes < 24 * 60; minutes += BLOCK_INTERVAL_MINUTES) {
+    options.push({ value: `${padTwo(Math.floor(minutes / 60))}:${padTwo(minutes % 60)}`, label: formatTimeOption(minutes) });
+  }
+  return options;
+}
+
+function buildBookingWindowDates() {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Array.from({ length: BOOKING_WINDOW_DAYS }, (_, index) => {
+    const date = new Date(today);
+    date.setDate(today.getDate() + index);
+    return toLocalIsoDate(date);
+  });
+}
+
+function blockDateTimeToDate(row) {
+  if (!row?.day || !row?.time) return null;
+  const [year, month, day] = row.day.split('-').map(Number);
+  const [hour, minute] = row.time.split(':').map(Number);
+  const date = new Date(year, month - 1, day, hour, minute, 0, 0);
+  return Number.isFinite(date.getTime()) ? date : null;
+}
+
+function createBlockRowFromDate(date) {
+  const normalizedDate = new Date(date);
+  normalizedDate.setSeconds(0, 0);
+  const day = toLocalIsoDate(normalizedDate);
+  return {
+    month: monthKeyFromDate(day),
+    day,
+    time: `${padTwo(normalizedDate.getHours())}:${padTwo(normalizedDate.getMinutes())}`,
+  };
+}
+
+function roundUpToInterval(date, intervalMinutes = BLOCK_INTERVAL_MINUTES) {
+  const rounded = new Date(date);
+  rounded.setSeconds(0, 0);
+  const totalMinutes = rounded.getHours() * 60 + rounded.getMinutes();
+  const roundedMinutes = Math.ceil(totalMinutes / intervalMinutes) * intervalMinutes;
+  rounded.setHours(0, roundedMinutes, 0, 0);
+  return rounded;
+}
+
+function buildInitialBlockRows() {
+  const start = roundUpToInterval(new Date());
+  const end = new Date(start);
+  end.setHours(start.getHours() + 1);
+  return {
+    start: createBlockRowFromDate(start),
+    end: createBlockRowFromDate(end),
+  };
+}
+
+function normalizeBlockRowMonth(row, month, datesByMonth) {
+  const days = datesByMonth.get(month) || [];
+  const nextDay = days.includes(row.day) ? row.day : days[0] || row.day;
+  return { ...row, month, day: nextDay };
+}
+
+function BlockDateTimeRow({ label, value, months, datesByMonth, timeOptions, onChange }) {
+  const dayOptions = datesByMonth.get(value.month) || [];
+
+  return <div className="block-datetime-row">
+    <span className="block-datetime-label">{label}</span>
+    <div className="block-datetime-controls">
+      <label>
+        <span>Month</span>
+        <select value={value.month} onChange={(event) => onChange(normalizeBlockRowMonth(value, event.target.value, datesByMonth))}>
+          {months.map((month) => <option key={month} value={month}>{formatBlockMonth(month)}</option>)}
+        </select>
+      </label>
+      <label>
+        <span>Day</span>
+        <select value={value.day} onChange={(event) => onChange({ ...value, day: event.target.value })}>
+          {dayOptions.map((day) => <option key={day} value={day}>{formatBlockDay(day)}</option>)}
+        </select>
+      </label>
+      <label>
+        <span>Time</span>
+        <select value={value.time} onChange={(event) => onChange({ ...value, time: event.target.value })}>
+          {timeOptions.map((time) => <option key={time.value} value={time.value}>{time.label}</option>)}
+        </select>
+      </label>
+    </div>
+  </div>;
+}
+
+function AddBlockPanel({ onCreate }) {
+  const initialRows = useMemo(() => buildInitialBlockRows(), []);
+  const [start, setStart] = useState(initialRows.start);
+  const [end, setEnd] = useState(initialRows.end);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState({ type: '', text: '' });
+  const bookingDates = useMemo(() => buildBookingWindowDates(), []);
+  const timeOptions = useMemo(() => buildTimeOptions(), []);
+  const datesByMonth = useMemo(() => bookingDates.reduce((map, date) => {
+    const month = monthKeyFromDate(date);
+    map.set(month, [...(map.get(month) || []), date]);
+    return map;
+  }, new Map()), [bookingDates]);
+  const months = useMemo(() => Array.from(datesByMonth.keys()), [datesByMonth]);
+  const startDate = blockDateTimeToDate(start);
+  const endDate = blockDateTimeToDate(end);
+  const isInvalid = !startDate || !endDate || endDate <= startDate;
+
+  const submit = async (event) => {
+    event.preventDefault();
+    setMessage({ type: '', text: '' });
+    if (isInvalid) {
+      setMessage({ type: 'error', text: 'Block end must be after block start.' });
+      return;
+    }
+
+    setBusy(true);
+    try {
+      await onCreate({ startAt: startDate.toISOString(), endAt: endDate.toISOString(), reason: 'Admin block' });
+      setMessage({ type: 'success', text: 'Blocked time created.' });
+    } catch (error) {
+      setMessage({ type: 'error', text: error.message || 'Unable to create blocked time.' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return <form className="add-block-panel" onSubmit={submit}>
+    <BlockDateTimeRow label="Block start" value={start} months={months} datesByMonth={datesByMonth} timeOptions={timeOptions} onChange={setStart} />
+    <BlockDateTimeRow label="Block end" value={end} months={months} datesByMonth={datesByMonth} timeOptions={timeOptions} onChange={setEnd} />
+    {isInvalid && <p className="admin-message error" role="alert">Block end must be after block start.</p>}
+    {message.text && <p className={`admin-message ${message.type}`} role="status">{message.text}</p>}
+    <button className="btn primary" type="submit" disabled={busy || isInvalid}>{busy ? 'Creating…' : 'Create Block'}</button>
+  </form>;
+}
+
 const appointmentDateFormatter = new Intl.DateTimeFormat('en-US', {
   month: 'long',
   day: 'numeric',
@@ -353,6 +538,7 @@ export default function AdminPage() {
   const [customerPage, setCustomerPage] = useState(0);
   const [archivesOpen, setArchivesOpen] = useState(false);
   const [appointmentArchives, setAppointmentArchives] = useState([]);
+  const [addBlockOpen, setAddBlockOpen] = useState(false);
   const [visibleOptionalAppointmentStatuses, setVisibleOptionalAppointmentStatuses] = useState(() => new Set());
 
   const filteredAppointments = useMemo(() => appointments.filter((appointment) => shouldShowAppointment(appointment, visibleOptionalAppointmentStatuses)), [appointments, visibleOptionalAppointmentStatuses]);
@@ -560,13 +746,15 @@ export default function AdminPage() {
       <AppointmentArchivePanel open={archivesOpen} archives={appointmentArchives} onToggle={() => setArchivesOpen((value) => !value)} onLoad={refreshAppointmentArchives} />
     </section>
 
-    <section className="admin-section"><h2>Blocked Times</h2><div className="admin-section-actions"><button className="btn" onClick={async () => {
-      const startAt = prompt('Start ISO datetime (e.g. 2026-04-17T16:00:00Z)');
-      const endAt = prompt('End ISO datetime (e.g. 2026-04-17T18:00:00Z)');
-      if (!startAt || !endAt) return;
-      await createBlockedTime({ startAt, endAt, reason: 'Admin block' });
-      refreshBookingAdmin();
-    }}>Add Block</button></div>{blockedTimes.map((block) => <div key={block.id}>{new Date(block.start_at).toLocaleString()} - {new Date(block.end_at).toLocaleString()} ({block.reason}) <AdminSecondaryButton onClick={async () => { await deleteBlockedTime(block.id); refreshBookingAdmin(); }}>Delete</AdminSecondaryButton></div>)}</section>
+    <section className="admin-section admin-section-blocks"><h2>Blocked Times</h2>
+      <div className="admin-section-actions"><button className="btn" type="button" onClick={() => setAddBlockOpen((open) => !open)}>{addBlockOpen ? 'Close Add Block' : 'Add Block'}</button></div>
+      {addBlockOpen && <AddBlockPanel onCreate={async (payload) => {
+        const result = await createBlockedTime(payload);
+        if (result?.error) throw new Error(result.error);
+        await refreshBookingAdmin();
+      }} />}
+      <div className="blocked-time-list">{blockedTimes.map((block) => <div className="blocked-time-item" key={block.id}><span>{new Date(block.start_at).toLocaleString()} - {new Date(block.end_at).toLocaleString()} ({block.reason})</span> <AdminSecondaryButton onClick={async () => { await deleteBlockedTime(block.id); refreshBookingAdmin(); }}>Delete</AdminSecondaryButton></div>)}</div>
+    </section>
 
     <section className="admin-section admin-section-customers"><h2>Customers</h2><div className="admin-list customer-list">{pagedCustomers.map((customer) => <CustomerCard key={customer.id} customer={customer} appointments={appointmentsByCustomerId.get(customer.id) || []} />)}</div>
       {sortedCustomers.length > CUSTOMERS_PER_PAGE && <div className="appointment-pagination" aria-label="Customer pagination">
