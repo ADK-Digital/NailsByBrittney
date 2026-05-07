@@ -5,6 +5,7 @@ import {
   refundAppointment,
   getAppointmentStatusSummaryByRequestNumber,
 } from './_lib/bookingActions.js';
+import { listClientMessages, sendAdminClientMessage } from './_lib/clientMessages.js';
 
 const ARCHIVE_SELECT = 'id,file_name,first_appointment_date,last_appointment_date,appointment_count,created_at';
 
@@ -39,8 +40,60 @@ async function downloadArchivedAppointment(fileName) {
   return data;
 }
 
+
+async function loadMessageTarget(payload) {
+  if (payload.appointmentId) {
+    const { data: appointment, error } = await supabaseAdmin
+      .from('appointments')
+      .select('*, customers(*)')
+      .eq('id', payload.appointmentId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!appointment) throw new Error('Appointment not found.');
+    return { appointment, customer: appointment.customers };
+  }
+
+  if (payload.customerId) {
+    const { data: customer, error } = await supabaseAdmin
+      .from('customers')
+      .select('*')
+      .eq('id', payload.customerId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!customer) throw new Error('Customer not found.');
+    return { appointment: null, customer };
+  }
+
+  throw new Error('Customer or appointment is required.');
+}
+
 async function handleAppointmentAction(payload) {
   const initiatedBy = 'dashboard';
+
+
+  if (payload.action === 'list_messages') {
+    const { appointment, customer } = await loadMessageTarget(payload);
+    const messages = await listClientMessages({
+      customerId: customer.id,
+      appointmentId: appointment?.id || null,
+    });
+    return { ok: true, messages };
+  }
+
+  if (payload.action === 'send_client_message') {
+    const { appointment, customer } = await loadMessageTarget(payload);
+    const result = await sendAdminClientMessage({
+      customer,
+      appointment,
+      body: payload.body,
+      source: 'dashboard',
+    });
+    const messages = await listClientMessages({
+      customerId: customer.id,
+      appointmentId: appointment?.id || null,
+    });
+    return { ok: true, ...result, messages };
+  }
 
   if (payload.action === 'set_status') {
     await transitionAppointment(payload.appointmentId, payload.status, { initiatedBy, note: payload.note });

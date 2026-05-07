@@ -19,6 +19,8 @@ import {
   fetchAdminAppointments,
   fetchArchivedAppointments,
   setAppointmentStatus,
+  fetchClientMessages,
+  sendClientMessage,
 } from '../lib/bookingApi';
 import { hasSupabaseConfig, supabase } from '../lib/supabase';
 
@@ -361,6 +363,104 @@ function AdminSecondaryButton({ className = '', ...props }) {
   return <button type="button" className={`admin-secondary-button${className ? ` ${className}` : ''}`} {...props} />;
 }
 
+
+function formatMessageTimestamp(value) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return '';
+  return date.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
+function MessageThread({ customer, appointment = null }) {
+  const [messages, setMessages] = useState([]);
+  const [draft, setDraft] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [notice, setNotice] = useState({ type: '', text: '' });
+  const threadRef = useRef(null);
+  const targetPayload = appointment?.id ? { appointmentId: appointment.id } : { customerId: customer?.id };
+  const hasThreadOverflow = messages.length > 6;
+
+  const loadMessages = async () => {
+    if (!customer?.id && !appointment?.id) return;
+    setLoading(true);
+    setNotice({ type: '', text: '' });
+    try {
+      const data = await fetchClientMessages(targetPayload);
+      setMessages(data.messages || []);
+    } catch (error) {
+      setNotice({ type: 'error', text: error.message || 'Unable to load messages.' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadMessages();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customer?.id, appointment?.id]);
+
+  useEffect(() => {
+    const node = threadRef.current;
+    if (!node) return;
+    node.scrollTop = node.scrollHeight;
+  }, [messages.length, expanded]);
+
+  const submit = async (event) => {
+    event.preventDefault();
+    const body = draft.trim();
+    if (!body) return;
+    setBusy(true);
+    setNotice({ type: '', text: '' });
+    try {
+      const result = await sendClientMessage({ ...targetPayload, body });
+      setMessages(result.messages || []);
+      setDraft('');
+      const sentParts = [];
+      if (result.sent?.sms) sentParts.push('SMS');
+      if (result.sent?.email) sentParts.push('email');
+      setNotice({ type: result.failures?.length ? 'error' : 'success', text: sentParts.length ? `Sent by ${sentParts.join(' + ')}.` : 'Message saved, but no delivery channel was available.' });
+    } catch (error) {
+      setNotice({ type: 'error', text: error.message || 'Unable to send message.' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return <section className={`message-thread-card${expanded ? ' enlarged' : ''}`} aria-label={`Message history with ${customer?.first_name || 'customer'}`}>
+    <div className="message-thread-head">
+      <div>
+        <h4>Messages</h4>
+        <p className="muted">Routes by preference: {formatCommunicationPreference(customer?.communication_preference)}</p>
+      </div>
+      <div className="message-thread-actions">
+        {hasThreadOverflow && <button type="button" className="message-thread-expand" onClick={() => setExpanded((value) => !value)}>{expanded ? 'Shrink' : 'Enlarge'}</button>}
+        {expanded && <button type="button" className="message-thread-close" onClick={() => setExpanded(false)} aria-label="Close enlarged message thread">×</button>}
+      </div>
+    </div>
+
+    <div className="message-thread-scroll" ref={threadRef}>
+      {loading && <p className="muted">Loading messages…</p>}
+      {!loading && !messages.length && <p className="muted empty-thread">No message history yet.</p>}
+      {messages.map((message) => {
+        const outbound = message.direction === 'admin_to_customer';
+        return <div key={message.id} className={`message-bubble-row ${outbound ? 'outbound' : 'inbound'}`}>
+          <div className="message-bubble">
+            <p>{message.body}</p>
+            <span>{outbound ? 'Admin' : 'Client'} • {message.channel} • {formatMessageTimestamp(message.created_at)}</span>
+          </div>
+        </div>;
+      })}
+    </div>
+
+    <form className="message-compose" onSubmit={submit}>
+      <textarea value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Write a message…" rows={2} />
+      <button className="btn primary" type="submit" disabled={busy || !draft.trim()}>{busy ? 'Sending…' : 'Send'}</button>
+    </form>
+    {notice.text && <p className={`admin-message ${notice.type}`} role="status">{notice.text}</p>}
+  </section>;
+}
+
 function AppointmentCard({ appointment, onRefresh }) {
   const [expanded, setExpanded] = useState(false);
   const [serviceAmount, setServiceAmount] = useState('');
@@ -412,6 +512,8 @@ function AppointmentCard({ appointment, onRefresh }) {
         </div>
       </div>
       <p className="muted">Communication preference: {formatCommunicationPreference(appointment.customers?.communication_preference)} • Card: {appointment.customers?.card_on_file_status || 'missing'} {appointment.customers?.card_brand ? `(${appointment.customers.card_brand} ••••${appointment.customers.card_last4 || ''})` : ''}</p>
+
+      <MessageThread customer={appointment.customers} appointment={appointment} />
 
       <div className="admin-action-grid">
         {['confirmed', 'declined', 'cancelled', 'completed', 'no_show'].map((status) => <button key={status} className="btn" onClick={() => call(() => setAppointmentStatus(appointment.id, status))}>{formatAdminStatus(status)}</button>)}
@@ -489,6 +591,8 @@ function CustomerCard({ customer, appointments }) {
       </div>
 
       <p className="muted">Card: {customer.card_on_file_status || 'missing'} {customer.card_brand ? `(${customer.card_brand} ••••${customer.card_last4 || ''})` : ''}</p>
+
+      <MessageThread customer={customer} />
 
       <div className="customer-appointment-list">
         <h4>Scheduled appointments</h4>
