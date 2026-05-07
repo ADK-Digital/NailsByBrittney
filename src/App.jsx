@@ -433,7 +433,7 @@ export default function App() {
       <Divider />
       <BookingSection services={services} />
       <Divider />
-      <section id="contact" className="section alt"><div className="container"><SectionHeading title="Contact" eyebrow="Get in Touch" /><p className="contact-blurb"><strong>Phone:</strong> {PHONE_DISPLAY} (call or text)<br /><strong>Email:</strong> {EMAIL}<br /><strong>Instagram:</strong> <a href={INSTAGRAM_URL} target="_blank" rel="noreferrer">Instagram</a></p></div></section>
+      <section id="contact" className="section alt"><div className="container"><SectionHeading title="Contact" eyebrow="Get in Touch" /><p className="contact-blurb"><strong>Phone:</strong> {PHONE_DISPLAY} (call or text)<br /><strong>Email:</strong> {EMAIL}<br /><a href={INSTAGRAM_URL} target="_blank" rel="noreferrer">Instagram</a></p></div></section>
       <Divider />
       <section id="location" className="section"><div className="container split"><div><SectionHeading title="Location" eyebrow="Visit" /><p>Brittney Prosser at "Bronzed and Polished"<br />139 Eastview Dr<br />Emerald Isle NC 28594<br />{PHONE_DISPLAY}<br />{EMAIL}</p></div><div className="map-shell"><iframe title="Map" className="map" loading="lazy" src="https://www.google.com/maps?q=139%20Eastview%20Dr%2C%20Emerald%20Isle%20NC%2028594&output=embed" /></div></div></section>
       <footer className="footer" role="contentinfo"><div className="container"><p>Nails by Brittney</p><p>{PHONE_DISPLAY} • {EMAIL}</p><p>Designed, hosted, and managed by <a href="https://www.adk-digital.com" target="_blank" rel="noreferrer">ADK Digital</a></p></div></footer>
