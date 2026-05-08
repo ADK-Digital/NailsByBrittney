@@ -41,6 +41,19 @@ function usePrefersReducedMotion() {
   return reduced;
 }
 
+
+function ServiceCard({ service }) {
+  const [expanded, setExpanded] = useState(false);
+  const descriptionId = `service-description-${service.id}`;
+
+  return <article className={`card service-card${expanded ? ' expanded' : ''}`}>
+    <button type="button" className="appointment-arrow service-card-toggle" onClick={() => setExpanded((value) => !value)} aria-expanded={expanded} aria-controls={descriptionId} aria-label={`${expanded ? 'Collapse' : 'Expand'} ${service.name} details`}>{expanded ? '⌃' : '⌄'}</button>
+    <h3>{service.name}</h3>
+    <p className="meta">{formatServicePrice(service)} • {service.duration || `${service.duration_minutes} min`}</p>
+    <p id={descriptionId} className="service-card-description">{service.description}</p>
+  </article>;
+}
+
 function GalleryCarousel({ items, interval = 6000 }) {
   const reducedMotion = usePrefersReducedMotion();
   const [index, setIndex] = useState(0);
@@ -429,7 +442,7 @@ export default function App() {
       <Divider />
       <section id="examples" className="section alt"><div className="container"><h3>Testimonials</h3>{testimonials.map((item) => <blockquote key={item.id}>"{item.quote}" <span>- {item.customer}</span></blockquote>)}<h3>Gallery</h3><GalleryCarousel items={gallery} />{!hasImages && <p className="muted">Upload images in admin.</p>}</div></section>
       <Divider />
-      <section id="services" className="section"><div className="container"><SectionHeading title="Services and Pricing" eyebrow="Signature Menu" /><div className="service-grid">{services.map((service) => <article key={service.id} className="card"><h3>{service.name}</h3><p className="meta">{formatServicePrice(service)} • {service.duration || `${service.duration_minutes} min`}</p><p>{service.description}</p></article>)}</div></div></section>
+      <section id="services" className="section"><div className="container"><SectionHeading title="Services and Pricing" eyebrow="Signature Menu" /><div className="service-grid">{services.map((service) => <ServiceCard key={service.id} service={service} />)}</div></div></section>
       <Divider />
       <BookingSection services={services} />
       <Divider />

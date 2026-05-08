@@ -28,6 +28,14 @@ const APPOINTMENTS_PER_PAGE = 20;
 const CUSTOMERS_PER_PAGE = 20;
 const DEFAULT_APPOINTMENT_STATUSES = new Set(['pending_confirmation', 'pending', 'confirmed']);
 const OPTIONAL_APPOINTMENT_STATUSES = ['completed', 'cancelled', 'declined', 'no_show', 'expired'];
+const adminNavItems = [
+  ['admin-appointments', 'Appointments'],
+  ['admin-blocks', 'Blocked Times'],
+  ['admin-customers', 'Customers'],
+  ['admin-testimonials', 'Testimonials'],
+  ['admin-services', 'Services'],
+  ['admin-gallery', 'Gallery'],
+];
 
 
 const BOOKING_WINDOW_DAYS = 90;
@@ -245,7 +253,7 @@ function reorderItems(items, fromIndex, toIndex) {
   return nextItems.map((item, index) => ({ ...item, display_order: index + 1 }));
 }
 
-function DraggableList({ items, renderFields, onReorder, getItemLabel = (item, idx) => `Item ${idx + 1}` }) {
+function ReorderableList({ items, renderFields, onReorder, getItemLabel = (item, idx) => `Item ${idx + 1}` }) {
   const canReorder = typeof onReorder === 'function';
   const moveItem = (fromIndex, toIndex) => {
     if (!canReorder) return;
@@ -257,25 +265,8 @@ function DraggableList({ items, renderFields, onReorder, getItemLabel = (item, i
   return <ul className={`admin-edit-list${canReorder ? ' reorderable-list' : ''}`}>{items.map((item, idx) => <li
     key={item.id}
     className={`admin-item${canReorder ? ' reorderable-item' : ''}`}
-    draggable={canReorder}
-    onDragStart={(event) => {
-      if (!canReorder) return;
-      event.dataTransfer.effectAllowed = 'move';
-      event.dataTransfer.setData('text/plain', String(idx));
-    }}
-    onDragOver={(event) => {
-      if (!canReorder) return;
-      event.preventDefault();
-      event.dataTransfer.dropEffect = 'move';
-    }}
-    onDrop={(event) => {
-      if (!canReorder) return;
-      event.preventDefault();
-      moveItem(Number(event.dataTransfer.getData('text/plain')), idx);
-    }}
   >
     {canReorder && <div className="reorder-strip" aria-label={`Reorder ${getItemLabel(item, idx)}`}>
-      <span className="drag-handle" aria-hidden="true">⋮⋮</span>
       <span className="reorder-position">#{idx + 1}</span>
       <button type="button" className="reorder-arrow" onClick={() => moveItem(idx, idx - 1)} disabled={idx === 0} aria-label={`Move ${getItemLabel(item, idx)} up`}>↑</button>
       <button type="button" className="reorder-arrow" onClick={() => moveItem(idx, idx + 1)} disabled={idx === items.length - 1} aria-label={`Move ${getItemLabel(item, idx)} down`}>↓</button>
@@ -837,8 +828,11 @@ export default function AdminPage() {
 
   return <main className="admin-wrap"><h1>Nails by Brittney Admin</h1>
     {hasSupabaseConfig && <div className="admin-top-actions"><button className="btn" onClick={() => supabase.auth.signOut()}>Sign out</button></div>}
+    <nav className="admin-section-nav" aria-label="Admin section navigation">
+      {adminNavItems.map(([id, label]) => <a key={id} href={`#${id}`}>{label}</a>)}
+    </nav>
 
-    <section className="admin-section admin-section-appointments"><h2>Appointments</h2><div className="admin-section-actions"><button className="btn" onClick={refreshBookingAdmin}>Refresh</button></div>
+    <section id="admin-appointments" className="admin-section admin-section-appointments"><h2>Appointments</h2><div className="admin-section-actions"><button className="btn" onClick={refreshBookingAdmin}>Refresh</button></div>
       <div className="appointment-filter-panel" aria-label="Appointment status filters">
         <span className="appointment-filter-label">Show hidden statuses:</span>
         {OPTIONAL_APPOINTMENT_STATUSES.map((status) => <label key={status} className={`appointment-filter-pill${visibleOptionalAppointmentStatuses.has(status) ? ' active' : ''}`}>
@@ -855,7 +849,7 @@ export default function AdminPage() {
       <AppointmentArchivePanel open={archivesOpen} archives={appointmentArchives} onToggle={() => setArchivesOpen((value) => !value)} onLoad={refreshAppointmentArchives} />
     </section>
 
-    <section className="admin-section admin-section-blocks"><h2>Blocked Times</h2>
+    <section id="admin-blocks" className="admin-section admin-section-blocks"><h2>Blocked Times</h2>
       <div className="admin-section-actions"><button className="btn" type="button" onClick={() => setAddBlockOpen((open) => !open)}>{addBlockOpen ? 'Close Add Block' : 'Add Block'}</button></div>
       {addBlockOpen && <AddBlockPanel onCreate={async (payload) => {
         const result = await createBlockedTime(payload);
@@ -865,7 +859,7 @@ export default function AdminPage() {
       <div className="blocked-time-list">{blockedTimes.map((block) => <div className="blocked-time-item" key={block.id}><span>{new Date(block.start_at).toLocaleString()} - {new Date(block.end_at).toLocaleString()} ({block.reason})</span> <AdminSecondaryButton onClick={async () => { await deleteBlockedTime(block.id); refreshBookingAdmin(); }}>Delete</AdminSecondaryButton></div>)}</div>
     </section>
 
-    <section className="admin-section admin-section-customers"><h2>Customers</h2><div className="admin-list customer-list">{pagedCustomers.map((customer) => <CustomerCard key={customer.id} customer={customer} appointments={appointmentsByCustomerId.get(customer.id) || []} />)}</div>
+    <section id="admin-customers" className="admin-section admin-section-customers"><h2>Customers</h2><div className="admin-list customer-list">{pagedCustomers.map((customer) => <CustomerCard key={customer.id} customer={customer} appointments={appointmentsByCustomerId.get(customer.id) || []} />)}</div>
       {sortedCustomers.length > CUSTOMERS_PER_PAGE && <div className="appointment-pagination" aria-label="Customer pagination">
         <button className="admin-secondary-button" type="button" onClick={() => setCustomerPage((page) => Math.max(0, page - 1))} disabled={currentCustomerPage === 0}>‹</button>
         <span>{customerPageStart + 1}-{customerPageEnd} of {sortedCustomers.length}</span>
@@ -873,20 +867,20 @@ export default function AdminPage() {
       </div>}
     </section>
 
-    <section className="admin-section admin-section-testimonials"><h2>Testimonials</h2><div className="admin-section-actions"><button className="btn" onClick={async () => { const item = { customer: 'Customer Name', quote: 'Editable testimonial quote.', display_order: testimonials.length + 1 }; const created = hasSupabaseConfig ? await createRecord('testimonials', item) : { ...item, id: crypto.randomUUID() }; setTestimonials((previous) => [...previous, created]); }}>Add Testimonial</button></div>
-      <DraggableList items={testimonials} onReorder={saveTestimonialVisualOrder} getItemLabel={(testimonial) => testimonial.customer || 'testimonial'} renderFields={(testimonial) => <><input value={testimonial.customer} onChange={(e) => setTestimonials((previous) => previous.map((item) => item.id === testimonial.id ? { ...item, customer: e.target.value } : item))} /><textarea value={testimonial.quote} onChange={(e) => setTestimonials((previous) => previous.map((item) => item.id === testimonial.id ? { ...item, quote: e.target.value } : item))} /><AdminSecondaryButton onClick={async () => hasSupabaseConfig && updateRecord('testimonials', testimonial.id, { customer: testimonial.customer, quote: testimonial.quote })}>Save</AdminSecondaryButton><AdminSecondaryButton className="danger" onClick={async () => { if (hasSupabaseConfig) await deleteRecord('testimonials', testimonial.id); setTestimonials((previous) => previous.filter((item) => item.id !== testimonial.id)); }}>Delete</AdminSecondaryButton></>} />
+    <section id="admin-testimonials" className="admin-section admin-section-testimonials"><h2>Testimonials</h2><div className="admin-section-actions"><button className="btn" onClick={async () => { const item = { customer: 'Customer Name', quote: 'Editable testimonial quote.', display_order: testimonials.length + 1 }; const created = hasSupabaseConfig ? await createRecord('testimonials', item) : { ...item, id: crypto.randomUUID() }; setTestimonials((previous) => [...previous, created]); }}>Add Testimonial</button></div>
+      <ReorderableList items={testimonials} onReorder={saveTestimonialVisualOrder} getItemLabel={(testimonial) => testimonial.customer || 'testimonial'} renderFields={(testimonial) => <><input value={testimonial.customer} onChange={(e) => setTestimonials((previous) => previous.map((item) => item.id === testimonial.id ? { ...item, customer: e.target.value } : item))} /><textarea value={testimonial.quote} onChange={(e) => setTestimonials((previous) => previous.map((item) => item.id === testimonial.id ? { ...item, quote: e.target.value } : item))} /><AdminSecondaryButton onClick={async () => hasSupabaseConfig && updateRecord('testimonials', testimonial.id, { customer: testimonial.customer, quote: testimonial.quote })}>Save</AdminSecondaryButton><AdminSecondaryButton className="danger" onClick={async () => { if (hasSupabaseConfig) await deleteRecord('testimonials', testimonial.id); setTestimonials((previous) => previous.filter((item) => item.id !== testimonial.id)); }}>Delete</AdminSecondaryButton></>} />
     </section>
 
-    <section className="admin-section admin-section-services"><h2>Services</h2><div className="admin-section-actions"><button className="btn" onClick={async () => {
+    <section id="admin-services" className="admin-section admin-section-services"><h2>Services</h2><div className="admin-section-actions"><button className="btn" onClick={async () => {
       const item = { name: 'New Service', price_text: '$0', price_min_numeric: 0, duration: '30 min', duration_minutes: 30, is_variable_price: false, description: 'Service details', type: 'base', requires_service_ids: [], display_order: services.length + 1, active: true };
       const created = hasSupabaseConfig ? await createRecord('services', item) : { ...item, id: crypto.randomUUID() };
       if (hasSupabaseConfig) await refreshServiceList(); else setServices((previous) => [...previous, created]);
     }}>Add Service</button></div>
-      <DraggableList items={services} onReorder={saveServiceVisualOrder} getItemLabel={(service) => service.name || 'service'} renderFields={(service, idx) => <><label>Service name<input value={service.name} onChange={(e) => setServices((previous) => previous.map((item) => item.id === service.id ? { ...item, name: e.target.value } : item))} /></label><label>Price<input type="number" min="0" step="0.01" value={getServicePriceNumber(service)} onChange={(e) => updateServicePrice(service.id, e.target.value)} /></label><label>Duration (minutes)<input type="number" value={service.duration_minutes || 0} onChange={(e) => setServices((previous) => previous.map((item) => item.id === service.id ? { ...item, duration_minutes: Number(e.target.value), duration: `${e.target.value} min` } : item))} /></label><label className="variable-price-row"><span>Variable price?</span><input type="checkbox" checked={Boolean(service.is_variable_price)} onChange={(e) => updateServiceVariablePrice(service.id, e.target.checked)} /></label><label>Description<textarea value={service.description} onChange={(e) => setServices((previous) => previous.map((item) => item.id === service.id ? { ...item, description: e.target.value } : item))} /></label><AdminSecondaryButton onClick={() => saveService(service, idx)}>Save</AdminSecondaryButton><AdminSecondaryButton className="danger" onClick={async () => { if (hasSupabaseConfig) { await deleteRecord('services', service.id); await refreshServiceList(); return; } setServices((previous) => previous.filter((item) => item.id !== service.id)); }}>Delete</AdminSecondaryButton></>} />
+      <ReorderableList items={services} onReorder={saveServiceVisualOrder} getItemLabel={(service) => service.name || 'service'} renderFields={(service, idx) => <><label>Service name<input value={service.name} onChange={(e) => setServices((previous) => previous.map((item) => item.id === service.id ? { ...item, name: e.target.value } : item))} /></label><label>Price<input type="number" min="0" step="0.01" value={getServicePriceNumber(service)} onChange={(e) => updateServicePrice(service.id, e.target.value)} /></label><label>Duration (minutes)<input type="number" value={service.duration_minutes || 0} onChange={(e) => setServices((previous) => previous.map((item) => item.id === service.id ? { ...item, duration_minutes: Number(e.target.value), duration: `${e.target.value} min` } : item))} /></label><label className="variable-price-row"><span>Variable price?</span><input type="checkbox" checked={Boolean(service.is_variable_price)} onChange={(e) => updateServiceVariablePrice(service.id, e.target.checked)} /></label><label>Description<textarea value={service.description} onChange={(e) => setServices((previous) => previous.map((item) => item.id === service.id ? { ...item, description: e.target.value } : item))} /></label><AdminSecondaryButton onClick={() => saveService(service, idx)}>Save</AdminSecondaryButton><AdminSecondaryButton className="danger" onClick={async () => { if (hasSupabaseConfig) { await deleteRecord('services', service.id); await refreshServiceList(); return; } setServices((previous) => previous.filter((item) => item.id !== service.id)); }}>Delete</AdminSecondaryButton></>} />
     </section>
 
-    <section className="admin-section admin-section-gallery"><h2>Gallery</h2><div className="gallery-upload-panel"><label htmlFor="gallery-file-picker">Select photo(s) to upload</label><input id="gallery-file-picker" type="file" accept="image/*" multiple onChange={(e) => { setSelectedGalleryFiles(Array.from(e.target.files || [])); setGalleryMessage({ type: '', text: '' }); }} /><label htmlFor="gallery-caption-input">Caption (optional)</label><input id="gallery-caption-input" placeholder="Caption for selected photo(s)" value={galleryCaptionDraft} onChange={(e) => setGalleryCaptionDraft(e.target.value)} /><button className="btn primary" onClick={uploadSelectedGalleryPhotos} disabled={galleryUploadBusy}>{galleryUploadBusy ? 'Uploading...' : 'Upload Selected Photos'}</button>{!!selectedGalleryFiles.length && <p className="muted">{selectedGalleryFiles.length} file(s) selected.</p>}{!!galleryMessage.text && <p className={galleryMessage.type === 'error' ? 'admin-message error' : 'admin-message success'}>{galleryMessage.text}</p>}</div>
-      <DraggableList items={gallery} onReorder={saveGalleryVisualOrder} getItemLabel={(galleryItem) => galleryItem.caption || 'gallery item'} renderFields={(galleryItem) => <div className="gallery-admin-item">{(galleryItem.imageUrl || galleryItem.local_path) ? <img src={galleryItem.imageUrl || galleryItem.local_path} alt="Gallery" /> : <div className="missing-image">No image</div>}<input placeholder="Caption" value={galleryItem.caption || ''} onChange={(e) => setGallery((previous) => previous.map((item) => item.id === galleryItem.id ? { ...item, caption: e.target.value } : item))} /><AdminSecondaryButton onClick={async () => { if (!hasSupabaseConfig) return; await updateRecord('gallery_items', galleryItem.id, { caption: galleryItem.caption || '' }); await refreshGalleryList(); }}>Save</AdminSecondaryButton><AdminSecondaryButton className="danger" onClick={async () => { if (hasSupabaseConfig) { await deleteGalleryImage(galleryItem.storage_key); await deleteRecord('gallery_items', galleryItem.id); await refreshGalleryList(); return; } setGallery((previous) => previous.filter((item) => item.id !== galleryItem.id)); }}>Delete</AdminSecondaryButton></div>} />
+    <section id="admin-gallery" className="admin-section admin-section-gallery"><h2>Gallery</h2><div className="gallery-upload-panel"><label htmlFor="gallery-file-picker">Select photo(s) to upload</label><input id="gallery-file-picker" type="file" accept="image/*" multiple onChange={(e) => { setSelectedGalleryFiles(Array.from(e.target.files || [])); setGalleryMessage({ type: '', text: '' }); }} /><label htmlFor="gallery-caption-input">Caption (optional)</label><input id="gallery-caption-input" placeholder="Caption for selected photo(s)" value={galleryCaptionDraft} onChange={(e) => setGalleryCaptionDraft(e.target.value)} /><button className="btn primary" onClick={uploadSelectedGalleryPhotos} disabled={galleryUploadBusy}>{galleryUploadBusy ? 'Uploading...' : 'Upload Selected Photos'}</button>{!!selectedGalleryFiles.length && <p className="muted">{selectedGalleryFiles.length} file(s) selected.</p>}{!!galleryMessage.text && <p className={galleryMessage.type === 'error' ? 'admin-message error' : 'admin-message success'}>{galleryMessage.text}</p>}</div>
+      <ReorderableList items={gallery} onReorder={saveGalleryVisualOrder} getItemLabel={(galleryItem) => galleryItem.caption || 'gallery item'} renderFields={(galleryItem) => <div className="gallery-admin-item">{(galleryItem.imageUrl || galleryItem.local_path) ? <img src={galleryItem.imageUrl || galleryItem.local_path} alt="Gallery" /> : <div className="missing-image">No image</div>}<input placeholder="Caption" value={galleryItem.caption || ''} onChange={(e) => setGallery((previous) => previous.map((item) => item.id === galleryItem.id ? { ...item, caption: e.target.value } : item))} /><AdminSecondaryButton onClick={async () => { if (!hasSupabaseConfig) return; await updateRecord('gallery_items', galleryItem.id, { caption: galleryItem.caption || '' }); await refreshGalleryList(); }}>Save</AdminSecondaryButton><AdminSecondaryButton className="danger" onClick={async () => { if (hasSupabaseConfig) { await deleteGalleryImage(galleryItem.storage_key); await deleteRecord('gallery_items', galleryItem.id); await refreshGalleryList(); return; } setGallery((previous) => previous.filter((item) => item.id !== galleryItem.id)); }}>Delete</AdminSecondaryButton></div>} />
     </section>
   </main>;
 }
