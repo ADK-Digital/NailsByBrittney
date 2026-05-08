@@ -1,4 +1,4 @@
-import { ensureServerConfig, supabaseAdmin } from './_lib/supabaseAdmin.js';
+import { ensureServerConfig, json, supabaseAdmin } from './_lib/supabaseAdmin.js';
 import {
   transitionAppointment,
   chargeAppointment,
@@ -9,6 +9,83 @@ import { sendSms, notifyBrittney } from './_lib/notifications.js';
 import { logClientMessage } from './_lib/clientMessages.js';
 import { APP_TIMEZONE } from './_lib/config.js';
 import { localDateTimeToUtcIso, toIsoDate } from './_lib/time.js';
+
+function getHeader(headers = {}, name) {
+  const target = name.toLowerCase();
+  const entry = Object.entries(headers || {}).find(([key]) => key.toLowerCase() === target);
+  return entry ? entry[1] : '';
+}
+
+function firstForwardedValue(value = '') {
+  return String(value).split(',')[0].trim();
+}
+
+function buildValidationUrl(event) {
+  const headers = event.headers || {};
+  const rawUrl = event.rawUrl || '';
+  const forwardedProto = firstForwardedValue(getHeader(headers, 'x-forwarded-proto'));
+  const forwardedHost = firstForwardedValue(getHeader(headers, 'x-forwarded-host'));
+  const requestHost = firstForwardedValue(getHeader(headers, 'host'));
+
+  let rawPathAndQuery = '';
+  let rawUrlHost = '';
+  let rawUrlProtocol = '';
+
+  if (rawUrl) {
+    const parsedRawUrl = new URL(rawUrl, `https://${forwardedHost || requestHost || 'example.com'}`);
+    rawPathAndQuery = `${parsedRawUrl.pathname}${parsedRawUrl.search}`;
+    rawUrlHost = parsedRawUrl.host;
+    rawUrlProtocol = parsedRawUrl.protocol.replace(':', '');
+  }
+
+  if (!rawPathAndQuery) {
+    const path = event.path || '/.netlify/functions/twilio-inbound';
+    const query = event.rawQueryString
+      ? `?${event.rawQueryString}`
+      : event.queryStringParameters
+        ? `?${new URLSearchParams(event.queryStringParameters).toString()}`
+        : '';
+    rawPathAndQuery = `${path}${query}`;
+  }
+
+  const protocol = forwardedProto || rawUrlProtocol || 'https';
+  const host = forwardedHost || requestHost || rawUrlHost;
+
+  return `${protocol}://${host}${rawPathAndQuery}`;
+}
+
+function formParamsToObject(params) {
+  return [...params.entries()].reduce((acc, [key, value]) => {
+    acc[key] = value;
+    return acc;
+  }, {});
+}
+
+function shouldBypassTwilioSignature() {
+  return process.env.ALLOW_TWILIO_SIGNATURE_BYPASS === 'true' && process.env.CONTEXT !== 'production';
+}
+
+async function validateTwilioSignature(event, params) {
+  if (shouldBypassTwilioSignature()) return true;
+
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+  const signature = getHeader(event.headers, 'x-twilio-signature');
+  if (!authToken || !signature) return false;
+
+  try {
+    const { default: twilio } = await import('twilio');
+
+    return twilio.validateRequest(
+      authToken,
+      signature,
+      buildValidationUrl(event),
+      formParamsToObject(params),
+    );
+  } catch (error) {
+    console.warn('[twilio-inbound] signature validation failed', { error: error.message });
+    return false;
+  }
+}
 
 
 async function safeLogClientMessage(payload) {
@@ -644,9 +721,13 @@ async function forwardClientMessage(from, body) {
 
 export const handler = async (event) => {
   try {
+    const params = new URLSearchParams(event.body || '');
+    if (!(await validateTwilioSignature(event, params))) {
+      return json(403, { error: 'Invalid Twilio signature' });
+    }
+
     ensureServerConfig();
 
-    const params = new URLSearchParams(event.body || '');
     const body = (params.get('Body') || '').trim();
     const from = normalizePhone(params.get('From') || '');
     const brittney = normalizePhone(process.env.BRITTNEY_NOTIFICATION_PHONE || '');
