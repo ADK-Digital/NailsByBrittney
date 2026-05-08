@@ -318,8 +318,8 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
   .nav-links a{display:block;color:var(--accent);padding:.55rem .7rem;border-radius:10px}
   .nav-links a:hover,.nav-links a:focus-visible{background:rgba(255,255,255,.62)}
   .nav-links.open{display:flex}
-  .carousel{padding:0 2.9rem}
-  .carousel-content{height:clamp(220px,66vw,520px);min-height:0}
+  .carousel{--mobile-gallery-height:clamp(340px,112vw,520px);padding:0 2.9rem;min-height:var(--mobile-gallery-height)}
+  .carousel-content{height:var(--mobile-gallery-height);min-height:var(--mobile-gallery-height)}
   .gallery-slide{height:100%;min-height:0}
   .gallery-media{height:100%;max-height:100%}
   .gallery-media img{max-height:100%}
