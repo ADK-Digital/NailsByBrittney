@@ -9,6 +9,44 @@ import { listClientMessages, sendAdminClientMessage } from './_lib/clientMessage
 
 const ARCHIVE_SELECT = 'id,file_name,first_appointment_date,last_appointment_date,appointment_count,created_at';
 
+function getBearerToken(event) {
+  const headers = event.headers || {};
+  const authorization = headers.authorization || headers.Authorization || '';
+  const match = authorization.match(/^Bearer\s+(.+)$/i);
+  return match?.[1]?.trim() || '';
+}
+
+function getAllowedAdminEmails() {
+  return (process.env.ADMIN_EMAILS || '')
+    .split(',')
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function allowAdminAuthBypass() {
+  return process.env.ALLOW_ADMIN_AUTH_BYPASS === 'true'
+    && process.env.CONTEXT !== 'production'
+    && process.env.NODE_ENV !== 'production';
+}
+
+async function authorizeAdminRequest(event) {
+  if (allowAdminAuthBypass()) return null;
+
+  const token = getBearerToken(event);
+  if (!token) return json(401, { error: 'Unauthorized' });
+
+  ensureServerConfig();
+  const { data, error } = await supabaseAdmin.auth.getUser(token);
+  const email = data?.user?.email?.trim().toLowerCase();
+  if (error || !data?.user || !email) return json(401, { error: 'Unauthorized' });
+
+  const allowedEmails = getAllowedAdminEmails();
+  if (!allowedEmails.includes(email)) return json(403, { error: 'Forbidden' });
+
+  return null;
+}
+
+
 function csvResponse(fileName, csvContent) {
   return {
     statusCode: 200,
@@ -149,6 +187,9 @@ async function handleAppointmentAction(payload) {
 
 export const handler = async (event) => {
   try {
+    const authResponse = await authorizeAdminRequest(event);
+    if (authResponse) return authResponse;
+
     ensureServerConfig();
 
     if (event.httpMethod === 'GET') {

@@ -1,3 +1,15 @@
+import { hasSupabaseConfig, supabase } from './supabase';
+
+async function getAdminAuthHeaders(headers = {}) {
+  if (!hasSupabaseConfig || !supabase) return headers;
+
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) throw new Error('Admin authentication required.');
+
+  return { ...headers, Authorization: `Bearer ${token}` };
+}
+
 export async function fetchAvailability(serviceIds) {
   console.log('fetchAvailability called', serviceIds);
 
@@ -25,57 +37,85 @@ export async function createBookingRequest(payload) {
 }
 
 export async function fetchAdminAppointments() {
-  const res = await fetch('/.netlify/functions/admin-appointments');
+  const res = await fetch('/.netlify/functions/admin-appointments', {
+    headers: await getAdminAuthHeaders(),
+  });
   return res.json();
 }
 
 export async function fetchArchivedAppointments() {
-  const res = await fetch('/.netlify/functions/admin-appointments?archives=1');
+  const res = await fetch('/.netlify/functions/admin-appointments?archives=1', {
+    headers: await getAdminAuthHeaders(),
+  });
   return res.json();
 }
 
-export function archivedAppointmentDownloadUrl(fileName) {
-  return `/.netlify/functions/admin-appointments?archive=${encodeURIComponent(fileName)}`;
+export async function downloadArchivedAppointment(fileName) {
+  const res = await fetch(`/.netlify/functions/admin-appointments?archive=${encodeURIComponent(fileName)}`, {
+    headers: await getAdminAuthHeaders(),
+  });
+
+  if (!res.ok) {
+    let message = 'Failed to download archive';
+    try {
+      const body = await res.json();
+      message = body.error || message;
+    } catch {
+      // Keep the fallback download error when the response is not JSON.
+    }
+    throw new Error(message);
+  }
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  return { ok: true };
 }
 
 export async function setAppointmentStatus(appointmentId, status, note) {
   const res = await fetch('/.netlify/functions/admin-appointments', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'set_status', appointmentId, status, note }),
+    method: 'POST', headers: await getAdminAuthHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ action: 'set_status', appointmentId, status, note }),
   });
   return res.json();
 }
 
 export async function adminChargeAppointment(payload) {
   const res = await fetch('/.netlify/functions/admin-appointments', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'charge', ...payload }),
+    method: 'POST', headers: await getAdminAuthHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ action: 'charge', ...payload }),
   });
   return res.json();
 }
 
 export async function adminRefundAppointment(payload) {
   const res = await fetch('/.netlify/functions/admin-appointments', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'refund', ...payload }),
+    method: 'POST', headers: await getAdminAuthHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ action: 'refund', ...payload }),
   });
   return res.json();
 }
 
 export async function fetchAppointmentStatusSummary(requestNumber) {
   const res = await fetch('/.netlify/functions/admin-appointments', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'status_summary', requestNumber }),
+    method: 'POST', headers: await getAdminAuthHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ action: 'status_summary', requestNumber }),
   });
   return res.json();
 }
 
 export async function createBlockedTime(payload) {
   const res = await fetch('/.netlify/functions/admin-appointments', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'create_block', ...payload }),
+    method: 'POST', headers: await getAdminAuthHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ action: 'create_block', ...payload }),
   });
   return res.json();
 }
 
 export async function deleteBlockedTime(blockId) {
   const res = await fetch('/.netlify/functions/admin-appointments', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete_block', blockId }),
+    method: 'POST', headers: await getAdminAuthHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ action: 'delete_block', blockId }),
   });
   return res.json();
 }
@@ -83,7 +123,7 @@ export async function deleteBlockedTime(blockId) {
 
 export async function fetchClientMessages(payload) {
   const res = await fetch('/.netlify/functions/admin-appointments', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'list_messages', ...payload }),
+    method: 'POST', headers: await getAdminAuthHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ action: 'list_messages', ...payload }),
   });
   const body = await res.json();
   if (!res.ok || body.error) throw new Error(body.error || 'Failed to load messages');
@@ -92,7 +132,7 @@ export async function fetchClientMessages(payload) {
 
 export async function sendClientMessage(payload) {
   const res = await fetch('/.netlify/functions/admin-appointments', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'send_client_message', ...payload }),
+    method: 'POST', headers: await getAdminAuthHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ action: 'send_client_message', ...payload }),
   });
   const body = await res.json();
   if (!res.ok || body.error) throw new Error(body.error || 'Failed to send message');

@@ -1197,9 +1197,16 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
   text-align:center;
 }
 
-.archive-list a{
+.archive-list .link-button{
+  appearance:none;
+  padding:0;
+  border:0;
+  background:transparent;
   color:var(--accent);
+  font:inherit;
   font-weight:700;
+  cursor:pointer;
+  text-decoration:underline;
 }
 
 .message-thread-card{

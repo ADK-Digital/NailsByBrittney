@@ -15,7 +15,7 @@ import {
   adminRefundAppointment,
   createBlockedTime,
   deleteBlockedTime,
-  archivedAppointmentDownloadUrl,
+  downloadArchivedAppointment,
   fetchAdminAppointments,
   fetchArchivedAppointments,
   setAppointmentStatus,
@@ -602,13 +602,13 @@ function CustomerCard({ customer, appointments }) {
   </article>;
 }
 
-function AppointmentArchivePanel({ open, archives, onToggle, onLoad }) {
+function AppointmentArchivePanel({ open, archives, onToggle, onLoad, onDownload }) {
   return <div className="appointment-archive-panel">
     <button type="button" className="admin-secondary-button" onClick={async () => { await onLoad(); onToggle(); }}>Archived appointments</button>
     {open && <div className="archive-list card">
       <h3>Archived appointments</h3>
       {archives.length ? <ul>{archives.map((archive) => <li key={archive.id || archive.file_name}>
-        <a href={archivedAppointmentDownloadUrl(archive.file_name)}>{archive.file_name}</a>
+        <button type="button" className="link-button" onClick={() => onDownload(archive.file_name)}>{archive.file_name}</button>
         <span>{archive.appointment_count || 0} appointment(s)</span>
       </li>)}</ul> : <p className="muted">No archived appointment CSV files yet.</p>}
     </div>}
@@ -742,8 +742,16 @@ export default function AdminPage() {
       setTestimonials(testimonialData);
       setGallery(galleryData);
     });
-    refreshBookingAdmin();
   }, []);
+
+  useEffect(() => {
+    if (hasSupabaseConfig && !session) return;
+    refreshBookingAdmin().catch(() => {
+      setAppointments([]);
+      setCustomers([]);
+      setBlockedTimes([]);
+    });
+  }, [session]);
 
   const signedIn = useMemo(() => (!hasSupabaseConfig ? true : Boolean(session)), [session]);
   const signIn = async (e) => {
@@ -846,7 +854,7 @@ export default function AdminPage() {
         <span>{sortedAppointments.length ? appointmentPageStart + 1 : 0}-{appointmentPageEnd} of {sortedAppointments.length}</span>
         <button className="admin-secondary-button" type="button" onClick={() => setAppointmentPage((page) => Math.min(appointmentPageCount - 1, page + 1))} disabled={currentAppointmentPage >= appointmentPageCount - 1}>›</button>
       </div>}
-      <AppointmentArchivePanel open={archivesOpen} archives={appointmentArchives} onToggle={() => setArchivesOpen((value) => !value)} onLoad={refreshAppointmentArchives} />
+      <AppointmentArchivePanel open={archivesOpen} archives={appointmentArchives} onToggle={() => setArchivesOpen((value) => !value)} onLoad={refreshAppointmentArchives} onDownload={downloadArchivedAppointment} />
     </section>
 
     <section id="admin-blocks" className="admin-section admin-section-blocks"><h2>Blocked Times</h2>
