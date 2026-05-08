@@ -3,7 +3,7 @@ export const PHONE_LINK = '+15187297251';
 export const EMAIL = 'nailsbybrittneyp@gmail.com';
 export const INSTAGRAM_URL = 'https://www.instagram.com/nailss_by_brittneyy/';
 
-export const SAMPLE_BIO = `I am Brittney Prosser, a certified nail technician since 2025 with a detail-oriented approach. I focus on clean, beautiful, personalized nail services so every guest leaves feeling polished and confident.`;
+export const SAMPLE_BIO = `I am Brittney Prosser, a licensed nail technician since 2025 with a detail-oriented approach. I focus on clean, beautiful, personalized nail services so every guest leaves feeling polished and confident.`;
 
 export const SAMPLE_TESTIMONIALS = [
   { id: 'sample-1', customer: 'Jasmine R.', quote: 'Brittney is so precise and professional—my nails have never looked better.' },
