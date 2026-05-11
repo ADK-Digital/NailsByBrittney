@@ -1,3 +1,5 @@
+import { normalizeCommunicationPreference } from './notifications.js';
+
 export function normalizeEmail(email = '') {
   return email.trim().toLowerCase();
 }
@@ -9,7 +11,6 @@ export function normalizePhone(phone = '') {
   return `+1${normalized}`;
 }
 
-const COMM_PREF = new Set(['sms', 'email', 'both']);
 
 export function validateBookingInput(input) {
   const errors = {};
@@ -23,8 +24,10 @@ export function validateBookingInput(input) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date || '')) errors.date = 'Date is invalid.';
   if (!/^\d{2}:\d{2}$/.test(input.time || '')) errors.time = 'Time is invalid.';
   if (!input.idempotencyKey?.trim()) errors.idempotencyKey = 'Idempotency key is required.';
-  if (!COMM_PREF.has(input.communicationPreference || 'both')) errors.communicationPreference = 'Communication preference must be sms, email, or both.';
+  const rawCommunicationPreference = input.communicationPreference ?? 'both';
+  const communicationPreference = normalizeCommunicationPreference(rawCommunicationPreference);
+  if (!['sms', 'email', 'both'].includes(communicationPreference)) errors.communicationPreference = 'Communication preference must include sms, email, or both.';
   if (!input.policyAcknowledged) errors.policyAcknowledged = 'You must acknowledge the card-on-file and cancellation policy.';
   if (!input.squareCardToken?.trim()) errors.squareCardToken = 'Card on file is required before submitting.';
-  return { errors, phone, email };
+  return { errors, phone, email, communicationPreference };
 }

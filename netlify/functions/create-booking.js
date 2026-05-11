@@ -1,7 +1,7 @@
 import { json, ensureServerConfig, supabaseAdmin } from './_lib/supabaseAdmin.js';
 import { normalizeEmail, validateBookingInput } from './_lib/validation.js';
 import { localDateTimeToUtcIso, formatDuration } from './_lib/time.js';
-import { notifyBrittney } from './_lib/notifications.js';
+import { canSendSms, logSmsSkipped, notifyBrittney, sendSms } from './_lib/notifications.js';
 import { disableCardOnFile, ensureSquareCustomer, storeCardOnFile } from './_lib/square.js';
 import { sendBookingCreatedEmail } from './_lib/email.js';
 
@@ -171,7 +171,7 @@ export const handler = async (event) => {
     if (event.httpMethod !== 'POST') return json(405, { error: 'Method not allowed' });
 
     payload = JSON.parse(event.body || '{}');
-    const { errors, phone, email } = validateBookingInput(payload);
+    const { errors, phone, email, communicationPreference } = validateBookingInput(payload);
     if (Object.keys(errors).length) return json(400, { errors });
 
     const existingAppointment = await findAppointmentByIdempotencyKey(payload.idempotencyKey);
@@ -211,8 +211,6 @@ export const handler = async (event) => {
     });
 
     createdSquareCardId = card.cardId;
-    const communicationPreference = payload.communicationPreference || 'both';
-
     squareSetupStage = 'booking_rpc';
     const { data, error } = await supabaseAdmin.rpc('create_booking_request', {
       p_first_name: payload.firstName.trim(),
@@ -253,15 +251,24 @@ export const handler = async (event) => {
       .single();
 
     const responseBody = await buildBookingResponse(appointment);
-    const serviceList = (await fetchAppointmentServices(appointment.id)).join(', ');
+    const services = await fetchAppointmentServices(appointment.id);
+    const serviceList = services.join(', ');
     const formattedBookingNumber = formatBookingNumber(appointment.booking_request_number);
     const body = `appointment request #${formattedBookingNumber}: Customer ${appointment.customers.first_name} ${appointment.customers.last_name}. Phone number ${appointment.customers.phone}. Service(s): ${serviceList}. Estimated revenue: ${appointment.estimated_total_text}. Reply "yes ${formattedBookingNumber}" to confirm or "no ${formattedBookingNumber}" to cancel.`;
     await notifyBrittney(body);
 
+    const customerPreference = appointment.customers.communication_preference || communicationPreference;
+    const customerSms = `Your Nails by Brittney appointment request #${formattedBookingNumber} has been received and is pending review. You will be notified once it is confirmed or cancelled.`;
+    if (canSendSms(customerPreference)) {
+      await sendSms(appointment.customers.phone, customerSms, { type: 'booking_created', preference: customerPreference });
+    } else {
+      logSmsSkipped({ type: 'booking_created', to: appointment.customers.phone, preference: customerPreference, reason: 'preference_not_sms' });
+    }
+
     await sendBookingCreatedEmail({
       customer: appointment.customers,
       appointment,
-      services: await fetchAppointmentServices(appointment.id),
+      services,
     });
 
     return json(200, {

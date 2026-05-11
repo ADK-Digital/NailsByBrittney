@@ -1,6 +1,6 @@
 import { supabaseAdmin } from './supabaseAdmin.js';
 import { BOOKING_LINK } from './config.js';
-import { sendSms } from './notifications.js';
+import { canSendSms, logSmsSkipped, sendSms } from './notifications.js';
 import {
   sendBookingCancelledEmail,
   sendBookingConfirmedEmail,
@@ -49,13 +49,6 @@ function combinePaymentStatus(chargedCents, refundedCents) {
   return 'partially_refunded';
 }
 
-function canSendSms(preference) {
-  return preference === 'sms' || preference === 'both' || !preference;
-}
-
-function canSendEmail(preference) {
-  return preference === 'email' || preference === 'both' || !preference;
-}
 
 function buildSquareIdempotencyKey(action, appointmentId, eventType, amountCents, basisValue) {
   const seed = `${action}|${appointmentId}|${eventType}|${amountCents}|${basisValue ?? 'na'}|${Date.now()}`;
@@ -109,25 +102,29 @@ async function notifyCustomerStatus(appointment, services, nextStatus, context =
   if (nextStatus === 'confirmed') {
     const sms = context.confirmationMessageOverride
       || `Your appointment with Nails By Brittney is confirmed for ${date} at ${time}, for ${serviceList}. ${appointment.estimated_total_text}. Estimated appointment length: ${formatDuration(appointment.total_duration_minutes)}.`;
-    if (canSendSms(preference)) await sendSms(appointment.customers.phone, sms);
+    if (canSendSms(preference)) await sendSms(appointment.customers.phone, sms, { type: `booking_${nextStatus}`, preference });
+    else logSmsSkipped({ type: `booking_${nextStatus}`, to: appointment.customers.phone, preference, reason: 'preference_not_sms' });
     await sendBookingConfirmedEmail({ customer: appointment.customers, appointment, services });
   }
 
   if (nextStatus === 'declined') {
     const sms = `Sorry, the appointment time you requested is no longer available. Please choose another available time here: ${BOOKING_LINK}`;
-    if (canSendSms(preference)) await sendSms(appointment.customers.phone, sms);
+    if (canSendSms(preference)) await sendSms(appointment.customers.phone, sms, { type: `booking_${nextStatus}`, preference });
+    else logSmsSkipped({ type: `booking_${nextStatus}`, to: appointment.customers.phone, preference, reason: 'preference_not_sms' });
     await sendBookingDeclinedEmail({ customer: appointment.customers, appointment, services });
   }
 
   if (nextStatus === 'cancelled') {
     const sms = `Your appointment has been cancelled. Please choose another available time here: ${BOOKING_LINK}`;
-    if (canSendSms(preference)) await sendSms(appointment.customers.phone, sms);
+    if (canSendSms(preference)) await sendSms(appointment.customers.phone, sms, { type: `booking_${nextStatus}`, preference });
+    else logSmsSkipped({ type: `booking_${nextStatus}`, to: appointment.customers.phone, preference, reason: 'preference_not_sms' });
     await sendBookingCancelledEmail({ customer: appointment.customers, appointment, services });
   }
 
   if (nextStatus === 'expired') {
     const sms = `Your appointment request could not be confirmed in time and has been released. Please choose another available time here: ${BOOKING_LINK}`;
-    if (canSendSms(preference)) await sendSms(appointment.customers.phone, sms);
+    if (canSendSms(preference)) await sendSms(appointment.customers.phone, sms, { type: `booking_${nextStatus}`, preference });
+    else logSmsSkipped({ type: `booking_${nextStatus}`, to: appointment.customers.phone, preference, reason: 'preference_not_sms' });
     await sendBookingExpiredEmail({ customer: appointment.customers, appointment, services });
   }
 }

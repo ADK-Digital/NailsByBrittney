@@ -1,4 +1,5 @@
 import { Resend } from 'resend';
+import { canSendEmail } from './notifications.js';
 import { BOOKING_LINK } from './config.js';
 import { formatDuration } from './time.js';
 
@@ -112,7 +113,7 @@ export async function sendEmail({ type, to, subject, html, text }) {
 async function sendBookingEmail({ type, customer, appointment, subject, heading, introLine, detailLines, closingLine }) {
   try {
     const preference = customer?.communication_preference;
-    const shouldSendEmail = preference === 'email' || preference === 'both';
+    const shouldSendEmail = canSendEmail(preference);
 
     if (!shouldSendEmail) {
       console.log('EMAIL SEND', { type, to: customer?.email || null, success: false, error: 'preference_not_email' });

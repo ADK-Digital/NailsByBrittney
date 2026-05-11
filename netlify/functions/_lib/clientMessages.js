@@ -1,14 +1,7 @@
 import { supabaseAdmin } from './supabaseAdmin.js';
 import { sendEmail } from './email.js';
-import { sendSms } from './notifications.js';
+import { canSendEmail, canSendSms, logSmsSkipped, sendSms } from './notifications.js';
 
-function canSendSms(preference) {
-  return preference === 'sms' || preference === 'both' || !preference;
-}
-
-function canSendEmail(preference) {
-  return preference === 'email' || preference === 'both' || !preference;
-}
 
 function escapeHtml(value = '') {
   return String(value)
@@ -72,12 +65,13 @@ export async function sendAdminClientMessage({ customer, appointment = null, bod
 
   if (canSendSms(preference)) {
     try {
-      if (!customer.phone) throw new Error('missing_customer_phone');
-      await sendSms(customer.phone, cleanBody);
-      sent.sms = true;
+      sent.sms = Boolean(await sendSms(customer.phone, cleanBody, { type: 'admin_client_message', preference }));
+      if (!sent.sms) failures.push('SMS: failed');
     } catch (error) {
       failures.push(`SMS: ${error.message || 'failed'}`);
     }
+  } else {
+    logSmsSkipped({ type: 'admin_client_message', to: customer.phone || null, preference, reason: 'preference_not_sms' });
   }
 
   if (canSendEmail(preference)) {
