@@ -457,6 +457,8 @@ function AppointmentCard({ appointment, onRefresh }) {
   const [serviceAmount, setServiceAmount] = useState('');
   const [latePct, setLatePct] = useState('25');
   const [noShowPct, setNoShowPct] = useState('50');
+  const [actionNotice, setActionNotice] = useState({ type: '', text: '' });
+  const [actionBusy, setActionBusy] = useState(false);
 
   const events = appointment.appointment_financial_events || [];
   const sortedEvents = [...events].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
@@ -472,7 +474,29 @@ function AppointmentCard({ appointment, onRefresh }) {
     setServiceRefundAmount(serviceRefundableDollars);
   }, [appointment.id, serviceRefundableDollars]);
 
-  const call = async (fn) => { await fn(); await onRefresh(); };
+  const call = async (fn, successText = 'Appointment action completed.') => {
+    setActionBusy(true);
+    setActionNotice({ type: '', text: '' });
+    try {
+      await fn();
+      await onRefresh();
+      setActionNotice({ type: 'success', text: successText });
+    } catch (error) {
+      setActionNotice({ type: 'error', text: error.message || 'Appointment action failed.' });
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
+  const chargeLateFee = () => call(
+    () => adminChargeAppointment({ appointmentId: appointment.id, target: 'late', percentOverride: Number(latePct || 25) }),
+    'Late fee charged successfully.',
+  );
+
+  const chargeNoShowFee = () => call(
+    () => adminChargeAppointment({ appointmentId: appointment.id, target: 'no_show', percentOverride: Number(noShowPct || 50) }),
+    'No-show fee charged successfully.',
+  );
 
   return <article className={`card appointment-card${expanded ? ' expanded' : ''}`}>
     {!expanded && <button type="button" className="appointment-toggle" onClick={() => setExpanded(true)} aria-expanded={expanded}>
@@ -507,15 +531,15 @@ function AppointmentCard({ appointment, onRefresh }) {
       <MessageThread customer={appointment.customers} appointment={appointment} />
 
       <div className="admin-action-grid">
-        {['confirmed', 'declined', 'cancelled', 'completed', 'no_show'].map((status) => <button key={status} className="btn" onClick={() => call(() => setAppointmentStatus(appointment.id, status))}>{formatAdminStatus(status)}</button>)}
+        {['confirmed', 'declined', 'cancelled', 'completed', 'no_show'].map((status) => <button key={status} className="btn" disabled={actionBusy} onClick={() => call(() => setAppointmentStatus(appointment.id, status), `Appointment marked ${formatAdminStatus(status)}.`)}>{formatAdminStatus(status)}</button>)}
       </div>
 
       <div className="admin-action-grid">
-        <button className="btn" onClick={() => call(() => adminChargeAppointment({ appointmentId: appointment.id, target: 'late', percent: Number(latePct || 25) }))}>Charge late fee</button>
-        <input value={latePct} onChange={(e) => setLatePct(parseCurrencyInput(e.target.value))} placeholder="25" />
-        <button className="btn" onClick={() => call(() => adminChargeAppointment({ appointmentId: appointment.id, target: 'no_show', percent: Number(noShowPct || 50) }))}>Charge no-show fee</button>
-        <input value={noShowPct} onChange={(e) => setNoShowPct(parseCurrencyInput(e.target.value))} placeholder="50" />
-        <button className="btn" onClick={() => call(() => adminChargeAppointment({ appointmentId: appointment.id, target: 'service', amount: Number(serviceAmount || 0) }))}>Charge services</button>
+        <button className="btn" disabled={actionBusy} onClick={chargeLateFee}>Charge late fee</button>
+        <input value={latePct} onChange={(e) => setLatePct(parseCurrencyInput(e.target.value))} placeholder="25" aria-label="Late fee percentage" />
+        <button className="btn" disabled={actionBusy} onClick={chargeNoShowFee}>Charge no-show fee</button>
+        <input value={noShowPct} onChange={(e) => setNoShowPct(parseCurrencyInput(e.target.value))} placeholder="50" aria-label="No-show fee percentage" />
+        <button className="btn" disabled={actionBusy} onClick={() => call(() => adminChargeAppointment({ appointmentId: appointment.id, target: 'service', amount: Number(serviceAmount || 0) }), 'Service charge completed successfully.')}>Charge services</button>
         <input
           value={serviceAmount}
           onChange={(e) => setServiceAmount(parseCurrencyInput(e.target.value))}
@@ -523,11 +547,13 @@ function AppointmentCard({ appointment, onRefresh }) {
         />
       </div>
 
+      {actionNotice.text && <p className={`admin-message ${actionNotice.type}`} role={actionNotice.type === 'error' ? 'alert' : 'status'}>{actionNotice.text}</p>}
+
       <div className="admin-action-grid">
-        <button className="btn" onClick={() => call(() => adminRefundAppointment({ appointmentId: appointment.id, target: 'late' }))}>Refund late fee</button>
-        <button className="btn" onClick={() => call(() => adminRefundAppointment({ appointmentId: appointment.id, target: 'no_show' }))}>Refund no-show fee</button>
-        <button className="btn" onClick={() => call(() => adminRefundAppointment({ appointmentId: appointment.id, target: 'service' }))}>Refund services full</button>
-        <button className="btn" onClick={() => call(() => adminRefundAppointment({ appointmentId: appointment.id, target: 'service', amount: Number(serviceRefundAmount || 0) }))}>Refund services</button>
+        <button className="btn" disabled={actionBusy} onClick={() => call(() => adminRefundAppointment({ appointmentId: appointment.id, target: 'late' }), 'Late fee refunded successfully.')}>Refund late fee</button>
+        <button className="btn" disabled={actionBusy} onClick={() => call(() => adminRefundAppointment({ appointmentId: appointment.id, target: 'no_show' }), 'No-show fee refunded successfully.')}>Refund no-show fee</button>
+        <button className="btn" disabled={actionBusy} onClick={() => call(() => adminRefundAppointment({ appointmentId: appointment.id, target: 'service' }), 'Service charge refunded successfully.')}>Refund services full</button>
+        <button className="btn" disabled={actionBusy} onClick={() => call(() => adminRefundAppointment({ appointmentId: appointment.id, target: 'service', amount: Number(serviceRefundAmount || 0) }), 'Service refund completed successfully.')}>Refund services</button>
         <input
           type="text"
           inputMode="decimal"
