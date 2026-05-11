@@ -251,7 +251,10 @@ export async function chargeAppointment({
   allowAdditionalServiceCharge = false,
 }) {
   const type = PAYMENT_TARGET[target];
-  if (!type) throw new Error('Invalid charge target.');
+  if (!type) {
+    console.warn('[bookingActions] unsupported charge target', { appointmentId, target });
+    throw new Error(`Invalid charge target: ${target || 'missing'}.`);
+  }
 
   const { appointment } = await loadAppointment(appointmentId);
   if (!appointment.customers.square_card_id || appointment.customers.card_on_file_status !== 'on_file') {
@@ -267,12 +270,18 @@ export async function chargeAppointment({
   if (!dollars) {
     if (target === 'late') percentBasis = finiteNumber(percentOverride ?? 25);
     if (target === 'no_show') percentBasis = finiteNumber(percentOverride ?? 50);
-    if (!percentBasis) throw new Error('Amount is required for service charges.');
+    if (!percentBasis) {
+      console.warn('[bookingActions] missing charge amount', { appointmentId, target, amountDollars, percentOverride });
+      throw new Error(target === 'service' ? 'Amount is required for service charges.' : 'Fee percentage is required for this charge.');
+    }
     dollars = (estimate * percentBasis) / 100;
   }
 
   const amountCents = dollarsToCents(dollars);
-  if (amountCents <= 0) throw new Error('Charge amount must be greater than zero.');
+  if (amountCents <= 0) {
+    console.warn('[bookingActions] non-positive charge amount', { appointmentId, target, amountDollars, percentOverride, estimate, amountCents });
+    throw new Error('Charge amount must be greater than zero.');
+  }
 
   const idempotencyKey = buildSquareIdempotencyKey(
     'charge',
@@ -321,7 +330,10 @@ export async function chargeAppointment({
 
 export async function refundAppointment({ appointmentId, target, percentOverride, amountDollars, initiatedBy = 'dashboard', note, commandText }) {
   const type = PAYMENT_TARGET[target];
-  if (!type) throw new Error('Invalid refund target.');
+  if (!type) {
+    console.warn('[bookingActions] unsupported refund target', { appointmentId, target });
+    throw new Error(`Invalid refund target: ${target || 'missing'}.`);
+  }
 
   const { data: chargeEvents } = await supabaseAdmin
     .from('appointment_financial_events')

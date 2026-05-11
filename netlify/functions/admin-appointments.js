@@ -139,11 +139,19 @@ async function handleAppointmentAction(payload) {
   }
 
   if (payload.action === 'charge') {
+    const amountDollars = payload.amountDollars ?? payload.amount;
+    const percentOverride = payload.percentOverride ?? payload.percent;
+    console.log('[admin-appointments] charge routing', {
+      appointmentId: payload.appointmentId,
+      target: payload.target,
+      hasAmount: amountDollars !== undefined && amountDollars !== null && amountDollars !== '',
+      percentOverride,
+    });
     const event = await chargeAppointment({
       appointmentId: payload.appointmentId,
       target: payload.target,
-      amountDollars: payload.amount,
-      percentOverride: payload.percent,
+      amountDollars,
+      percentOverride,
       initiatedBy,
       note: payload.note,
     });
@@ -154,8 +162,8 @@ async function handleAppointmentAction(payload) {
     const event = await refundAppointment({
       appointmentId: payload.appointmentId,
       target: payload.target,
-      percentOverride: payload.percent,
-      amountDollars: payload.amount,
+      percentOverride: payload.percentOverride ?? payload.percent,
+      amountDollars: payload.amountDollars ?? payload.amount,
       initiatedBy,
       note: payload.note,
     });
@@ -182,7 +190,8 @@ async function handleAppointmentAction(payload) {
     return { ok: true };
   }
 
-  throw new Error('Unsupported action');
+  console.warn('[admin-appointments] unsupported action', { action: payload.action });
+  throw new Error(`Unsupported action: ${payload.action || 'missing'}`);
 }
 
 export const handler = async (event) => {
