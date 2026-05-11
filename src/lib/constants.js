@@ -1,5 +1,5 @@
-export const PHONE_DISPLAY = '(518) 729-7251';
-export const PHONE_LINK = '+15187297251';
+export const PHONE_DISPLAY = '(252) 888-7757';
+export const PHONE_LINK = '+12528887757';
 export const EMAIL = 'nailsbybrittneyp@gmail.com';
 export const INSTAGRAM_URL = 'https://www.instagram.com/nailss_by_brittneyy/';
 
