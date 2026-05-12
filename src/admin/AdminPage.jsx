@@ -361,6 +361,15 @@ function formatMessageTimestamp(value) {
   return date.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
+function isSmsThreadEnabled(preference) {
+  return ['sms', 'both'].includes(String(preference || 'both').toLowerCase());
+}
+
+function isSmsThreadMessage(message) {
+  const channel = String(message?.channel || '').toLowerCase();
+  return channel === 'sms' || channel === 'both';
+}
+
 function MessageThread({ customer, appointment = null }) {
   const [messages, setMessages] = useState([]);
   const [draft, setDraft] = useState('');
@@ -369,33 +378,60 @@ function MessageThread({ customer, appointment = null }) {
   const [expanded, setExpanded] = useState(false);
   const [notice, setNotice] = useState({ type: '', text: '' });
   const threadRef = useRef(null);
+  const smsEnabled = isSmsThreadEnabled(customer?.communication_preference);
   const targetPayload = appointment?.id ? { appointmentId: appointment.id } : { customerId: customer?.id };
-  const hasThreadOverflow = messages.length > 6;
+  const visibleMessages = messages.filter(isSmsThreadMessage);
+  const hasThreadOverflow = visibleMessages.length > 6;
 
   const loadMessages = async () => {
-    if (!customer?.id && !appointment?.id) return;
+    if (!smsEnabled || (!customer?.id && !appointment?.id)) return;
     setLoading(true);
     setNotice({ type: '', text: '' });
     try {
       const data = await fetchClientMessages(targetPayload);
       setMessages(data.messages || []);
     } catch (error) {
-      setNotice({ type: 'error', text: error.message || 'Unable to load messages.' });
+      setNotice({ type: 'error', text: error.message || 'Unable to load SMS messages.' });
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
+    setMessages([]);
+    setDraft('');
+    setExpanded(false);
+    if (!smsEnabled) {
+      setLoading(false);
+      setNotice({ type: '', text: '' });
+      return;
+    }
     loadMessages();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [customer?.id, appointment?.id]);
+  }, [customer?.id, appointment?.id, smsEnabled]);
 
   useEffect(() => {
     const node = threadRef.current;
     if (!node) return;
     node.scrollTop = node.scrollHeight;
-  }, [messages.length, expanded]);
+  }, [visibleMessages.length, expanded]);
+
+  if (!smsEnabled) {
+    return <section className="message-thread-card sms-opt-out-card" aria-label={`SMS messaging unavailable for ${customer?.first_name || 'customer'}`}>
+      <div className="message-thread-head">
+        <div>
+          <h4>SMS Messages</h4>
+          <p className="muted">Email communication happens outside the app.</p>
+        </div>
+      </div>
+      <div className="sms-opt-out-message" role="note">
+        <p>This customer has opted out of SMS communications and requested communication by email only.</p>
+        <p>Please contact them directly at: <a href={customer?.email ? `mailto:${customer.email}` : undefined}>{customer?.email || 'No email on file'}</a></p>
+        <p>Automated appointment emails will still be delivered normally.</p>
+      </div>
+      <p className="muted message-helper-text">Customers who opt out of SMS must be contacted directly through email.</p>
+    </section>;
+  }
 
   const submit = async (event) => {
     event.preventDefault();
@@ -407,46 +443,44 @@ function MessageThread({ customer, appointment = null }) {
       const result = await sendClientMessage({ ...targetPayload, body });
       setMessages(result.messages || []);
       setDraft('');
-      const sentParts = [];
-      if (result.sent?.sms) sentParts.push('SMS');
-      if (result.sent?.email) sentParts.push('email');
-      setNotice({ type: result.failures?.length ? 'error' : 'success', text: sentParts.length ? `Sent by ${sentParts.join(' + ')}.` : 'Message saved, but no delivery channel was available.' });
+      setNotice({ type: result.failures?.length ? 'error' : 'success', text: result.sent?.sms ? 'SMS sent.' : 'SMS message saved, but delivery was unavailable.' });
     } catch (error) {
-      setNotice({ type: 'error', text: error.message || 'Unable to send message.' });
+      setNotice({ type: 'error', text: error.message || 'Unable to send SMS.' });
     } finally {
       setBusy(false);
     }
   };
 
-  return <section className={`message-thread-card${expanded ? ' enlarged' : ''}`} aria-label={`Message history with ${customer?.first_name || 'customer'}`}>
+  return <section className={`message-thread-card${expanded ? ' enlarged' : ''}`} aria-label={`SMS message history with ${customer?.first_name || 'customer'}`}>
     <div className="message-thread-head">
       <div>
-        <h4>Messages</h4>
-        <p className="muted">Routes by preference: {formatCommunicationPreference(customer?.communication_preference)}</p>
+        <h4>SMS Messages</h4>
+        <p className="muted">In-app messaging sends SMS only. Email communication happens outside the app.</p>
+        <p className="muted message-helper-text">Customers who opt out of SMS must be contacted directly through email.</p>
       </div>
       <div className="message-thread-actions">
         {hasThreadOverflow && <button type="button" className="message-thread-expand" onClick={() => setExpanded((value) => !value)}>{expanded ? 'Shrink' : 'Enlarge'}</button>}
-        {expanded && <button type="button" className="message-thread-close" onClick={() => setExpanded(false)} aria-label="Close enlarged message thread">×</button>}
+        {expanded && <button type="button" className="message-thread-close" onClick={() => setExpanded(false)} aria-label="Close enlarged SMS message thread">×</button>}
       </div>
     </div>
 
     <div className="message-thread-scroll" ref={threadRef}>
-      {loading && <p className="muted">Loading messages…</p>}
-      {!loading && !messages.length && <p className="muted empty-thread">No message history yet.</p>}
-      {messages.map((message) => {
+      {loading && <p className="muted">Loading SMS messages…</p>}
+      {!loading && !visibleMessages.length && <p className="muted empty-thread">No SMS history yet.</p>}
+      {visibleMessages.map((message) => {
         const outbound = message.direction === 'admin_to_customer';
         return <div key={message.id} className={`message-bubble-row ${outbound ? 'outbound' : 'inbound'}`}>
           <div className="message-bubble">
             <p>{message.body}</p>
-            <span>{outbound ? 'Admin' : 'Client'} • {message.channel} • {formatMessageTimestamp(message.created_at)}</span>
+            <span>{outbound ? 'Admin' : 'Client'} • SMS • {formatMessageTimestamp(message.created_at)}</span>
           </div>
         </div>;
       })}
     </div>
 
     <form className="message-compose" onSubmit={submit}>
-      <textarea value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Write a message…" rows={2} />
-      <button className="btn primary" type="submit" disabled={busy || !draft.trim()}>{busy ? 'Sending…' : 'Send'}</button>
+      <textarea value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Write an SMS…" rows={2} />
+      <button className="btn primary" type="submit" disabled={busy || !draft.trim()}>{busy ? 'Sending…' : 'Send SMS'}</button>
     </form>
     {notice.text && <p className={`admin-message ${notice.type}`} role="status">{notice.text}</p>}
   </section>;
