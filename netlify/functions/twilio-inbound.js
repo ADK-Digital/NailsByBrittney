@@ -5,10 +5,11 @@ import {
   refundAppointment,
   getAppointmentStatusSummaryByRequestNumber,
 } from './_lib/bookingActions.js';
-import { sendSms, notifyBrittney } from './_lib/notifications.js';
+import { normalizeCommunicationPreference, sendSms, notifyBrittney } from './_lib/notifications.js';
 import { logClientMessage } from './_lib/clientMessages.js';
 import { APP_TIMEZONE } from './_lib/config.js';
 import { localDateTimeToUtcIso, toIsoDate } from './_lib/time.js';
+import { normalizePhoneNumber as normalizePhone } from './_lib/phone.js';
 
 function getHeader(headers = {}, name) {
   const target = name.toLowerCase();
@@ -111,13 +112,6 @@ function xmlMessage(message) {
     headers: { 'Content-Type': 'text/xml' },
     body: `<Response><Message>${escapeXml(message)}</Message></Response>`,
   };
-}
-
-function normalizePhone(phone = '') {
-  const digits = String(phone).replace(/\D/g, '');
-  if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`;
-  if (digits.length === 10) return `+1${digits}`;
-  return phone;
 }
 
 function phoneCandidates(phone = '') {
@@ -265,6 +259,40 @@ async function findCustomerByPhone(phone) {
     .in('phone', candidates)
     .limit(1);
   return data?.[0] || null;
+}
+
+async function upgradeEmailOnlyCustomerForInboundSms(customer) {
+  if (!customer?.id || normalizeCommunicationPreference(customer.communication_preference) !== 'email') return customer;
+
+  const { error } = await supabaseAdmin
+    .from('customers')
+    .update({ communication_preference: 'both' })
+    .eq('id', customer.id);
+
+  if (error) {
+    console.warn('[twilio-inbound] communication preference upgrade failed', { customerId: customer.id, error: error.message });
+    return customer;
+  }
+
+  console.log('[twilio-inbound] communication preference upgraded', {
+    customerId: customer.id,
+    from: 'email',
+    to: 'both',
+    reason: 'inbound_sms',
+  });
+
+  return { ...customer, communication_preference: 'both' };
+}
+
+function isStopOptOutMessage(body = '') {
+  return ['stop', 'stopall', 'unsubscribe', 'cancel', 'end', 'quit'].includes(String(body || '').trim().toLowerCase());
+}
+
+async function maybeUpgradeInboundSmsPreference(from, body) {
+  if (isStopOptOutMessage(body)) return null;
+  const customer = await findCustomerByPhone(from);
+  await upgradeEmailOnlyCustomerForInboundSms(customer);
+  return customer;
 }
 
 function formatDateTime(value) {
@@ -736,6 +764,10 @@ export const handler = async (event) => {
     console.log('[twilio-inbound] incoming', { from, body });
 
     const parsed = parseCommand(body);
+
+    if (!isBrittney) {
+      await maybeUpgradeInboundSmsPreference(from, body);
+    }
 
     if (isBrittney && parsed) {
       const handlerFn = handlers[parsed.key];

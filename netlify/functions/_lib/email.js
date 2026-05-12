@@ -2,9 +2,11 @@ import { Resend } from 'resend';
 import { canSendEmail } from './notifications.js';
 import { BOOKING_LINK } from './config.js';
 import { formatDuration } from './time.js';
+import { getBusinessPhoneDisplay } from './phone.js';
 
 const BRAND_NAME = 'Nails by Brittney';
-const SUPPORT_TEXT_PHONE = '(518) 729-7251';
+const LOGO_URL = 'https://nailsbybrittney.com/assets/logo-BmAccaIs.png';
+const SMS_DISCLOSURE = 'By texting Nails by Brittney, you consent to receive appointment-related SMS responses. Reply STOP to opt out.';
 const resend = process.env.RESEND_API_KEY
   ? new Resend(process.env.RESEND_API_KEY)
   : null;
@@ -47,27 +49,24 @@ function createAppointmentSummary({ appointment, services }) {
   };
 }
 
-function getLogoUrl() {
-  const base = (process.env.BOOKING_PUBLIC_BASE_URL || '').trim();
-  if (!base) return null;
-  return `${base.replace(/\/$/, '')}/images/logo.png`;
-}
-
-function buildTemplate({ heading, greetingName, introLine, detailLines = [], closingLine }) {
-  const logoUrl = getLogoUrl();
+function buildTemplate({ heading, greetingName, introLine, detailLines = [], closingLine, includeSmsDisclosure = false }) {
+  const supportTextPhone = getBusinessPhoneDisplay();
   const greeting = greetingName ? `Hi ${greetingName},` : 'Hi there,';
   const htmlLines = [introLine, ...detailLines, closingLine].filter(Boolean).map((line) => `<p>${line}</p>`).join('');
 
+  const disclosureText = includeSmsDisclosure ? SMS_DISCLOSURE : '';
+
   return {
-    text: [greeting, heading, introLine, ...detailLines, closingLine, `Questions? Text us at ${SUPPORT_TEXT_PHONE}.`].filter(Boolean).join('\n\n'),
+    text: [greeting, heading, introLine, ...detailLines, closingLine, `Questions? Text us at ${supportTextPhone}.`, disclosureText].filter(Boolean).join('\n\n'),
     html: `<!doctype html>
 <html>
   <body>
-    ${logoUrl ? `<p><img src="${logoUrl}" alt="${BRAND_NAME} logo" style="max-width:150px;height:auto;" /></p>` : ''}
+    <p><img src="${LOGO_URL}" width="150" alt="${BRAND_NAME} logo" style="display:block;width:150px;max-width:150px;height:auto;border:0;outline:none;text-decoration:none;" /></p>
     <p>${greeting}</p>
     <h2>${heading}</h2>
     ${htmlLines}
-    <p>Questions? Text us at ${SUPPORT_TEXT_PHONE}.</p>
+    <p>Questions? Text us at ${supportTextPhone}.</p>
+    ${includeSmsDisclosure ? `<p style="font-size:12px;color:#666;line-height:1.4;">${SMS_DISCLOSURE}</p>` : ''}
     <p>Thank you,<br/>${BRAND_NAME}</p>
   </body>
 </html>`,
@@ -110,7 +109,7 @@ export async function sendEmail({ type, to, subject, html, text }) {
   }
 }
 
-async function sendBookingEmail({ type, customer, appointment, subject, heading, introLine, detailLines, closingLine }) {
+async function sendBookingEmail({ type, customer, appointment, subject, heading, introLine, detailLines, closingLine, includeSmsDisclosure = false }) {
   try {
     const preference = customer?.communication_preference;
     const shouldSendEmail = canSendEmail(preference);
@@ -136,6 +135,7 @@ async function sendBookingEmail({ type, customer, appointment, subject, heading,
       introLine,
       detailLines,
       closingLine,
+      includeSmsDisclosure,
     });
 
     await sendEmail({ type, to: customer.email, subject, html, text });
@@ -155,6 +155,7 @@ export async function sendBookingCreatedEmail({ customer, appointment, services 
     introLine: `Your appointment for ${details.dateTime} is pending confirmation.`,
     detailLines: [`Booking #: ${details.bookingNumber}.`, `Services: ${details.serviceList}.`, `Date/time: ${details.dateTime}.`, `Estimated total: ${details.estimatedTotal}.`, `Estimated duration: ${details.estimatedDuration}.`],
     closingLine: 'We will follow up as soon as your appointment is reviewed.',
+    includeSmsDisclosure: true,
   });
 }
 
@@ -168,6 +169,7 @@ export async function sendBookingConfirmedEmail({ customer, appointment, service
     heading: "You're all set!",
     introLine: `Your appointment has been confirmed for ${details.dateTime}.`,
     detailLines: [`Booking #: ${details.bookingNumber}.`, `Services: ${details.serviceList}.`, `Date/time: ${details.dateTime}.`, `Estimated total: ${details.estimatedTotal}.`, `Estimated duration: ${details.estimatedDuration}.`],
+    includeSmsDisclosure: true,
   });
 }
 
