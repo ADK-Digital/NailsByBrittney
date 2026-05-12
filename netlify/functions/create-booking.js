@@ -4,6 +4,7 @@ import { localDateTimeToUtcIso, formatDuration } from './_lib/time.js';
 import { canSendSms, logSmsSkipped, notifyBrittney, sendSms } from './_lib/notifications.js';
 import { disableCardOnFile, ensureSquareCustomer, storeCardOnFile } from './_lib/square.js';
 import { sendBookingCreatedEmail } from './_lib/email.js';
+import { logClientMessage } from './_lib/clientMessages.js';
 
 async function findMatchedCustomerIdentity({ firstName, lastName, email, phone }) {
   const { data, error } = await supabaseAdmin.rpc('find_matching_customer_identity', {
@@ -66,6 +67,23 @@ async function buildBookingResponse(appointment) {
     estimatedDurationText: formatDuration(appointment.total_duration_minutes),
     cardOnFileStatus: appointment.customers?.card_on_file_status || 'unknown',
   };
+}
+
+async function logNotificationFailure({ customerId, appointmentId, channel, body }) {
+  if (!customerId || !appointmentId) return;
+  try {
+    await logClientMessage({
+      customerId,
+      appointmentId,
+      direction: 'admin_to_customer',
+      channel,
+      body,
+      source: 'system',
+      status: 'failed',
+    });
+  } catch (error) {
+    console.error('booking_notification_failure_log_failed', { appointmentId, channel, error: error.message });
+  }
 }
 
 async function logOrphanedSquareArtifacts({ payload, squareCustomerId, squareCardId, reason, cleanupAttempted, cleanedUp }) {
@@ -246,9 +264,22 @@ export const handler = async (event) => {
 
     const { data: appointment } = await supabaseAdmin
       .from('appointments')
-      .select('id,start_at,booking_request_number,estimated_total_text,total_duration_minutes,customers(first_name,last_name,phone,email,card_on_file_status,communication_preference)')
+      .select('id,start_at,booking_request_number,estimated_total_text,total_duration_minutes,customers(id,first_name,last_name,phone,email,card_on_file_status,communication_preference)')
       .eq('id', data.appointment_id)
       .single();
+
+    if (matchedIdentity?.square_card_id && matchedIdentity.square_card_id !== card.cardId) {
+      try {
+        await disableCardOnFile({ cardId: matchedIdentity.square_card_id });
+      } catch (disableError) {
+        console.error('previous_square_card_disable_failed', {
+          customerId: matchedIdentity.customer_id,
+          previousSquareCardId: matchedIdentity.square_card_id,
+          newSquareCardId: card.cardId,
+          error: disableError.message,
+        });
+      }
+    }
 
     const responseBody = await buildBookingResponse(appointment);
     const services = await fetchAppointmentServices(appointment.id);
@@ -260,16 +291,18 @@ export const handler = async (event) => {
     const customerPreference = appointment.customers.communication_preference || communicationPreference;
     const customerSms = `Your Nails by Brittney appointment request #${formattedBookingNumber} has been received and is pending review. You will be notified once it is confirmed or cancelled.`;
     if (canSendSms(customerPreference)) {
-      await sendSms(appointment.customers.phone, customerSms, { type: 'booking_created', preference: customerPreference });
+      const sent = await sendSms(appointment.customers.phone, customerSms, { type: 'booking_created', preference: customerPreference });
+      if (!sent) await logNotificationFailure({ customerId: appointment.customers.id, appointmentId: appointment.id, channel: 'sms', body: 'Booking request SMS delivery may have failed. Please contact the customer directly if needed.' });
     } else {
       logSmsSkipped({ type: 'booking_created', to: appointment.customers.phone, preference: customerPreference, reason: 'preference_not_sms' });
     }
 
-    await sendBookingCreatedEmail({
+    const emailed = await sendBookingCreatedEmail({
       customer: appointment.customers,
       appointment,
       services,
     });
+    if (!emailed) await logNotificationFailure({ customerId: appointment.customers.id, appointmentId: appointment.id, channel: 'email', body: 'Booking request email delivery may have failed. Please contact the customer directly if needed.' });
 
     return json(200, {
       ...responseBody,

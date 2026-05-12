@@ -1,6 +1,7 @@
 import { supabaseAdmin } from './supabaseAdmin.js';
 import { BOOKING_LINK } from './config.js';
 import { canSendSms, logSmsSkipped, sendSms } from './notifications.js';
+import { logClientMessage } from './clientMessages.js';
 import {
   sendBookingCancelledEmail,
   sendBookingConfirmedEmail,
@@ -50,11 +51,42 @@ function combinePaymentStatus(chargedCents, refundedCents) {
 }
 
 
-function buildSquareIdempotencyKey(action, appointmentId, eventType, amountCents, basisValue) {
-  const seed = `${action}|${appointmentId}|${eventType}|${amountCents}|${basisValue ?? 'na'}|${Date.now()}`;
+const PAYMENT_IDEMPOTENCY_WINDOW_MS = 2 * 60 * 1000;
+
+function buildSquareIdempotencyKey(action, appointmentId, eventType, amountCents, basisValue, relatedEventId = '') {
+  const windowBucket = Math.floor(Date.now() / PAYMENT_IDEMPOTENCY_WINDOW_MS);
+  const seed = `${action}|${appointmentId}|${eventType}|${amountCents}|${basisValue ?? 'na'}|${relatedEventId || 'none'}|${windowBucket}`;
   const digest = createHash('sha256').update(seed).digest('hex').slice(0, 24);
   const appointmentToken = String(appointmentId || '').replace(/-/g, '').slice(0, 8) || 'appt';
   return `${action}-${appointmentToken}-${digest}`;
+}
+
+async function findFinancialEventByIdempotencyKey(idempotencyKey) {
+  if (!idempotencyKey) return null;
+  const { data, error } = await supabaseAdmin
+    .from('appointment_financial_events')
+    .select('*')
+    .eq('idempotency_key', idempotencyKey)
+    .maybeSingle();
+  if (error) throw error;
+  return data || null;
+}
+
+async function logNotificationFailure({ customerId, appointmentId, channel, body }) {
+  if (!customerId || !appointmentId) return;
+  try {
+    await logClientMessage({
+      customerId,
+      appointmentId,
+      direction: 'admin_to_customer',
+      channel,
+      body,
+      source: 'system',
+      status: 'failed',
+    });
+  } catch (error) {
+    console.error('[bookingActions] notification failure log failed', { appointmentId, channel, error: error.message });
+  }
 }
 
 async function loadAppointment(appointmentId) {
@@ -102,30 +134,42 @@ async function notifyCustomerStatus(appointment, services, nextStatus, context =
   if (nextStatus === 'confirmed') {
     const sms = context.confirmationMessageOverride
       || `Your appointment with Nails By Brittney is confirmed for ${date} at ${time}, for ${serviceList}. ${appointment.estimated_total_text}. Estimated appointment length: ${formatDuration(appointment.total_duration_minutes)}.`;
-    if (canSendSms(preference)) await sendSms(appointment.customers.phone, sms, { type: `booking_${nextStatus}`, preference });
-    else logSmsSkipped({ type: `booking_${nextStatus}`, to: appointment.customers.phone, preference, reason: 'preference_not_sms' });
-    await sendBookingConfirmedEmail({ customer: appointment.customers, appointment, services });
+    if (canSendSms(preference)) {
+      const sent = await sendSms(appointment.customers.phone, sms, { type: `booking_${nextStatus}`, preference });
+      if (!sent) await logNotificationFailure({ customerId: appointment.customers.id, appointmentId: appointment.id, channel: 'sms', body: `SMS delivery may have failed for booking ${nextStatus}. Please contact the customer directly if needed.` });
+    } else logSmsSkipped({ type: `booking_${nextStatus}`, to: appointment.customers.phone, preference, reason: 'preference_not_sms' });
+    const emailed = await sendBookingConfirmedEmail({ customer: appointment.customers, appointment, services });
+    if (!emailed) await logNotificationFailure({ customerId: appointment.customers.id, appointmentId: appointment.id, channel: 'email', body: `Email delivery may have failed for booking ${nextStatus}. Please contact the customer directly if needed.` });
   }
 
   if (nextStatus === 'declined') {
     const sms = `Sorry, the appointment time you requested is no longer available. Please choose another available time here: ${BOOKING_LINK}`;
-    if (canSendSms(preference)) await sendSms(appointment.customers.phone, sms, { type: `booking_${nextStatus}`, preference });
-    else logSmsSkipped({ type: `booking_${nextStatus}`, to: appointment.customers.phone, preference, reason: 'preference_not_sms' });
-    await sendBookingDeclinedEmail({ customer: appointment.customers, appointment, services });
+    if (canSendSms(preference)) {
+      const sent = await sendSms(appointment.customers.phone, sms, { type: `booking_${nextStatus}`, preference });
+      if (!sent) await logNotificationFailure({ customerId: appointment.customers.id, appointmentId: appointment.id, channel: 'sms', body: `SMS delivery may have failed for booking ${nextStatus}. Please contact the customer directly if needed.` });
+    } else logSmsSkipped({ type: `booking_${nextStatus}`, to: appointment.customers.phone, preference, reason: 'preference_not_sms' });
+    const emailed = await sendBookingDeclinedEmail({ customer: appointment.customers, appointment, services });
+    if (!emailed) await logNotificationFailure({ customerId: appointment.customers.id, appointmentId: appointment.id, channel: 'email', body: `Email delivery may have failed for booking ${nextStatus}. Please contact the customer directly if needed.` });
   }
 
   if (nextStatus === 'cancelled') {
     const sms = `Your appointment has been cancelled. Please choose another available time here: ${BOOKING_LINK}`;
-    if (canSendSms(preference)) await sendSms(appointment.customers.phone, sms, { type: `booking_${nextStatus}`, preference });
-    else logSmsSkipped({ type: `booking_${nextStatus}`, to: appointment.customers.phone, preference, reason: 'preference_not_sms' });
-    await sendBookingCancelledEmail({ customer: appointment.customers, appointment, services });
+    if (canSendSms(preference)) {
+      const sent = await sendSms(appointment.customers.phone, sms, { type: `booking_${nextStatus}`, preference });
+      if (!sent) await logNotificationFailure({ customerId: appointment.customers.id, appointmentId: appointment.id, channel: 'sms', body: `SMS delivery may have failed for booking ${nextStatus}. Please contact the customer directly if needed.` });
+    } else logSmsSkipped({ type: `booking_${nextStatus}`, to: appointment.customers.phone, preference, reason: 'preference_not_sms' });
+    const emailed = await sendBookingCancelledEmail({ customer: appointment.customers, appointment, services });
+    if (!emailed) await logNotificationFailure({ customerId: appointment.customers.id, appointmentId: appointment.id, channel: 'email', body: `Email delivery may have failed for booking ${nextStatus}. Please contact the customer directly if needed.` });
   }
 
   if (nextStatus === 'expired') {
     const sms = `Your appointment request could not be confirmed in time and has been released. Please choose another available time here: ${BOOKING_LINK}`;
-    if (canSendSms(preference)) await sendSms(appointment.customers.phone, sms, { type: `booking_${nextStatus}`, preference });
-    else logSmsSkipped({ type: `booking_${nextStatus}`, to: appointment.customers.phone, preference, reason: 'preference_not_sms' });
-    await sendBookingExpiredEmail({ customer: appointment.customers, appointment, services });
+    if (canSendSms(preference)) {
+      const sent = await sendSms(appointment.customers.phone, sms, { type: `booking_${nextStatus}`, preference });
+      if (!sent) await logNotificationFailure({ customerId: appointment.customers.id, appointmentId: appointment.id, channel: 'sms', body: `SMS delivery may have failed for booking ${nextStatus}. Please contact the customer directly if needed.` });
+    } else logSmsSkipped({ type: `booking_${nextStatus}`, to: appointment.customers.phone, preference, reason: 'preference_not_sms' });
+    const emailed = await sendBookingExpiredEmail({ customer: appointment.customers, appointment, services });
+    if (!emailed) await logNotificationFailure({ customerId: appointment.customers.id, appointmentId: appointment.id, channel: 'email', body: `Email delivery may have failed for booking ${nextStatus}. Please contact the customer directly if needed.` });
   }
 }
 
@@ -291,6 +335,9 @@ export async function chargeAppointment({
     percentBasis ?? 'custom',
   );
 
+  const existingEvent = await findFinancialEventByIdempotencyKey(idempotencyKey);
+  if (existingEvent) return existingEvent;
+
   const charge = await chargeCardOnFile({
     appointmentId,
     squareCustomerId: appointment.customers.square_customer_id,
@@ -317,13 +364,13 @@ export async function chargeAppointment({
   await logAudit(appointmentId, `charge_${target}`, initiatedBy, note, commandText || null);
 
   const { services } = await loadAppointment(appointmentId);
-  const preference = appointment.customers.communication_preference || 'both';
-  await sendChargeAppliedEmail({
+  const emailed = await sendChargeAppliedEmail({
     customer: appointment.customers,
     appointment,
     services,
     amountCents,
   });
+  if (!emailed) await logNotificationFailure({ customerId: appointment.customers.id, appointmentId, channel: 'email', body: 'Payment email delivery may have failed. Please contact the customer directly if needed.' });
 
   return event;
 }
@@ -349,7 +396,7 @@ export async function refundAppointment({ appointmentId, target, percentOverride
 
   const { data: refunds } = await supabaseAdmin
     .from('appointment_financial_events')
-    .select('amount_cents')
+    .select('amount_cents, related_event_id')
     .eq('appointment_id', appointmentId)
     .eq('event_type', type.refundType)
     .eq('status', 'succeeded');
@@ -368,51 +415,88 @@ export async function refundAppointment({ appointmentId, target, percentOverride
   if (refundCents <= 0) throw new Error('Refund amount must be greater than zero.');
   if (refundCents > refundable) throw new Error('Refund amount cannot exceed the refundable balance.');
 
-  const latestCharge = [...chargeEvents].reverse().find((item) => item.processor_reference);
-  if (!latestCharge) throw new Error('Cannot refund because no processor payment reference was stored for the original charge.');
+  const refundedByCharge = new Map();
+  let unlinkedRefundedCents = 0;
+  for (const refund of refunds || []) {
+    const amount = finiteNumber(refund.amount_cents);
+    if (refund.related_event_id) refundedByCharge.set(refund.related_event_id, (refundedByCharge.get(refund.related_event_id) || 0) + amount);
+    else unlinkedRefundedCents += amount;
+  }
 
-  const idempotencyKey = buildSquareIdempotencyKey(
-    'refund',
-    appointmentId,
-    type.refundType,
-    refundCents,
-    percentOverride ?? 'full',
-  );
+  const refundableCharges = [];
+  for (const charge of chargeEvents) {
+    if (!charge.processor_reference) continue;
+    const linkedRefunded = refundedByCharge.get(charge.id) || 0;
+    const unlinkedApplied = Math.min(unlinkedRefundedCents, Math.max(0, finiteNumber(charge.amount_cents) - linkedRefunded));
+    unlinkedRefundedCents -= unlinkedApplied;
+    const remaining = Math.max(0, finiteNumber(charge.amount_cents) - linkedRefunded - unlinkedApplied);
+    if (remaining > 0) refundableCharges.push({ charge, remaining });
+  }
 
-  const refund = await refundPayment({
-    paymentId: latestCharge.processor_reference,
-    amountCents: refundCents,
-    reason: note || `${type.refundType} for appointment ${appointmentId}`,
-    idempotencyKey,
-  });
+  if (!refundableCharges.length) throw new Error('Cannot refund because no refundable processor payment reference was stored for the original charge.');
 
-  const event = await createFinancialEvent({
-    appointmentId,
-    eventType: type.refundType,
-    amountCents: refundCents,
-    percentBasis: percentOverride ?? null,
-    processorReference: refund.refundId,
-    status: 'succeeded',
-    initiatedBy,
-    note,
-    commandSource: commandText,
-    relatedEventId: latestCharge.id,
-    idempotencyKey,
-  });
+  let remainingRefundCents = refundCents;
+  const createdEvents = [];
+
+  for (const item of refundableCharges) {
+    if (remainingRefundCents <= 0) break;
+    const allocationCents = Math.min(remainingRefundCents, item.remaining);
+    const idempotencyKey = buildSquareIdempotencyKey(
+      'refund',
+      appointmentId,
+      type.refundType,
+      allocationCents,
+      percentOverride ?? 'full',
+      item.charge.id,
+    );
+
+    const existingEvent = await findFinancialEventByIdempotencyKey(idempotencyKey);
+    if (existingEvent) {
+      createdEvents.push(existingEvent);
+      remainingRefundCents -= allocationCents;
+      continue;
+    }
+
+    const refund = await refundPayment({
+      paymentId: item.charge.processor_reference,
+      amountCents: allocationCents,
+      reason: note || `${type.refundType} for appointment ${appointmentId}`,
+      idempotencyKey,
+    });
+
+    const event = await createFinancialEvent({
+      appointmentId,
+      eventType: type.refundType,
+      amountCents: allocationCents,
+      percentBasis: percentOverride ?? null,
+      processorReference: refund.refundId,
+      status: 'succeeded',
+      initiatedBy,
+      note,
+      commandSource: commandText,
+      relatedEventId: item.charge.id,
+      idempotencyKey,
+    });
+
+    createdEvents.push(event);
+    remainingRefundCents -= allocationCents;
+  }
+
+  if (remainingRefundCents > 0) throw new Error('Refund amount exceeds the refundable balance on linked Square payments.');
 
   await updatePaymentStatusFields(appointmentId, target);
   await logAudit(appointmentId, `refund_${target}`, initiatedBy, note, commandText || null);
 
   const { appointment, services } = await loadAppointment(appointmentId);
-  const preference = appointment.customers.communication_preference || 'both';
-  await sendRefundIssuedEmail({
+  const emailed = await sendRefundIssuedEmail({
     customer: appointment.customers,
     appointment,
     services,
     amountCents: refundCents,
   });
+  if (!emailed) await logNotificationFailure({ customerId: appointment.customers.id, appointmentId, channel: 'email', body: 'Refund email delivery may have failed. Please contact the customer directly if needed.' });
 
-  return event;
+  return createdEvents[0];
 }
 
 export async function getAppointmentStatusSummaryByRequestNumber(requestNumber) {
