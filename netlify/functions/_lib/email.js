@@ -7,6 +7,7 @@ const BRAND_NAME = 'Nails by Brittney';
 const LOGO_URL = 'https://nailsbybrittney.com/assets/logo-BmAccaIs.png';
 const SMS_DISCLOSURE = 'By texting Nails by Brittney, you consent to receive appointment-related SMS responses. Reply STOP to opt out.';
 const EMAIL_SUPPORT_PHONE_DISPLAY = '(252) 888-7757';
+const FASTEST_RESPONSE_LINE = `For fastest response, text us at ${EMAIL_SUPPORT_PHONE_DISPLAY}.`;
 const resend = process.env.RESEND_API_KEY
   ? new Resend(process.env.RESEND_API_KEY)
   : null;
@@ -56,7 +57,7 @@ function buildTemplate({ heading, greetingName, introLine, detailLines = [], clo
   const disclosureText = includeSmsDisclosure ? SMS_DISCLOSURE : '';
 
   return {
-    text: [greeting, heading, introLine, ...detailLines, closingLine, `Questions? Text us at ${EMAIL_SUPPORT_PHONE_DISPLAY}.`, disclosureText].filter(Boolean).join('\n\n'),
+    text: [greeting, heading, introLine, ...detailLines, closingLine, FASTEST_RESPONSE_LINE, disclosureText].filter(Boolean).join('\n\n'),
     html: `<!doctype html>
 <html>
   <body>
@@ -64,7 +65,7 @@ function buildTemplate({ heading, greetingName, introLine, detailLines = [], clo
     <p>${greeting}</p>
     <h2>${heading}</h2>
     ${htmlLines}
-    <p>Questions? Text us at ${EMAIL_SUPPORT_PHONE_DISPLAY}.</p>
+    <p>${FASTEST_RESPONSE_LINE}</p>
     ${includeSmsDisclosure ? `<p style="font-size:12px;color:#666;line-height:1.4;">${SMS_DISCLOSURE}</p>` : ''}
     <p>Thank you,<br/>${BRAND_NAME}</p>
   </body>

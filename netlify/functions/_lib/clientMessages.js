@@ -1,22 +1,9 @@
 import { supabaseAdmin } from './supabaseAdmin.js';
-import { sendEmail } from './email.js';
-import { canSendEmail, canSendSms, logSmsSkipped, sendSms } from './notifications.js';
+import { canSendSms, logSmsSkipped, sendSms } from './notifications.js';
 
 
-function escapeHtml(value = '') {
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-function normalizeChannel(flags) {
-  if (flags.sms && flags.email) return 'both';
-  if (flags.sms) return 'sms';
-  if (flags.email) return 'email';
-  return 'none';
+function normalizeSmsChannel(sentSms) {
+  return sentSms ? 'sms' : 'none';
 }
 
 export async function logClientMessage({ customerId, appointmentId = null, direction, channel, body, source = 'dashboard', status = 'sent' }) {
@@ -60,7 +47,7 @@ export async function sendAdminClientMessage({ customer, appointment = null, bod
   if (!customer?.id) throw new Error('Customer is required.');
 
   const preference = customer.communication_preference || 'both';
-  const sent = { sms: false, email: false };
+  const sent = { sms: false };
   const failures = [];
 
   if (canSendSms(preference)) {
@@ -72,30 +59,10 @@ export async function sendAdminClientMessage({ customer, appointment = null, bod
     }
   } else {
     logSmsSkipped({ type: 'admin_client_message', to: customer.phone || null, preference, reason: 'preference_not_sms' });
+    failures.push('SMS: customer opted out');
   }
 
-  if (canSendEmail(preference)) {
-    try {
-      if (!customer.email) throw new Error('missing_customer_email');
-      const subject = appointment?.booking_request_number
-        ? `Message about your Nails by Brittney appointment #${String(appointment.booking_request_number).padStart(3, '0').slice(-3)}`
-        : 'Message from Nails by Brittney';
-      const safeBody = escapeHtml(cleanBody).replace(/\n/g, '<br />');
-      const ok = await sendEmail({
-        type: 'client_message',
-        to: customer.email,
-        subject,
-        text: cleanBody,
-        html: `<!doctype html><html><body><p>Hi ${escapeHtml(customer.first_name || 'there')},</p><p>${safeBody}</p><p>Thank you,<br/>Nails by Brittney</p></body></html>`,
-      });
-      sent.email = Boolean(ok);
-      if (!ok) failures.push('Email: failed');
-    } catch (error) {
-      failures.push(`Email: ${error.message || 'failed'}`);
-    }
-  }
-
-  const channel = normalizeChannel(sent);
+  const channel = normalizeSmsChannel(sent.sms);
   const status = channel === 'none' ? 'failed' : failures.length ? 'partial' : 'sent';
   const message = await logClientMessage({
     customerId: customer.id,

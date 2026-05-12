@@ -388,6 +388,7 @@ function BookingSection({ services }) {
           <option value="email">Email only</option>
         </select>
       </label>
+      {form.communicationPreference === 'email' && <div className="communication-email-warning" role="note"><p>Note: by opting out of SMS communications, you may not receive important real-time updates about your appointment.</p></div>}
       <div className="communication-disclaimer">
         <p>By submitting this form and selecting SMS communications, you agree to receive appointment-related text messages from Nails by Brittney. Message &amp; data rates may apply. Reply STOP to opt out.</p>
         <p><Link to="/privacy-policy">Privacy Policy</Link> • <Link to="/terms">Terms &amp; Conditions</Link></p>

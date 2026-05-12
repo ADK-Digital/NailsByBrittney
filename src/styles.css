@@ -1221,6 +1221,38 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
   box-shadow:0 10px 22px rgba(17,32,69,.07);
 }
 
+
+.sms-opt-out-card{
+  border-style:dashed;
+  background:linear-gradient(180deg,rgba(255,255,255,.82),rgba(247,242,250,.74));
+}
+
+.sms-opt-out-message{
+  border:1px solid rgba(116,81,146,.14);
+  border-radius:15px;
+  background:rgba(255,255,255,.62);
+  padding:.78rem .9rem;
+  color:#3a3652;
+}
+
+.sms-opt-out-message p{
+  margin:0;
+  line-height:1.45;
+}
+
+.sms-opt-out-message p + p{margin-top:.45rem}
+
+.sms-opt-out-message a{
+  color:var(--accent);
+  font-weight:800;
+  text-decoration-thickness:1px;
+  text-underline-offset:3px;
+}
+
+.message-helper-text{
+  font-size:.76rem!important;
+}
+
 .message-thread-card.enlarged{
   position:sticky;
   top:1rem;
@@ -1415,6 +1447,22 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
 }
 
 .communication-disclaimer p + p{margin-top:.28rem}
+
+
+.communication-email-warning{
+  border:1px solid rgba(116,81,146,.16);
+  border-radius:14px;
+  background:rgba(255,255,255,.58);
+  padding:.64rem .8rem;
+  margin:-.15rem 0 .45rem;
+  color:#5c5268;
+  font-size:.85rem;
+  line-height:1.45;
+}
+
+.communication-email-warning p{
+  margin:0;
+}
 
 .communication-disclaimer a,
 .footer a,
