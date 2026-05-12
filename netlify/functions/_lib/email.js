@@ -2,11 +2,11 @@ import { Resend } from 'resend';
 import { canSendEmail } from './notifications.js';
 import { BOOKING_LINK } from './config.js';
 import { formatDuration } from './time.js';
-import { getBusinessPhoneDisplay } from './phone.js';
 
 const BRAND_NAME = 'Nails by Brittney';
 const LOGO_URL = 'https://nailsbybrittney.com/assets/logo-BmAccaIs.png';
 const SMS_DISCLOSURE = 'By texting Nails by Brittney, you consent to receive appointment-related SMS responses. Reply STOP to opt out.';
+const EMAIL_SUPPORT_PHONE_DISPLAY = '(252) 888-7757';
 const resend = process.env.RESEND_API_KEY
   ? new Resend(process.env.RESEND_API_KEY)
   : null;
@@ -50,14 +50,13 @@ function createAppointmentSummary({ appointment, services }) {
 }
 
 function buildTemplate({ heading, greetingName, introLine, detailLines = [], closingLine, includeSmsDisclosure = false }) {
-  const supportTextPhone = getBusinessPhoneDisplay();
   const greeting = greetingName ? `Hi ${greetingName},` : 'Hi there,';
   const htmlLines = [introLine, ...detailLines, closingLine].filter(Boolean).map((line) => `<p>${line}</p>`).join('');
 
   const disclosureText = includeSmsDisclosure ? SMS_DISCLOSURE : '';
 
   return {
-    text: [greeting, heading, introLine, ...detailLines, closingLine, `Questions? Text us at ${supportTextPhone}.`, disclosureText].filter(Boolean).join('\n\n'),
+    text: [greeting, heading, introLine, ...detailLines, closingLine, `Questions? Text us at ${EMAIL_SUPPORT_PHONE_DISPLAY}.`, disclosureText].filter(Boolean).join('\n\n'),
     html: `<!doctype html>
 <html>
   <body>
@@ -65,7 +64,7 @@ function buildTemplate({ heading, greetingName, introLine, detailLines = [], clo
     <p>${greeting}</p>
     <h2>${heading}</h2>
     ${htmlLines}
-    <p>Questions? Text us at ${supportTextPhone}.</p>
+    <p>Questions? Text us at ${EMAIL_SUPPORT_PHONE_DISPLAY}.</p>
     ${includeSmsDisclosure ? `<p style="font-size:12px;color:#666;line-height:1.4;">${SMS_DISCLOSURE}</p>` : ''}
     <p>Thank you,<br/>${BRAND_NAME}</p>
   </body>
