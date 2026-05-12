@@ -1506,3 +1506,31 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
   .legal-hero{padding:3rem 0 1rem}
   .legal-card{border-radius:20px}
 }
+
+.notification-warning-pill,
+.admin-warning-banner{
+  border:1px solid rgba(126,37,49,.22);
+  background:rgba(255,246,230,.86);
+  color:#7e2531;
+}
+
+.notification-warning-pill{
+  display:inline-flex;
+  width:max-content;
+  border-radius:999px;
+  padding:.18rem .55rem;
+  font-size:.78rem;
+  font-weight:800;
+}
+
+.admin-warning-banner{
+  border-radius:14px;
+  padding:.7rem .85rem;
+  margin:.65rem 0;
+  font-size:.9rem;
+}
+
+.admin-warning-banner ul{
+  margin:.35rem 0 0 1rem;
+  padding:0;
+}

@@ -141,12 +141,6 @@ async function handleAppointmentAction(payload) {
   if (payload.action === 'charge') {
     const amountDollars = payload.amountDollars ?? payload.amount;
     const percentOverride = payload.percentOverride ?? payload.percent;
-    console.log('[admin-appointments] charge routing', {
-      appointmentId: payload.appointmentId,
-      target: payload.target,
-      hasAmount: amountDollars !== undefined && amountDollars !== null && amountDollars !== '',
-      percentOverride,
-    });
     const event = await chargeAppointment({
       appointmentId: payload.appointmentId,
       target: payload.target,
@@ -214,19 +208,25 @@ export const handler = async (event) => {
         return csvResponse(archive.file_name, archive.csv_content);
       }
 
-      const { data: appointments } = await supabaseAdmin
+      const { data: appointments, error: appointmentsError } = await supabaseAdmin
         .from('appointments')
-        .select('*, customers(*), appointment_services(*), appointment_financial_events(*)')
+        .select('*, customers(*), appointment_services(*), appointment_financial_events(*), client_messages(*)')
         .is('archived_at', null)
         .order('start_at', { ascending: true });
-      const { data: customers } = await supabaseAdmin
+      if (appointmentsError) throw appointmentsError;
+
+      const { data: customers, error: customersError } = await supabaseAdmin
         .from('customers')
         .select('*, customer_notes(*)')
         .order('updated_at', { ascending: false });
-      const { data: blockedTimes } = await supabaseAdmin
+      if (customersError) throw customersError;
+
+      const { data: blockedTimes, error: blockedTimesError } = await supabaseAdmin
         .from('blocked_times')
         .select('*')
         .order('start_at', { ascending: true });
+      if (blockedTimesError) throw blockedTimesError;
+
       return json(200, { appointments: appointments || [], customers: customers || [], blockedTimes: blockedTimes || [] });
     }
 

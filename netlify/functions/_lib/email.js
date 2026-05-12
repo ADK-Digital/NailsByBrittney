@@ -116,17 +116,17 @@ async function sendBookingEmail({ type, customer, appointment, subject, heading,
 
     if (!shouldSendEmail) {
       console.log('EMAIL SEND', { type, to: customer?.email || null, success: false, error: 'preference_not_email' });
-      return;
+      return true;
     }
 
     if (!customer?.email) {
       console.log('EMAIL SEND', { type, to: null, success: false, error: 'missing_customer_email' });
-      return;
+      return false;
     }
 
     if (!appointment?.start_at) {
       console.log('EMAIL SEND', { type, to: customer.email, success: false, error: 'missing_appointment_start_at' });
-      return;
+      return false;
     }
 
     const { text, html } = buildTemplate({
@@ -138,9 +138,10 @@ async function sendBookingEmail({ type, customer, appointment, subject, heading,
       includeSmsDisclosure,
     });
 
-    await sendEmail({ type, to: customer.email, subject, html, text });
+    return Boolean(await sendEmail({ type, to: customer.email, subject, html, text }));
   } catch (err) {
-    // Intentionally silent: sendEmail handles error logging.
+    console.log('EMAIL SEND', { type, to: customer?.email || null, success: false, error: err?.message || 'unknown_error' });
+    return false;
   }
 }
 

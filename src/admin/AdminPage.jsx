@@ -367,7 +367,13 @@ function isSmsThreadEnabled(preference) {
 
 function isSmsThreadMessage(message) {
   const channel = String(message?.channel || '').toLowerCase();
-  return channel === 'sms' || channel === 'both';
+  return channel === 'sms' || channel === 'both' || message?.status === 'failed';
+}
+
+function getAppointmentNotificationWarnings(appointment) {
+  return (appointment.client_messages || [])
+    .filter((message) => message.status === 'failed')
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 }
 
 function MessageThread({ customer, appointment = null }) {
@@ -503,6 +509,7 @@ function AppointmentCard({ appointment, onRefresh }) {
   const [serviceRefundAmount, setServiceRefundAmount] = useState(serviceRefundableDollars);
   const customerName = `${appointment.customers?.first_name || ''} ${appointment.customers?.last_name || ''}`.trim() || 'Customer';
   const appointmentDateTime = formatAppointmentDateTime(appointment.start_at);
+  const notificationWarnings = getAppointmentNotificationWarnings(appointment);
 
   useEffect(() => {
     setServiceRefundAmount(serviceRefundableDollars);
@@ -538,6 +545,7 @@ function AppointmentCard({ appointment, onRefresh }) {
         <strong>{appointmentDateTime}</strong>
         <span className="appointment-customer">{customerName}</span>
         <span className="appointment-booking-number">Booking #{formatBookingNumber(appointment.booking_request_number)}</span>
+        {!!notificationWarnings.length && <span className="notification-warning-pill">Communication warning</span>}
       </span>
       <span className="appointment-toggle-status">
         <span className={statusClassName(appointment.status)}><span>Status</span>{formatAdminStatus(appointment.status)}</span>
@@ -561,6 +569,10 @@ function AppointmentCard({ appointment, onRefresh }) {
         </div>
       </div>
       <p className="muted">Communication preference: {formatCommunicationPreference(appointment.customers?.communication_preference)} • Card: {appointment.customers?.card_on_file_status || 'missing'} {appointment.customers?.card_brand ? `(${appointment.customers.card_brand} ••••${appointment.customers.card_last4 || ''})` : ''}</p>
+      {!!notificationWarnings.length && <div className="admin-warning-banner" role="status">
+        <strong>Customer communication may not have been delivered.</strong>
+        <ul>{notificationWarnings.slice(0, 3).map((message) => <li key={message.id}>{message.body}</li>)}</ul>
+      </div>}
 
       <MessageThread customer={appointment.customers} appointment={appointment} />
 
@@ -695,6 +707,7 @@ export default function AdminPage() {
   const [archivesOpen, setArchivesOpen] = useState(false);
   const [appointmentArchives, setAppointmentArchives] = useState([]);
   const [addBlockOpen, setAddBlockOpen] = useState(false);
+  const [bookingAdminError, setBookingAdminError] = useState('');
   const [visibleOptionalAppointmentStatuses, setVisibleOptionalAppointmentStatuses] = useState(() => new Set());
 
   const filteredAppointments = useMemo(() => appointments.filter((appointment) => shouldShowAppointment(appointment, visibleOptionalAppointmentStatuses)), [appointments, visibleOptionalAppointmentStatuses]);
@@ -738,10 +751,16 @@ export default function AdminPage() {
   }, [customerPage, customerPageCount]);
 
   const refreshBookingAdmin = async () => {
-    const data = await fetchAdminAppointments();
-    setAppointments(data.appointments || []);
-    setCustomers(data.customers || []);
-    setBlockedTimes(data.blockedTimes || []);
+    setBookingAdminError('');
+    try {
+      const data = await fetchAdminAppointments();
+      setAppointments(data.appointments || []);
+      setCustomers(data.customers || []);
+      setBlockedTimes(data.blockedTimes || []);
+    } catch (error) {
+      setBookingAdminError('Appointment scheduling is temporarily unavailable. Please try again later.');
+      throw error;
+    }
   };
 
   const refreshAppointmentArchives = async () => {
@@ -806,11 +825,7 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (hasSupabaseConfig && !session) return;
-    refreshBookingAdmin().catch(() => {
-      setAppointments([]);
-      setCustomers([]);
-      setBlockedTimes([]);
-    });
+    refreshBookingAdmin().catch(() => {});
   }, [session]);
 
   const signedIn = useMemo(() => (!hasSupabaseConfig ? true : Boolean(session)), [session]);
@@ -900,7 +915,8 @@ export default function AdminPage() {
       {adminNavItems.map(([id, label]) => <a key={id} href={`#${id}`}>{label}</a>)}
     </nav>
 
-    <section id="admin-appointments" className="admin-section admin-section-appointments"><h2>Appointments</h2><div className="admin-section-actions"><button className="btn" onClick={refreshBookingAdmin}>Refresh</button></div>
+    <section id="admin-appointments" className="admin-section admin-section-appointments"><h2>Appointments</h2><div className="admin-section-actions"><button className="btn" onClick={() => refreshBookingAdmin().catch(() => {})}>Refresh</button></div>
+      {bookingAdminError && <p className="admin-message error" role="alert">{bookingAdminError}</p>}
       <div className="appointment-filter-panel" aria-label="Appointment status filters">
         <span className="appointment-filter-label">Show hidden statuses:</span>
         {OPTIONAL_APPOINTMENT_STATUSES.map((status) => <label key={status} className={`appointment-filter-pill${visibleOptionalAppointmentStatuses.has(status) ? ' active' : ''}`}>
@@ -908,7 +924,8 @@ export default function AdminPage() {
           {formatAdminStatus(status)}
         </label>)}
       </div>
-      <div className="admin-list">{pagedAppointments.map((appointment) => <AppointmentCard key={appointment.id} appointment={appointment} onRefresh={refreshBookingAdmin} />)}</div>
+      {!bookingAdminError && <div className="admin-list">{pagedAppointments.map((appointment) => <AppointmentCard key={appointment.id} appointment={appointment} onRefresh={refreshBookingAdmin} />)}</div>}
+      {!bookingAdminError && !sortedAppointments.length && <p className="muted">No appointments match the selected filters.</p>}
       {sortedAppointments.length > APPOINTMENTS_PER_PAGE && <div className="appointment-pagination" aria-label="Appointment pagination">
         <button className="admin-secondary-button" type="button" onClick={() => setAppointmentPage((page) => Math.max(0, page - 1))} disabled={currentAppointmentPage === 0}>‹</button>
         <span>{sortedAppointments.length ? appointmentPageStart + 1 : 0}-{appointmentPageEnd} of {sortedAppointments.length}</span>

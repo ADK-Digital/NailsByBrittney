@@ -11,8 +11,6 @@ async function getAdminAuthHeaders(headers = {}) {
 }
 
 export async function fetchAvailability(serviceIds) {
-  console.log('fetchAvailability called', serviceIds);
-
   const params = new URLSearchParams();
   serviceIds.forEach((serviceId) => params.append('serviceIds', serviceId));
 
@@ -40,7 +38,9 @@ export async function fetchAdminAppointments() {
   const res = await fetch('/.netlify/functions/admin-appointments', {
     headers: await getAdminAuthHeaders(),
   });
-  return res.json();
+  const body = await res.json();
+  if (!res.ok || body.error) throw new Error(body.error || 'Failed to fetch admin appointments');
+  return body;
 }
 
 export async function fetchArchivedAppointments() {
@@ -79,10 +79,6 @@ export async function downloadArchivedAppointment(fileName) {
 }
 
 async function postAdminAppointmentAction(payload) {
-  if (import.meta.env.VITE_ADMIN_DEBUG === 'true') {
-    console.log('[admin-appointments] request', payload);
-  }
-
   const res = await fetch('/.netlify/functions/admin-appointments', {
     method: 'POST',
     headers: await getAdminAuthHeaders({ 'Content-Type': 'application/json' }),
