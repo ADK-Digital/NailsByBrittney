@@ -245,6 +245,38 @@ function formatBookingNumber(value) {
   return String(numeric).padStart(3, '0').slice(-3);
 }
 
+
+function formatEstimatedTotal(appointment) {
+  if (appointment.estimated_total_text) return appointment.estimated_total_text;
+
+  const numeric = Number(appointment.estimated_total_min);
+  if (!Number.isFinite(numeric)) return 'Estimated total unavailable';
+
+  const formatted = Number.isInteger(numeric) ? String(numeric) : numeric.toFixed(2);
+  return `$${formatted}`;
+}
+
+function formatEstimatedDuration(minutes) {
+  const totalMinutes = Number(minutes);
+  if (!Number.isFinite(totalMinutes) || totalMinutes <= 0) return 'Estimated duration unavailable';
+
+  const roundedMinutes = Math.round(totalMinutes);
+  const hours = Math.floor(roundedMinutes / 60);
+  const remainderMinutes = roundedMinutes % 60;
+
+  if (!hours) return `${remainderMinutes} min`;
+
+  const hourLabel = `${hours} ${hours === 1 ? 'hour' : 'hours'}`;
+  if (!remainderMinutes) return hourLabel;
+  return `${hourLabel} ${remainderMinutes} min`;
+}
+
+function getAppointmentServiceNames(appointment) {
+  return (appointment.appointment_services || [])
+    .map((service) => service.service_name_snapshot || service.name || service.service_name)
+    .filter(Boolean);
+}
+
 function reorderItems(items, fromIndex, toIndex) {
   if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0 || fromIndex >= items.length || toIndex >= items.length) return items;
   const nextItems = [...items];
@@ -509,6 +541,10 @@ function AppointmentCard({ appointment, onRefresh }) {
   const [serviceRefundAmount, setServiceRefundAmount] = useState(serviceRefundableDollars);
   const customerName = `${appointment.customers?.first_name || ''} ${appointment.customers?.last_name || ''}`.trim() || 'Customer';
   const appointmentDateTime = formatAppointmentDateTime(appointment.start_at);
+  const appointmentServiceNames = getAppointmentServiceNames(appointment);
+  const appointmentServiceList = appointmentServiceNames.length ? appointmentServiceNames.join(', ') : 'Service details unavailable';
+  const estimatedTotal = formatEstimatedTotal(appointment);
+  const estimatedDuration = formatEstimatedDuration(appointment.total_duration_minutes);
   const notificationWarnings = getAppointmentNotificationWarnings(appointment);
 
   useEffect(() => {
@@ -558,6 +594,11 @@ function AppointmentCard({ appointment, onRefresh }) {
         <div className="appointment-title appointment-title-expanded">
           <strong>{appointmentDateTime}</strong>
           <span className="appointment-customer">{customerName}</span>
+          <span className="appointment-estimate-details">
+            <span><b>Services:</b> {appointmentServiceList}</span>
+            <span><b>Estimated Total:</b> {estimatedTotal}</span>
+            <span><b>Estimated duration:</b> {estimatedDuration}</span>
+          </span>
           <span className="appointment-booking-number">Booking #{formatBookingNumber(appointment.booking_request_number)}</span>
         </div>
         <div className="appointment-meta" aria-label="Booking status details">
