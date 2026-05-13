@@ -33,7 +33,7 @@ const OPTIONAL_APPOINTMENT_STATUSES = ['completed', 'cancelled', 'declined', 'no
 const adminNavItems = [
   ['admin-appointments', 'Appointments'],
   ['admin-blocks', 'Blocked Times'],
-  ['admin-additional-availability', 'Additional Availability'],
+  ['admin-additional-availability', 'Additional Times'],
   ['admin-customers', 'Customers'],
   ['admin-testimonials', 'Testimonials'],
   ['admin-services', 'Services'],
@@ -1115,7 +1115,7 @@ export default function AdminPage() {
       <div className="blocked-time-list">{blockedTimes.map((block) => <div className="blocked-time-item" key={block.id}><span>{new Date(block.start_at).toLocaleString()} - {new Date(block.end_at).toLocaleString()} ({block.reason})</span> <AdminSecondaryButton onClick={async () => { await deleteBlockedTime(block.id); refreshBookingAdmin(); }}>Delete</AdminSecondaryButton></div>)}</div>
     </section>
 
-    <section id="admin-additional-availability" className="admin-section admin-section-blocks"><h2>Additional Availability</h2>
+    <section id="admin-additional-availability" className="admin-section admin-section-blocks"><h2>Additional Times</h2>
       <div className="admin-section-actions"><button className="btn" type="button" onClick={() => setAddAvailabilityOpen((open) => !open)}>{addAvailabilityOpen ? 'Close Add Availability' : 'Add Availability'}</button></div>
       {addAvailabilityOpen && <AddAvailabilityPanel onCreate={async (payload) => {
         const result = await createAdditionalAvailability(payload);
