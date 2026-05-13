@@ -40,7 +40,7 @@ Required core values:
 - `BRITTNEY_NOTIFICATION_PHONE`
 - `RESEND_API_KEY`
 - `RESEND_FROM_EMAIL` (required in production; must be a Resend-verified sender/domain)
-- `BOOKING_PUBLIC_BASE_URL`
+- `BOOKING_PUBLIC_BASE_URL=https://nailsbybrittney.com`
 
 Square production values:
 - `SQUARE_APPLICATION_ID`
@@ -61,6 +61,8 @@ Square sandbox/local testing values only:
 
 Do not leave sandbox Square values or `SQUARE_ALLOW_MOCK=true` in production, because production card-on-file and payment calls must use Square production credentials and `https://connect.squareup.com`.
 
+Customer-facing booking/status links are generated from `BOOKING_PUBLIC_BASE_URL`. Leave this set to `https://nailsbybrittney.com` in production; if it is missing, invalid, or accidentally set to a Netlify-generated/deploy-preview/internal host, outbound customer communications fall back to the production domain.
+
 ## Supabase setup
 1. Create a Supabase project.
 2. Run `supabase/schema.sql`.
@@ -71,7 +73,7 @@ Do not leave sandbox Square values or `SQUARE_ALLOW_MOCK=true` in production, be
 ## Twilio setup
 1. Buy/configure SMS-capable Twilio number.
 2. Set inbound webhook to:
-   `https://<your-site>/.netlify/functions/twilio-inbound`
+   `https://nailsbybrittney.com/.netlify/functions/twilio-inbound`
 3. Set `BRITTNEY_NOTIFICATION_PHONE` to Brittney’s authorized sender number for admin SMS commands.
 
 ## Resend setup
