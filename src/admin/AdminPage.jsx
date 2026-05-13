@@ -13,7 +13,9 @@ import {
 import {
   adminChargeAppointment,
   adminRefundAppointment,
+  createAdditionalAvailability,
   createBlockedTime,
+  deleteAdditionalAvailability,
   deleteBlockedTime,
   downloadArchivedAppointment,
   fetchAdminAppointments,
@@ -31,6 +33,7 @@ const OPTIONAL_APPOINTMENT_STATUSES = ['completed', 'cancelled', 'declined', 'no
 const adminNavItems = [
   ['admin-appointments', 'Appointments'],
   ['admin-blocks', 'Blocked Times'],
+  ['admin-additional-availability', 'Additional Availability'],
   ['admin-customers', 'Customers'],
   ['admin-testimonials', 'Testimonials'],
   ['admin-services', 'Services'],
@@ -178,10 +181,21 @@ function BlockDateTimeRow({ label, value, months, datesByMonth, timeOptions, onC
   </div>;
 }
 
-function AddBlockPanel({ onCreate }) {
+function AvailabilityWindowPanel({
+  onCreate,
+  startLabel,
+  endLabel,
+  invalidMessage,
+  successMessage,
+  errorMessage,
+  submitLabel,
+  busyLabel,
+  includeNote = false,
+}) {
   const initialRows = useMemo(() => buildInitialBlockRows(), []);
   const [start, setStart] = useState(initialRows.start);
   const [end, setEnd] = useState(initialRows.end);
+  const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
   const bookingDates = useMemo(() => buildBookingWindowDates(), []);
@@ -200,28 +214,57 @@ function AddBlockPanel({ onCreate }) {
     event.preventDefault();
     setMessage({ type: '', text: '' });
     if (isInvalid) {
-      setMessage({ type: 'error', text: 'Block end must be after block start.' });
+      setMessage({ type: 'error', text: invalidMessage });
       return;
     }
 
     setBusy(true);
     try {
-      await onCreate({ startAt: startDate.toISOString(), endAt: endDate.toISOString(), reason: 'Admin block' });
-      setMessage({ type: 'success', text: 'Blocked time created.' });
+      await onCreate({ startAt: startDate.toISOString(), endAt: endDate.toISOString(), note: note.trim() || null });
+      setMessage({ type: 'success', text: successMessage });
+      setNote('');
     } catch (error) {
-      setMessage({ type: 'error', text: error.message || 'Unable to create blocked time.' });
+      setMessage({ type: 'error', text: error.message || errorMessage });
     } finally {
       setBusy(false);
     }
   };
 
   return <form className="add-block-panel" onSubmit={submit}>
-    <BlockDateTimeRow label="Block start" value={start} months={months} datesByMonth={datesByMonth} timeOptions={timeOptions} onChange={setStart} />
-    <BlockDateTimeRow label="Block end" value={end} months={months} datesByMonth={datesByMonth} timeOptions={timeOptions} onChange={setEnd} />
-    {isInvalid && <p className="admin-message error" role="alert">Block end must be after block start.</p>}
+    <BlockDateTimeRow label={startLabel} value={start} months={months} datesByMonth={datesByMonth} timeOptions={timeOptions} onChange={setStart} />
+    <BlockDateTimeRow label={endLabel} value={end} months={months} datesByMonth={datesByMonth} timeOptions={timeOptions} onChange={setEnd} />
+    {includeNote && <label className="availability-note-field">Note / reason (optional)<textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder="Example: Friday openings" /></label>}
+    {isInvalid && <p className="admin-message error" role="alert">{invalidMessage}</p>}
     {message.text && <p className={`admin-message ${message.type}`} role="status">{message.text}</p>}
-    <button className="btn primary" type="submit" disabled={busy || isInvalid}>{busy ? 'Creating…' : 'Create Block'}</button>
+    <button className="btn primary" type="submit" disabled={busy || isInvalid}>{busy ? busyLabel : submitLabel}</button>
   </form>;
+}
+
+function AddBlockPanel({ onCreate }) {
+  return <AvailabilityWindowPanel
+    onCreate={async (payload) => onCreate({ ...payload, reason: 'Admin block' })}
+    startLabel="Block start"
+    endLabel="Block end"
+    invalidMessage="Block end must be after block start."
+    successMessage="Blocked time created."
+    errorMessage="Unable to create blocked time."
+    submitLabel="Create Block"
+    busyLabel="Creating…"
+  />;
+}
+
+function AddAvailabilityPanel({ onCreate }) {
+  return <AvailabilityWindowPanel
+    onCreate={onCreate}
+    startLabel="Availability start"
+    endLabel="Availability end"
+    invalidMessage="Availability end must be after availability start."
+    successMessage="Additional availability created."
+    errorMessage="Unable to create additional availability."
+    submitLabel="Create Availability"
+    busyLabel="Creating…"
+    includeNote
+  />;
 }
 
 const appointmentDateFormatter = new Intl.DateTimeFormat('en-US', {
@@ -819,6 +862,7 @@ export default function AdminPage() {
   const [appointments, setAppointments] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [blockedTimes, setBlockedTimes] = useState([]);
+  const [additionalAvailability, setAdditionalAvailability] = useState([]);
   const [selectedGalleryFiles, setSelectedGalleryFiles] = useState([]);
   const [galleryCaptionDraft, setGalleryCaptionDraft] = useState('');
   const [galleryUploadBusy, setGalleryUploadBusy] = useState(false);
@@ -831,6 +875,7 @@ export default function AdminPage() {
   const [archivesOpen, setArchivesOpen] = useState(false);
   const [appointmentArchives, setAppointmentArchives] = useState([]);
   const [addBlockOpen, setAddBlockOpen] = useState(false);
+  const [addAvailabilityOpen, setAddAvailabilityOpen] = useState(false);
   const [bookingAdminError, setBookingAdminError] = useState('');
   const [visibleOptionalAppointmentStatuses, setVisibleOptionalAppointmentStatuses] = useState(() => new Set());
 
@@ -882,6 +927,7 @@ export default function AdminPage() {
       setAppointments(data.appointments || []);
       setCustomers(data.customers || []);
       setBlockedTimes(data.blockedTimes || []);
+      setAdditionalAvailability(data.additionalAvailability || []);
     } catch (error) {
       setBookingAdminError('Appointment scheduling is temporarily unavailable. Please try again later.');
       throw error;
@@ -1067,6 +1113,16 @@ export default function AdminPage() {
         await refreshBookingAdmin();
       }} />}
       <div className="blocked-time-list">{blockedTimes.map((block) => <div className="blocked-time-item" key={block.id}><span>{new Date(block.start_at).toLocaleString()} - {new Date(block.end_at).toLocaleString()} ({block.reason})</span> <AdminSecondaryButton onClick={async () => { await deleteBlockedTime(block.id); refreshBookingAdmin(); }}>Delete</AdminSecondaryButton></div>)}</div>
+    </section>
+
+    <section id="admin-additional-availability" className="admin-section admin-section-blocks"><h2>Additional Availability</h2>
+      <div className="admin-section-actions"><button className="btn" type="button" onClick={() => setAddAvailabilityOpen((open) => !open)}>{addAvailabilityOpen ? 'Close Add Availability' : 'Add Availability'}</button></div>
+      {addAvailabilityOpen && <AddAvailabilityPanel onCreate={async (payload) => {
+        const result = await createAdditionalAvailability(payload);
+        if (result?.error) throw new Error(result.error);
+        await refreshBookingAdmin();
+      }} />}
+      <div className="blocked-time-list">{additionalAvailability.map((availability) => <div className="blocked-time-item" key={availability.id}><span>{new Date(availability.start_at).toLocaleString()} - {new Date(availability.end_at).toLocaleString()}{availability.note ? ` (${availability.note})` : ''}</span> <AdminSecondaryButton onClick={async () => { await deleteAdditionalAvailability(availability.id); refreshBookingAdmin(); }}>Delete</AdminSecondaryButton></div>)}</div>
     </section>
 
     <section id="admin-customers" className="admin-section admin-section-customers"><h2>Customers</h2><div className="admin-list customer-list">{pagedCustomers.map((customer) => <CustomerCard key={customer.id} customer={customer} appointments={appointmentsByCustomerId.get(customer.id) || []} />)}</div>

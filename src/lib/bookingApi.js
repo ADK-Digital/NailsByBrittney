@@ -125,6 +125,20 @@ export async function deleteBlockedTime(blockId) {
   return res.json();
 }
 
+export async function createAdditionalAvailability(payload) {
+  const res = await fetch('/.netlify/functions/admin-appointments', {
+    method: 'POST', headers: await getAdminAuthHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ action: 'create_additional_availability', ...payload }),
+  });
+  return res.json();
+}
+
+export async function deleteAdditionalAvailability(availabilityId) {
+  const res = await fetch('/.netlify/functions/admin-appointments', {
+    method: 'POST', headers: await getAdminAuthHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ action: 'delete_additional_availability', availabilityId }),
+  });
+  return res.json();
+}
+
 
 export async function fetchClientMessages(payload) {
   const res = await fetch('/.netlify/functions/admin-appointments', {
