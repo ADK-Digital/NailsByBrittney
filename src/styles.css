@@ -344,7 +344,12 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
   .calendar-header{font-size:.82rem}
 }
 
-@media (min-width:821px){.split{grid-template-columns:1fr 1fr}}
+@media (min-width:821px){
+  .split{grid-template-columns:1fr 1fr}
+  .hero-logo{width:70%;max-width:70%}
+  .gallery-media{transform:scale(.8);transform-origin:center}
+  .location-details{width:max-content;max-width:100%;margin-left:auto;text-align:left}
+}
 @media (max-width:1100px){.service-grid{grid-template-columns:repeat(3,minmax(0,1fr));}}
 @media (max-width:680px){.service-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
 
