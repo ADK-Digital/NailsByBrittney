@@ -82,6 +82,7 @@ function BookingSection({ services }) {
   const squareCardRef = useRef(null);
   const [selectedServices, setSelectedServices] = useState([]);
   const [availability, setAvailability] = useState([]);
+  const [isAvailabilityLoading, setIsAvailabilityLoading] = useState(false);
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedTime, setSelectedTime] = useState('');
   const [form, setForm] = useState({
@@ -98,6 +99,7 @@ function BookingSection({ services }) {
   const timeRef = useRef(null);
   const timeSelectRef = useRef(null);
   const shouldSyncAvailabilityRef = useRef(false);
+  const availabilityRequestIdRef = useRef(0);
 
   const selected = services.filter((s) => selectedServices.includes(s.id));
   const isAddonService = (s) => s.is_addon === true || s.type === 'addon';
@@ -123,8 +125,12 @@ function BookingSection({ services }) {
   }, [selectedServices, services]);
 
   useEffect(() => {
+    const requestId = availabilityRequestIdRef.current + 1;
+    availabilityRequestIdRef.current = requestId;
+
     if (!selectedServices.length) {
       shouldSyncAvailabilityRef.current = false;
+      setIsAvailabilityLoading(false);
       setAvailability([]);
       setSelectedDate('');
       setSelectedTime('');
@@ -133,17 +139,31 @@ function BookingSection({ services }) {
 
     let cancelled = false;
 
+    shouldSyncAvailabilityRef.current = false;
+    setIsAvailabilityLoading(true);
+    setAvailability([]);
+    setSelectedDate('');
+    setSelectedTime('');
+
     fetchAvailability(selectedServices).then((data) => {
-      if (cancelled) return;
+      if (cancelled || availabilityRequestIdRef.current !== requestId) return;
 
       shouldSyncAvailabilityRef.current = true;
       setAvailability(data.dates || []);
+    }).catch((error) => {
+      if (cancelled || availabilityRequestIdRef.current !== requestId) return;
+
+      console.error('Failed to fetch availability:', error);
+    }).finally(() => {
+      if (cancelled || availabilityRequestIdRef.current !== requestId) return;
+
+      setIsAvailabilityLoading(false);
     });
 
     return () => {
       cancelled = true;
     };
-  }, [selectedServices.join(',')]);
+  }, [selectedServices]);
 
   useEffect(() => {
     if (selectedDate && timeRef.current) {
@@ -355,23 +375,26 @@ function BookingSection({ services }) {
               <div className="calendar-month-label" aria-live="polite">{monthLabel}</div>
               <button type="button" className="calendar-nav-button" onClick={() => changeCalendarMonth(1)} disabled={isNextMonthDisabled} aria-label="Next month">›</button>
             </div>
-            <div className="calendar-grid">
-              {weekdayLabels.map((label) => <div key={label} className="calendar-header">{label}</div>)}
-              {Array.from({ length: firstWeekday }).map((_, idx) => <div key={`empty-${idx}`} className="calendar-empty" aria-hidden="true" />)}
-              {Array.from({ length: daysInMonth }).map((_, idx) => {
-                const day = idx + 1;
-                const isoDate = `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                const dayAvailability = availabilityMap.get(isoDate);
-                const isAvailable = dayAvailability?.available;
-                const isSelected = selectedDate === isoDate;
-                const isToday = isoDate === todayIso;
-                const isPast = isoDate < todayIso;
-                const showToday = isToday && isAvailable && !isSelected && !isPast;
+            <div className="calendar-wrap" aria-busy={isAvailabilityLoading}>
+              {isAvailabilityLoading && <p className="calendar-loading" role="status">Loading availability...</p>}
+              <div className="calendar-grid">
+                {weekdayLabels.map((label) => <div key={label} className="calendar-header">{label}</div>)}
+                {Array.from({ length: firstWeekday }).map((_, idx) => <div key={`empty-${idx}`} className="calendar-empty" aria-hidden="true" />)}
+                {Array.from({ length: daysInMonth }).map((_, idx) => {
+                  const day = idx + 1;
+                  const isoDate = `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                  const dayAvailability = availabilityMap.get(isoDate);
+                  const isAvailable = dayAvailability?.available;
+                  const isSelected = selectedDate === isoDate;
+                  const isToday = isoDate === todayIso;
+                  const isPast = isoDate < todayIso;
+                  const showToday = isToday && isAvailable && !isSelected && !isPast;
 
-                return <button key={isoDate} className={`calendar-day ${isAvailable ? 'available' : 'unavailable'} ${isSelected ? 'selected' : ''} ${showToday ? 'today' : ''} ${isPast ? 'past' : ''}`} disabled={!isAvailable || isPast} onClick={() => { setBookingFlowError(''); setSubmitValidationError(''); setSelectedDate(isoDate); setSelectedTime(''); }}>{day}</button>;
-              })}
+                  return <button key={isoDate} className={`calendar-day ${isAvailable ? 'available' : 'unavailable'} ${isSelected ? 'selected' : ''} ${showToday ? 'today' : ''} ${isPast ? 'past' : ''}`} disabled={!isAvailable || isPast} onClick={() => { setBookingFlowError(''); setSubmitValidationError(''); setSelectedDate(isoDate); setSelectedTime(''); }}>{day}</button>;
+                })}
+              </div>
             </div>
-            {bookingFlowError === 'Please select an available date from above.' && <p className="form-error" role="alert">{bookingFlowError}</p>}
+            {bookingFlowError === 'Please select an available date from above.' && !isAvailabilityLoading && <p className="form-error" role="alert">{bookingFlowError}</p>}
             {selectedDate && <div ref={timeRef} className="time-selection"><h3>3. Choose time</h3>{times.length > 0 ? <select ref={timeSelectRef} value={selectedTime} onChange={(e) => { setBookingFlowError(''); setSubmitValidationError(''); setSelectedTime(e.target.value); }}><option value="">Select a time</option>{times.map((t) => <option key={t} value={t}>{formatTime12Hour(t)}</option>)}</select> : <p className="muted">No remaining times are available for this date.</p>}{bookingFlowError === 'Please select an available time from above.' && <p className="form-error" role="alert">{bookingFlowError}</p>}</div>}
           </>
         )}
