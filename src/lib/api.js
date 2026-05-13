@@ -13,9 +13,11 @@ const mapGalleryWithUrls = (items) =>
     return withLocalFallback({ ...item, imageUrl: data.publicUrl });
   });
 
-export async function fetchServices() {
-  if (!hasSupabaseConfig) return SAMPLE_SERVICES;
-  const { data, error } = await supabase.from('services').select('*').order('display_order', { ascending: true });
+export async function fetchServices({ includeInactive = false } = {}) {
+  if (!hasSupabaseConfig) return includeInactive ? SAMPLE_SERVICES : SAMPLE_SERVICES.filter((service) => service.active !== false);
+  let query = supabase.from('services').select('*').order('display_order', { ascending: true });
+  if (!includeInactive) query = query.eq('active', true);
+  const { data, error } = await query;
   if (error) {
     console.error('Failed to fetch services from Supabase:', error);
     return [];

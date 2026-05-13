@@ -25,11 +25,17 @@ const baseServices = [
   { name: 'Soak Off/File Off', description: 'Gentle gel removal service.', price_text: '$8', price_min_numeric: 8, duration_minutes: 30, is_variable_price: false, type: 'addon', requires_service_ids: [] },
 ];
 
+const sampleBaseServiceIds = baseServices
+  .map((service, idx) => ({ ...service, id: `sample-service-${idx + 1}` }))
+  .filter((service) => service.type !== 'addon')
+  .map((service) => service.id);
+
 export const SAMPLE_SERVICES = baseServices.map((service, idx) => ({
   ...service,
   id: `sample-service-${idx + 1}`,
   duration: `${service.duration_minutes} min`,
   active: true,
+  requires_service_ids: service.type === 'addon' ? sampleBaseServiceIds : [],
   display_order: idx + 1,
 }));
 
