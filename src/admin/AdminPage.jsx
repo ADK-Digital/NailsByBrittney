@@ -40,6 +40,8 @@ const adminNavItems = [
 
 const BOOKING_WINDOW_DAYS = 90;
 const BLOCK_INTERVAL_MINUTES = 15;
+const DEFAULT_LATE_FEE_PERCENT = 25;
+const DEFAULT_NO_SHOW_FEE_PERCENT = 50;
 
 const blockMonthFormatter = new Intl.DateTimeFormat('en-US', {
   month: 'long',
@@ -247,6 +249,20 @@ function formatBookingNumber(value) {
 }
 
 
+function getEstimatedTotalDollars(appointment) {
+  const numeric = Number(appointment?.estimated_total_min);
+  if (Number.isFinite(numeric) && numeric > 0) return numeric;
+
+  const parsed = Number(String(appointment?.estimated_total_text || '').replace(/[^0-9.]/g, ''));
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function formatDollarAmount(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric < 0) return '';
+  return `$${numeric.toFixed(2)}`;
+}
+
 function formatEstimatedTotal(appointment) {
   const estimatedTotalText = String(appointment.estimated_total_text || '').trim();
   if (estimatedTotalText) {
@@ -254,11 +270,10 @@ function formatEstimatedTotal(appointment) {
     return normalizedText || estimatedTotalText;
   }
 
-  const numeric = Number(appointment.estimated_total_min);
+  const numeric = getEstimatedTotalDollars(appointment);
   if (!Number.isFinite(numeric)) return 'Estimated total unavailable';
 
-  const formatted = Number.isInteger(numeric) ? String(numeric) : numeric.toFixed(2);
-  return `$${formatted}`;
+  return formatDollarAmount(numeric);
 }
 
 function formatEstimatedDuration(minutes) {
@@ -348,6 +363,16 @@ function getServicePriceNumber(service) {
 
 function parseCurrencyInput(value) {
   return value.replace(/[^0-9.]/g, '');
+}
+
+function parseCurrencyAmount(value) {
+  const numeric = Number(parseCurrencyInput(String(value || '')));
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function formatEditableCurrencyInput(value) {
+  const numeric = parseCurrencyAmount(value);
+  return numeric > 0 ? formatDollarAmount(numeric) : '';
 }
 
 function formatCommunicationPreference(preference) {
@@ -542,10 +567,14 @@ function MessageThread({ customer, appointment = null }) {
 }
 
 function AppointmentCard({ appointment, customer, onRefresh }) {
+  const estimatedTotalDollars = getEstimatedTotalDollars(appointment);
+  const defaultServiceAmount = formatDollarAmount(estimatedTotalDollars);
+  const defaultLateFeeAmount = Number.isFinite(estimatedTotalDollars) ? formatDollarAmount((estimatedTotalDollars * DEFAULT_LATE_FEE_PERCENT) / 100) : '';
+  const defaultNoShowFeeAmount = Number.isFinite(estimatedTotalDollars) ? formatDollarAmount((estimatedTotalDollars * DEFAULT_NO_SHOW_FEE_PERCENT) / 100) : '';
   const [expanded, setExpanded] = useState(false);
-  const [serviceAmount, setServiceAmount] = useState('');
-  const [latePct, setLatePct] = useState('25');
-  const [noShowPct, setNoShowPct] = useState('50');
+  const [serviceAmount, setServiceAmount] = useState(defaultServiceAmount);
+  const [lateFeeAmount, setLateFeeAmount] = useState(defaultLateFeeAmount);
+  const [noShowFeeAmount, setNoShowFeeAmount] = useState(defaultNoShowFeeAmount);
   const [actionNotice, setActionNotice] = useState({ type: '', text: '' });
   const [actionBusy, setActionBusy] = useState(false);
 
@@ -566,6 +595,12 @@ function AppointmentCard({ appointment, customer, onRefresh }) {
   const notificationWarnings = getAppointmentNotificationWarnings(appointment);
 
   useEffect(() => {
+    setServiceAmount(defaultServiceAmount);
+    setLateFeeAmount(defaultLateFeeAmount);
+    setNoShowFeeAmount(defaultNoShowFeeAmount);
+  }, [appointment.id, defaultServiceAmount, defaultLateFeeAmount, defaultNoShowFeeAmount]);
+
+  useEffect(() => {
     setServiceRefundAmount(serviceRefundableDollars);
   }, [appointment.id, serviceRefundableDollars]);
 
@@ -584,14 +619,23 @@ function AppointmentCard({ appointment, customer, onRefresh }) {
   };
 
   const chargeLateFee = () => call(
-    () => adminChargeAppointment({ appointmentId: appointment.id, target: 'late', percentOverride: Number(latePct || 25) }),
+    () => adminChargeAppointment({ appointmentId: appointment.id, target: 'late', amount: parseCurrencyAmount(lateFeeAmount) }),
     'Late fee charged successfully.',
   );
 
   const chargeNoShowFee = () => call(
-    () => adminChargeAppointment({ appointmentId: appointment.id, target: 'no_show', percentOverride: Number(noShowPct || 50) }),
+    () => adminChargeAppointment({ appointmentId: appointment.id, target: 'no_show', amount: parseCurrencyAmount(noShowFeeAmount) }),
     'No-show fee charged successfully.',
   );
+
+  const chargeService = () => call(
+    () => adminChargeAppointment({ appointmentId: appointment.id, target: 'service', amount: parseCurrencyAmount(serviceAmount) }),
+    'Service charge completed successfully.',
+  );
+
+  const formatChargeAmountField = (setter) => (event) => {
+    setter(formatEditableCurrencyInput(event.target.value));
+  };
 
   return <article className={`card appointment-card${expanded ? ' expanded' : ''}`}>
     {!expanded && <button type="button" className="appointment-toggle" onClick={() => setExpanded(true)} aria-expanded={expanded}>
@@ -641,15 +685,35 @@ function AppointmentCard({ appointment, customer, onRefresh }) {
       </div>
 
       <div className="admin-action-grid">
-        <button className="btn" disabled={actionBusy} onClick={chargeLateFee}>Charge late fee</button>
-        <input value={latePct} onChange={(e) => setLatePct(parseCurrencyInput(e.target.value))} placeholder="25" aria-label="Late fee percentage" />
-        <button className="btn" disabled={actionBusy} onClick={chargeNoShowFee}>Charge no-show fee</button>
-        <input value={noShowPct} onChange={(e) => setNoShowPct(parseCurrencyInput(e.target.value))} placeholder="50" aria-label="No-show fee percentage" />
-        <button className="btn" disabled={actionBusy} onClick={() => call(() => adminChargeAppointment({ appointmentId: appointment.id, target: 'service', amount: Number(serviceAmount || 0) }), 'Service charge completed successfully.')}>Charge services</button>
+        <button className="btn" disabled={actionBusy} onClick={chargeLateFee}>Charge late fee (defaulted to 25%)</button>
         <input
+          type="text"
+          inputMode="decimal"
+          value={lateFeeAmount}
+          onChange={(e) => setLateFeeAmount(e.target.value)}
+          onBlur={formatChargeAmountField(setLateFeeAmount)}
+          placeholder="Type late fee amount (e.g. $15.25)"
+          aria-label="Late fee dollar amount"
+        />
+        <button className="btn" disabled={actionBusy} onClick={chargeNoShowFee}>Charge no-show fee (defaulted to 50%)</button>
+        <input
+          type="text"
+          inputMode="decimal"
+          value={noShowFeeAmount}
+          onChange={(e) => setNoShowFeeAmount(e.target.value)}
+          onBlur={formatChargeAmountField(setNoShowFeeAmount)}
+          placeholder="Type no-show fee amount (e.g. $30.50)"
+          aria-label="No-show fee dollar amount"
+        />
+        <button className="btn" disabled={actionBusy} onClick={chargeService}>Charge services (estimated total)</button>
+        <input
+          type="text"
+          inputMode="decimal"
           value={serviceAmount}
-          onChange={(e) => setServiceAmount(parseCurrencyInput(e.target.value))}
-          placeholder="Type service amount (e.g. 85.00)"
+          onChange={(e) => setServiceAmount(e.target.value)}
+          onBlur={formatChargeAmountField(setServiceAmount)}
+          placeholder="Type service amount (e.g. $85.00)"
+          aria-label="Service charge dollar amount"
         />
       </div>
 
@@ -659,7 +723,7 @@ function AppointmentCard({ appointment, customer, onRefresh }) {
         <button className="btn" disabled={actionBusy} onClick={() => call(() => adminRefundAppointment({ appointmentId: appointment.id, target: 'late' }), 'Late fee refunded successfully.')}>Refund late fee</button>
         <button className="btn" disabled={actionBusy} onClick={() => call(() => adminRefundAppointment({ appointmentId: appointment.id, target: 'no_show' }), 'No-show fee refunded successfully.')}>Refund no-show fee</button>
         <button className="btn" disabled={actionBusy} onClick={() => call(() => adminRefundAppointment({ appointmentId: appointment.id, target: 'service' }), 'Service charge refunded successfully.')}>Refund services full</button>
-        <button className="btn" disabled={actionBusy} onClick={() => call(() => adminRefundAppointment({ appointmentId: appointment.id, target: 'service', amount: Number(serviceRefundAmount || 0) }), 'Service refund completed successfully.')}>Refund services</button>
+        <button className="btn" disabled={actionBusy} onClick={() => call(() => adminRefundAppointment({ appointmentId: appointment.id, target: 'service', amount: parseCurrencyAmount(serviceRefundAmount) }), 'Service refund completed successfully.')}>Refund services</button>
         <input
           type="text"
           inputMode="decimal"
