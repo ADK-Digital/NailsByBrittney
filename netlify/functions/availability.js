@@ -24,6 +24,25 @@ function localMinutesToUtcMs(isoDate, minutes) {
   return new Date(localDateTimeToUtcIso(date, formatTime(minutesInDay))).getTime();
 }
 
+function utcMsToLocalMinutes(utcMs) {
+  const local = new Date(utcMs).toLocaleString('en-US', {
+    timeZone: 'America/New_York',
+    hourCycle: 'h23',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+  const [hour, minute] = local.split(':').map(Number);
+  return hour * 60 + minute;
+}
+
+function alignUpToInterval(minutes, interval = 15) {
+  return Math.ceil(minutes / interval) * interval;
+}
+
+function alignDownToInterval(minutes, interval = 15) {
+  return Math.floor(minutes / interval) * interval;
+}
+
 export const handler = async (event) => {
   try {
     ensureServerConfig();
@@ -53,24 +72,43 @@ export const handler = async (event) => {
     for (const date of dateSet) {
       const dow = dayOfWeekFromIsoDate(date);
       const dayHours = hoursByDow.get(dow);
-      if (!dayHours) {
-        response.push({ date, available: false, times: [] });
-        // eslint-disable-next-line no-continue
-        continue;
-      }
-
-      const open = toMinutes(dayHours.open_time.slice(0, 5));
-      const close = toMinutes(dayHours.close_time.slice(0, 5));
-      const latestStart = close - totalDuration;
-      if (latestStart < open) {
-        response.push({ date, available: false, times: [] });
-        // eslint-disable-next-line no-continue
-        continue;
-      }
-
       const dayStartUtc = localDateTimeToUtcIso(date, '00:00');
       const nextDate = addDaysToIsoDate(date, 1);
       const dayEndUtc = localDateTimeToUtcIso(nextDate, '00:00');
+      const dayStartMs = new Date(dayStartUtc).getTime();
+      const dayEndMs = new Date(dayEndUtc).getTime();
+
+      const { data: additionalAvailability } = await supabaseAdmin
+        .from('additional_availability')
+        .select('start_at,end_at')
+        .lt('start_at', dayEndUtc)
+        .gt('end_at', dayStartUtc);
+
+      const availabilityWindows = [];
+      if (dayHours) {
+        availabilityWindows.push([
+          toMinutes(dayHours.open_time.slice(0, 5)),
+          toMinutes(dayHours.close_time.slice(0, 5)),
+        ]);
+      }
+
+      (additionalAvailability || []).forEach((slot) => {
+        const startMs = Math.max(new Date(slot.start_at).getTime(), dayStartMs);
+        const endMs = Math.min(new Date(slot.end_at).getTime(), dayEndMs);
+        if (endMs <= startMs) return;
+        const startMinutes = alignUpToInterval(utcMsToLocalMinutes(startMs));
+        const endMinutes = alignDownToInterval(utcMsToLocalMinutes(endMs));
+        if (endMinutes > startMinutes) availabilityWindows.push([startMinutes, endMinutes]);
+      });
+
+      const viableWindows = availabilityWindows
+        .map(([open, close]) => [open, close, close - totalDuration])
+        .filter(([open, close, latestStart]) => close > open && latestStart >= open);
+
+      if (!viableWindows.length) {
+        response.push({ date, available: false, times: [] });
+        continue;
+      }
 
       const { data: conflicts } = await supabaseAdmin
         .from('appointments')
@@ -91,15 +129,18 @@ export const handler = async (event) => {
         ...(blocks || []).map((b) => [new Date(b.start_at).getTime(), new Date(b.end_at).getTime()]),
       ];
 
-      const times = [];
-      for (let t = open; t <= latestStart; t += 15) {
-        const end = t + totalDuration;
-        const startUtcMs = localMinutesToUtcMs(date, t);
-        const endUtcMs = localMinutesToUtcMs(date, end);
-        const overlaps = spans.some(([s, e]) => startUtcMs < e && endUtcMs > s);
-        if (!overlaps) times.push(formatTime(t));
-      }
+      const timeSet = new Set();
+      viableWindows.forEach(([open, , latestStart]) => {
+        for (let t = open; t <= latestStart; t += 15) {
+          const end = t + totalDuration;
+          const startUtcMs = localMinutesToUtcMs(date, t);
+          const endUtcMs = localMinutesToUtcMs(date, end);
+          const overlaps = spans.some(([s, e]) => startUtcMs < e && endUtcMs > s);
+          if (!overlaps) timeSet.add(formatTime(t));
+        }
+      });
 
+      const times = Array.from(timeSet).sort();
       response.push({ date, available: times.length > 0, times });
     }
 

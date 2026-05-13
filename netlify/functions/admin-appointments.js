@@ -184,6 +184,21 @@ async function handleAppointmentAction(payload) {
     return { ok: true };
   }
 
+  if (payload.action === 'create_additional_availability') {
+    const { error } = await supabaseAdmin.from('additional_availability').insert({
+      start_at: payload.startAt,
+      end_at: payload.endAt,
+      note: payload.note || null,
+    });
+    if (error) throw error;
+    return { ok: true };
+  }
+
+  if (payload.action === 'delete_additional_availability') {
+    await supabaseAdmin.from('additional_availability').delete().eq('id', payload.availabilityId);
+    return { ok: true };
+  }
+
   console.warn('[admin-appointments] unsupported action', { action: payload.action });
   throw new Error(`Unsupported action: ${payload.action || 'missing'}`);
 }
@@ -227,7 +242,18 @@ export const handler = async (event) => {
         .order('start_at', { ascending: true });
       if (blockedTimesError) throw blockedTimesError;
 
-      return json(200, { appointments: appointments || [], customers: customers || [], blockedTimes: blockedTimes || [] });
+      const { data: additionalAvailability, error: additionalAvailabilityError } = await supabaseAdmin
+        .from('additional_availability')
+        .select('*')
+        .order('start_at', { ascending: true });
+      if (additionalAvailabilityError) throw additionalAvailabilityError;
+
+      return json(200, {
+        appointments: appointments || [],
+        customers: customers || [],
+        blockedTimes: blockedTimes || [],
+        additionalAvailability: additionalAvailability || [],
+      });
     }
 
     if (event.httpMethod === 'POST') {

@@ -95,6 +95,16 @@ create table if not exists blocked_times (
   check (end_at > start_at)
 );
 
+create table if not exists additional_availability (
+  id uuid primary key default gen_random_uuid(),
+  start_at timestamptz not null,
+  end_at timestamptz not null,
+  note text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  check (end_at > start_at)
+);
+
 create table if not exists request_counter (
   singleton boolean primary key default true,
   current_value int not null default 0,
@@ -598,20 +608,24 @@ begin
   from business_hours bh
   where bh.day_of_week = v_dow;
 
-  if coalesce(v_is_active, false) = false then
-    raise exception 'Requested day is not bookable';
-  end if;
-
   if (v_start_local)::date <> (v_end_local)::date then
     raise exception 'Appointment must start and end on the same local day';
   end if;
 
-  if (v_start_local)::time < v_open_time then
-    raise exception 'Appointment starts before opening time';
-  end if;
-
-  if (v_end_local)::time > v_close_time then
-    raise exception 'Appointment ends after closing time';
+  if not (
+    (
+      coalesce(v_is_active, false) = true
+      and (v_start_local)::time >= v_open_time
+      and (v_end_local)::time <= v_close_time
+    )
+    or exists (
+      select 1
+      from additional_availability aa
+      where tstzrange(aa.start_at, aa.end_at, '[)') @> p_start_at
+        and tstzrange(aa.start_at, aa.end_at, '[)') @> (v_end_at - interval '1 microsecond')
+    )
+  ) then
+    raise exception 'Requested time is outside available hours';
   end if;
 
   if exists (
@@ -708,11 +722,11 @@ $$;
 insert into business_hours (day_of_week, open_time, close_time, active)
 values
   (0, '09:30', '16:30', true),
-  (1, '09:30', '19:30', false),
+  (1, '09:30', '19:30', true),
   (2, '09:30', '19:30', false),
   (3, '09:30', '19:30', false),
   (4, '09:30', '19:30', false),
-  (5, '09:30', '19:30', true),
+  (5, '09:30', '19:30', false),
   (6, '09:30', '19:30', true)
 on conflict (day_of_week) do update
 set open_time = excluded.open_time,
@@ -727,6 +741,7 @@ alter table customer_notes enable row level security;
 alter table client_messages enable row level security;
 alter table business_hours enable row level security;
 alter table blocked_times enable row level security;
+alter table additional_availability enable row level security;
 alter table appointments enable row level security;
 alter table appointment_services enable row level security;
 
@@ -742,6 +757,7 @@ drop policy if exists "auth manage notes" on customer_notes;
 drop policy if exists "auth manage client messages" on client_messages;
 drop policy if exists "auth manage business hours" on business_hours;
 drop policy if exists "auth manage blocked times" on blocked_times;
+drop policy if exists "auth manage additional availability" on additional_availability;
 drop policy if exists "auth manage appointments" on appointments;
 drop policy if exists "auth manage appointment services" on appointment_services;
 
@@ -798,6 +814,11 @@ create policy "auth manage business hours" on business_hours
   with check (true);
 
 create policy "auth manage blocked times" on blocked_times
+  for all to authenticated
+  using (true)
+  with check (true);
+
+create policy "auth manage additional availability" on additional_availability
   for all to authenticated
   using (true)
   with check (true);
@@ -1024,10 +1045,8 @@ begin
   v_dow := extract(dow from v_start_local)::int;
 
   select bh.open_time, bh.close_time, bh.active into v_open_time, v_close_time, v_is_active from business_hours bh where bh.day_of_week = v_dow;
-  if coalesce(v_is_active, false) = false then raise exception 'Requested day is not bookable'; end if;
   if (v_start_local)::date <> (v_end_local)::date then raise exception 'Appointment must start and end on the same local day'; end if;
-  if (v_start_local)::time < v_open_time then raise exception 'Appointment starts before opening time'; end if;
-  if (v_end_local)::time > v_close_time then raise exception 'Appointment ends after closing time'; end if;
+  if not ((coalesce(v_is_active, false) = true and (v_start_local)::time >= v_open_time and (v_end_local)::time <= v_close_time) or exists (select 1 from additional_availability aa where tstzrange(aa.start_at, aa.end_at, '[)') @> p_start_at and tstzrange(aa.start_at, aa.end_at, '[)') @> (v_end_at - interval '1 microsecond'))) then raise exception 'Requested time is outside available hours'; end if;
 
   if exists (select 1 from blocked_times b where tstzrange(b.start_at, b.end_at, '[)') && tstzrange(p_start_at, v_end_at, '[)')) then raise exception 'Requested time is blocked'; end if;
 
