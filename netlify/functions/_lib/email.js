@@ -1,10 +1,10 @@
 import { Resend } from 'resend';
 import { canSendEmail } from './notifications.js';
-import { BOOKING_LINK } from './config.js';
+import { BOOKING_LINK, makePublicUrl } from './config.js';
 import { formatDuration } from './time.js';
 
 const BRAND_NAME = 'Nails by Brittney';
-const LOGO_URL = 'https://nailsbybrittney.com/assets/logo-BmAccaIs.png';
+const LOGO_URL = makePublicUrl('/assets/logo-BmAccaIs.png');
 const SMS_DISCLOSURE = 'By texting Nails by Brittney, you consent to receive appointment-related SMS responses. Reply STOP to opt out.';
 const EMAIL_SUPPORT_PHONE_DISPLAY = '(252) 888-7757';
 const FASTEST_RESPONSE_LINE = `For fastest response, text us at ${EMAIL_SUPPORT_PHONE_DISPLAY}.`;

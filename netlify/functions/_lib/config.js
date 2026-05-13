@@ -12,4 +12,31 @@ export const BOOKING_STATUS = {
   NO_SHOW: 'no_show',
 };
 
-export const BOOKING_LINK = process.env.BOOKING_PUBLIC_BASE_URL || '';
+export const PRODUCTION_PUBLIC_BASE_URL = 'https://nailsbybrittney.com';
+const CANONICAL_PUBLIC_HOST = 'nailsbybrittney.com';
+
+function normalizePublicBaseUrl(value) {
+  const candidate = String(value || '').trim();
+  if (!candidate) return PRODUCTION_PUBLIC_BASE_URL;
+
+  try {
+    const parsed = new URL(candidate);
+    const hostname = parsed.hostname.toLowerCase();
+
+    if (hostname !== CANONICAL_PUBLIC_HOST) {
+      return PRODUCTION_PUBLIC_BASE_URL;
+    }
+
+    return PRODUCTION_PUBLIC_BASE_URL;
+  } catch {
+    return PRODUCTION_PUBLIC_BASE_URL;
+  }
+}
+
+export const PUBLIC_BASE_URL = normalizePublicBaseUrl(process.env.BOOKING_PUBLIC_BASE_URL);
+
+export function makePublicUrl(path = '/') {
+  return new URL(path, `${PUBLIC_BASE_URL}/`).toString();
+}
+
+export const BOOKING_LINK = makePublicUrl('/#booking');
