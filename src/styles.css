@@ -289,8 +289,8 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
 #examples h3,#services h3,#booking h3{text-align:center}
 #booking .booking-grid,#booking .booking-form,#contact .contact-blurb{margin-left:auto;margin-right:auto}
 #booking .service-check{text-align:left}
-#booking .booking-services-list{display:grid;gap:.35rem;justify-items:center;max-width:720px;margin:0 auto}
-#booking .booking-services-list .service-check{justify-content:center;text-align:center;width:100%}
+#booking .booking-services-list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.35rem 1.1rem;justify-items:stretch;max-width:920px;margin:0 auto}
+#booking .booking-services-list .service-check{justify-content:flex-start;text-align:left;width:100%}
 #booking .booking-services-list .service-check span{max-width:52ch}
 #booking .date-list{justify-content:center}
 #booking .booking-form{text-align:left}
@@ -328,10 +328,20 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
   .service-check{padding:.45rem .2rem}
 }
 
+@media (max-width:900px){
+  #booking .booking-services-list{grid-template-columns:repeat(2,minmax(0,1fr));max-width:680px}
+}
+
+@media (max-width:560px){
+  #booking .booking-services-list{grid-template-columns:1fr;max-width:420px}
+}
+
 @media (max-width:768px){
   .section{padding:2rem 0}
   h3{margin:1.2rem 0 .65rem}
   .date-list{gap:.45rem}
+  .calendar-day{font-size:1rem;min-height:44px;padding:.42rem .25rem}
+  .calendar-header{font-size:.82rem}
 }
 
 @media (min-width:821px){.split{grid-template-columns:1fr 1fr}}
@@ -386,6 +396,32 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
   text-align: center;
 }
 
+.calendar-wrap {
+  position: relative;
+}
+
+.calendar-loading {
+  position: absolute;
+  top: 2.55rem;
+  left: 50%;
+  z-index: 1;
+  transform: translateX(-50%);
+  width: min(92%, 22rem);
+  border: 1px solid rgba(154,111,130,.26);
+  border-radius: 999px;
+  background: rgba(255,255,255,.86);
+  box-shadow: 0 10px 24px rgba(17,32,69,.08);
+  color: var(--heading);
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 1.08rem;
+  font-weight: 700;
+  letter-spacing: .025em;
+  margin: 0;
+  padding: 0.45rem 0.9rem;
+  pointer-events: none;
+  text-align: center;
+}
+
 .calendar-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
@@ -394,10 +430,11 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
 
 .calendar-header {
   color: #5c5268;
-  font-size: 0.78rem;
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 0.88rem;
   font-weight: 700;
   letter-spacing: .08em;
-  opacity: 0.72;
+  opacity: 0.82;
   text-align: center;
   text-transform: uppercase;
 }
@@ -409,6 +446,10 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
   padding: 0.5rem;
   text-align: center;
   cursor: pointer;
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 1.08rem;
+  font-weight: 700;
+  letter-spacing: .015em;
 }
 
 .calendar-day.available {
