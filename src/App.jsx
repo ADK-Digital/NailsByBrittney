@@ -10,6 +10,23 @@ import logo from '../Images/logo.png';
 const navItems = [['home', 'Home'], ['about', 'About'], ['examples', 'Examples'], ['services', 'Services'], ['booking', 'Booking'], ['contact', 'Contact'], ['location', 'Location']];
 
 
+
+function isAddonService(service) {
+  return service?.is_addon === true || service?.type === 'addon';
+}
+
+function displayServiceName(service) {
+  const name = service?.name || '';
+  return isAddonService(service) && !name.trim().endsWith('*') ? `${name}*` : name;
+}
+
+function hasCompatibleBaseService(addonService, selectedIds, allServices) {
+  if (!isAddonService(addonService)) return true;
+  const requiredIds = Array.isArray(addonService.requires_service_ids) ? addonService.requires_service_ids : [];
+  if (requiredIds.length) return requiredIds.some((id) => selectedIds.includes(id));
+  return allServices.some((service) => selectedIds.includes(service.id) && !isAddonService(service));
+}
+
 function getServicePriceNumber(service) {
   const numeric = Number(service.price_min_numeric);
   if (Number.isFinite(numeric)) return numeric;
@@ -48,8 +65,8 @@ function ServiceCard({ service }) {
   const descriptionId = `service-description-${service.id}`;
 
   return <article className={`card service-card${expanded ? ' expanded' : ''}`}>
-    <button type="button" className="appointment-arrow service-card-toggle" onClick={() => setExpanded((value) => !value)} aria-expanded={expanded} aria-controls={descriptionId} aria-label={`${expanded ? 'Collapse' : 'Expand'} ${service.name} details`}>{expanded ? '⌃' : '⌄'}</button>
-    <h3>{service.name}</h3>
+    <button type="button" className="appointment-arrow service-card-toggle" onClick={() => setExpanded((value) => !value)} aria-expanded={expanded} aria-controls={descriptionId} aria-label={`${expanded ? 'Collapse' : 'Expand'} ${displayServiceName(service)} details`}>{expanded ? '⌃' : '⌄'}</button>
+    <h3>{displayServiceName(service)}</h3>
     <p className="meta">{formatServicePrice(service)} • {service.duration || `${service.duration_minutes} min`}</p>
     <p id={descriptionId} className="service-card-description">{service.description}</p>
   </article>;
@@ -102,33 +119,28 @@ function BookingSection({ services }) {
   const availabilityRequestIdRef = useRef(0);
 
   const selected = services.filter((s) => selectedServices.includes(s.id));
-  const isAddonService = (s) => s.is_addon === true || s.type === 'addon';
-  const selectedBaseServices = selected.filter((s) => !isAddonService(s));
   const selectedAddonServices = selected.filter((s) => isAddonService(s));
+  const hasInvalidAddonSelection = selected.some((service) => isAddonService(service) && !hasCompatibleBaseService(service, selectedServices, services));
   const duration = selected.reduce((sum, s) => sum + (s.duration_minutes || 0), 0);
   const totalMin = selected.reduce((sum, s) => sum + Number(s.price_min_numeric || 0), 0);
   const startsAt = selected.some((s) => s.is_variable_price);
 
   useEffect(() => {
-    const selected = services.filter((s) => selectedServices.includes(s.id));
-    const hasAddon = selected.some((s) => isAddonService(s));
-    const hasBase = selected.some((s) => !isAddonService(s));
-
-    if (hasAddon && !hasBase) {
-      setServiceError('Add-ons must be booked with a manicure or pedicure.');
+    if (hasInvalidAddonSelection) {
+      setServiceError('Please select a manicure or pedicure before adding that service.');
       setBookingFlowError('');
       setSelectedDate('');
       setSelectedTime('');
     } else {
       setServiceError('');
     }
-  }, [selectedServices, services]);
+  }, [hasInvalidAddonSelection]);
 
   useEffect(() => {
     const requestId = availabilityRequestIdRef.current + 1;
     availabilityRequestIdRef.current = requestId;
 
-    if (!selectedServices.length) {
+    if (!selectedServices.length || hasInvalidAddonSelection) {
       shouldSyncAvailabilityRef.current = false;
       setIsAvailabilityLoading(false);
       setAvailability([]);
@@ -163,7 +175,7 @@ function BookingSection({ services }) {
     return () => {
       cancelled = true;
     };
-  }, [selectedServices]);
+  }, [hasInvalidAddonSelection, selectedServices]);
 
   useEffect(() => {
     if (selectedDate && timeRef.current) {
@@ -250,7 +262,27 @@ function BookingSection({ services }) {
   const toggleService = (id) => {
     setBookingFlowError('');
     setSubmitValidationError('');
-    setSelectedServices((curr) => curr.includes(id) ? curr.filter((x) => x !== id) : [...curr, id]);
+    const service = services.find((item) => item.id === id);
+    if (service && isAddonService(service) && !selectedServices.includes(id) && !hasCompatibleBaseService(service, selectedServices, services)) {
+      setServiceError('Please select a manicure or pedicure before adding that service.');
+      return;
+    }
+
+    setSelectedServices((current) => {
+      if (current.includes(id)) {
+        const next = current.filter((x) => x !== id);
+        const incompatibleAddonIds = services
+          .filter((item) => next.includes(item.id) && isAddonService(item) && !hasCompatibleBaseService(item, next, services))
+          .map((item) => item.id);
+        if (incompatibleAddonIds.length) {
+          setServiceError('Add-ons were removed because they need a manicure or pedicure selected first.');
+          return next.filter((serviceId) => !incompatibleAddonIds.includes(serviceId));
+        }
+        return next;
+      }
+      setServiceError('');
+      return [...current, id];
+    });
   };
 
   const submit = async (e) => {
@@ -282,8 +314,8 @@ function BookingSection({ services }) {
       return;
     }
 
-    if (selectedAddonServices.length && !selectedBaseServices.length) {
-      const message = 'Add-ons must be booked with a manicure or pedicure.';
+    if (selectedAddonServices.some((service) => !hasCompatibleBaseService(service, selectedServices, services))) {
+      const message = 'Please select a manicure or pedicure before adding that service.';
       setServiceError(message);
       setSubmitValidationError(message);
       return;
@@ -359,9 +391,13 @@ function BookingSection({ services }) {
       <div className="booking-services">
         <h3>1. Select service(s)</h3>
         <div className="booking-services-list">
-          {services.filter((s) => s.active !== false).map((s) => <label key={s.id} className="service-check"><input type="checkbox" checked={selectedServices.includes(s.id)} onChange={() => toggleService(s.id)} /> <span>{isAddonService(s) ? '* ' : ''}{s.name} — {formatServicePrice(s)} • {s.duration_minutes || 0} min</span></label>)}
+          {services.filter((s) => s.active !== false).map((s) => {
+            const checked = selectedServices.includes(s.id);
+            const addonBlocked = isAddonService(s) && !checked && !hasCompatibleBaseService(s, selectedServices, services);
+            return <label key={s.id} className={`service-check${addonBlocked ? ' service-check-disabled' : ''}`} title={addonBlocked ? 'Select a manicure or pedicure first.' : undefined}><input type="checkbox" checked={checked} disabled={addonBlocked} onChange={() => toggleService(s.id)} /> <span>{displayServiceName(s)} — {formatServicePrice(s)} • {s.duration_minutes || 0} min</span></label>;
+          })}
         </div>
-        <p className="muted addon-disclaimer">Services marked with * must be added with a pedicure or manicure</p>
+        <p className="muted addon-disclaimer">Services marked with * can be added after selecting a manicure or pedicure.</p>
         {bookingFlowError === 'Please select a service from above.' && <p className="form-error" role="alert">{bookingFlowError}</p>}
         {serviceError && <p className="form-error" role="alert">{serviceError}</p>}
         {!!selected.length && <p className="muted">Estimated length: {duration} min. {startsAt ? `Estimated total starts at $${totalMin.toFixed(2)}` : `Estimated total is $${totalMin.toFixed(2)}`}</p>}
@@ -471,7 +507,7 @@ export default function App() {
       <Divider />
       <section id="examples" className="section alt"><div className="container"><h3>Testimonials</h3>{testimonials.map((item) => <blockquote key={item.id}>"{item.quote}" <span>- {item.customer}</span></blockquote>)}<h3>Gallery</h3><GalleryCarousel items={gallery} />{!hasImages && <p className="muted">Upload images in admin.</p>}</div></section>
       <Divider />
-      <section id="services" className="section"><div className="container"><SectionHeading title="Services and Pricing" eyebrow="Signature Menu" /><div className="service-grid">{services.map((service) => <ServiceCard key={service.id} service={service} />)}</div></div></section>
+      <section id="services" className="section"><div className="container"><SectionHeading title="Services and Pricing" eyebrow="Signature Menu" /><div className="service-grid">{services.filter((service) => service.active !== false).map((service) => <ServiceCard key={service.id} service={service} />)}</div></div></section>
       <Divider />
       <BookingSection services={services} />
       <Divider />

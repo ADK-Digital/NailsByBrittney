@@ -1598,3 +1598,35 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
 .availability-note-field textarea{
   min-height:90px;
 }
+
+.service-check-disabled{
+  opacity:.58;
+  cursor:not-allowed;
+}
+
+.service-check-disabled input{
+  cursor:not-allowed;
+}
+
+.admin-service-preview,
+.admin-service-help{
+  margin:.15rem 0 .35rem;
+}
+
+.admin-service-status{
+  display:inline-flex;
+  width:max-content;
+  max-width:100%;
+  margin:0 0 .35rem;
+  padding:.32rem .65rem;
+  border:1px solid rgba(126,37,49,.22);
+  border-radius:999px;
+  color:#7e2531;
+  background:rgba(255,245,247,.8);
+  font-size:.86rem;
+  font-weight:700;
+}
+
+.service-addon-row{
+  margin-top:.1rem;
+}

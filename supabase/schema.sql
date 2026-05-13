@@ -22,6 +22,7 @@ create table if not exists services (
 alter table services add column if not exists type text not null default 'base' check (type in ('base', 'addon'));
 alter table services add column if not exists requires_service_ids uuid[] not null default '{}'::uuid[];
 alter table services add column if not exists requires_service_names text[] not null default '{}'::text[];
+alter table services add column if not exists active boolean not null default true;
 
 with addon_requirements as (
   select
@@ -763,7 +764,21 @@ drop policy if exists "auth manage appointment services" on appointment_services
 
 create policy "public read services" on services
   for select
-  using (true);
+  using (active = true);
+
+create or replace function is_service_admin()
+returns boolean
+language sql
+stable
+as $$
+  select coalesce(
+    (auth.jwt() -> 'app_metadata' ->> 'role') = 'admin'
+    or lower(coalesce(auth.jwt() -> 'app_metadata' ->> 'admin', 'false')) = 'true'
+    or (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin'
+    or lower(coalesce(auth.jwt() -> 'user_metadata' ->> 'admin', 'false')) = 'true',
+    false
+  )
+$$;
 
 create policy "public read testimonials" on testimonials
   for select
@@ -779,8 +794,8 @@ create policy "public read business hours" on business_hours
 
 create policy "auth manage services" on services
   for all to authenticated
-  using (true)
-  with check (true);
+  using (is_service_admin())
+  with check (is_service_admin());
 
 create policy "auth manage testimonials" on testimonials
   for all to authenticated

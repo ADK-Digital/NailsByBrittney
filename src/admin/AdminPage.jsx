@@ -404,6 +404,20 @@ function getServicePriceNumber(service) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+
+function isAddonService(service) {
+  return service?.is_addon === true || service?.type === 'addon';
+}
+
+function displayServiceName(service) {
+  const name = service?.name || '';
+  return isAddonService(service) && !name.trim().endsWith('*') ? `${name}*` : name;
+}
+
+function serviceRequiresBase(service) {
+  return isAddonService(service) || (Array.isArray(service?.requires_service_ids) && service.requires_service_ids.length > 0);
+}
+
 function parseCurrencyInput(value) {
   return value.replace(/[^0-9.]/g, '');
 }
@@ -939,7 +953,7 @@ export default function AdminPage() {
     setAppointmentArchives(data.archives || []);
   };
 
-  const refreshServiceList = async () => setServices(await fetchServices());
+  const refreshServiceList = async () => setServices(await fetchServices({ includeInactive: true }));
   const refreshGalleryList = async () => setGallery(await fetchGalleryItems());
 
   const saveVisualOrder = async (table, items, setItems, refreshList, saveTokenRef) => {
@@ -987,7 +1001,7 @@ export default function AdminPage() {
   }, []);
 
   useEffect(() => {
-    Promise.all([fetchServices(), fetchTestimonials(), fetchGalleryItems()]).then(([serviceData, testimonialData, galleryData]) => {
+    Promise.all([fetchServices({ includeInactive: true }), fetchTestimonials(), fetchGalleryItems()]).then(([serviceData, testimonialData, galleryData]) => {
       setServices(serviceData);
       setTestimonials(testimonialData);
       setGallery(galleryData);
@@ -1060,9 +1074,42 @@ export default function AdminPage() {
     } : service)));
   };
 
+  const getBaseServiceRequirements = (serviceId, sourceServices = services) => sourceServices
+    .filter((service) => service.id !== serviceId && service.active !== false && !isAddonService(service))
+    .map((service) => service.id);
+
+  const getBaseServiceRequirementNames = (serviceId, sourceServices = services) => sourceServices
+    .filter((service) => service.id !== serviceId && service.active !== false && !isAddonService(service))
+    .map((service) => service.name);
+
+  const updateServiceRequiresBase = (serviceId, checked) => {
+    setServices((previous) => previous.map((service) => {
+      if (service.id !== serviceId) return service;
+      return {
+        ...service,
+        type: checked ? 'addon' : 'base',
+        requires_service_ids: checked ? getBaseServiceRequirements(serviceId, previous) : [],
+        requires_service_names: checked ? getBaseServiceRequirementNames(serviceId, previous) : [],
+      };
+    }));
+  };
+
+  const toggleServiceActive = async (service) => {
+    const nextActive = service.active === false;
+    if (hasSupabaseConfig) {
+      await updateRecord('services', service.id, { active: nextActive });
+      await refreshServiceList();
+      return;
+    }
+    setServices((previous) => previous.map((item) => (item.id === service.id ? { ...item, active: nextActive } : item)));
+  };
+
   const saveService = async (service, idx) => {
     if (!hasSupabaseConfig) return;
     const priceText = formatServicePrice(service);
+    const requiresBase = serviceRequiresBase(service);
+    const requiredIds = requiresBase ? getBaseServiceRequirements(service.id) : [];
+    const requiredNames = requiresBase ? getBaseServiceRequirementNames(service.id) : [];
     await updateRecord('services', service.id, {
       name: service.name,
       price_text: priceText,
@@ -1071,8 +1118,10 @@ export default function AdminPage() {
       duration_minutes: service.duration_minutes,
       is_variable_price: service.is_variable_price,
       description: service.description,
-      type: service.type || 'base',
-      requires_service_ids: service.requires_service_ids || [],
+      type: requiresBase ? 'addon' : 'base',
+      requires_service_ids: requiredIds,
+      requires_service_names: requiredNames,
+      active: service.active !== false,
       display_order: idx + 1,
     });
     await refreshServiceList();
@@ -1138,11 +1187,23 @@ export default function AdminPage() {
     </section>
 
     <section id="admin-services" className="admin-section admin-section-services"><h2>Services</h2><div className="admin-section-actions"><button className="btn" onClick={async () => {
-      const item = { name: 'New Service', price_text: '$0', price_min_numeric: 0, duration: '30 min', duration_minutes: 30, is_variable_price: false, description: 'Service details', type: 'base', requires_service_ids: [], display_order: services.length + 1, active: true };
+      const item = { name: 'New Service', price_text: '$0', price_min_numeric: 0, duration: '30 min', duration_minutes: 30, is_variable_price: false, description: 'Service details', type: 'base', requires_service_ids: [], requires_service_names: [], display_order: services.length + 1, active: true };
       const created = hasSupabaseConfig ? await createRecord('services', item) : { ...item, id: crypto.randomUUID() };
       if (hasSupabaseConfig) await refreshServiceList(); else setServices((previous) => [...previous, created]);
     }}>Add Service</button></div>
-      <ReorderableList items={services} onReorder={saveServiceVisualOrder} getItemLabel={(service) => service.name || 'service'} renderFields={(service, idx) => <><label>Service name<input value={service.name} onChange={(e) => setServices((previous) => previous.map((item) => item.id === service.id ? { ...item, name: e.target.value } : item))} /></label><label>Price<input type="number" min="0" step="0.01" value={getServicePriceNumber(service)} onChange={(e) => updateServicePrice(service.id, e.target.value)} /></label><label>Duration (minutes)<input type="number" value={service.duration_minutes || 0} onChange={(e) => setServices((previous) => previous.map((item) => item.id === service.id ? { ...item, duration_minutes: Number(e.target.value), duration: `${e.target.value} min` } : item))} /></label><label className="variable-price-row"><span>Variable price?</span><input type="checkbox" checked={Boolean(service.is_variable_price)} onChange={(e) => updateServiceVariablePrice(service.id, e.target.checked)} /></label><label>Description<textarea value={service.description} onChange={(e) => setServices((previous) => previous.map((item) => item.id === service.id ? { ...item, description: e.target.value } : item))} /></label><AdminSecondaryButton onClick={() => saveService(service, idx)}>Save</AdminSecondaryButton><AdminSecondaryButton className="danger" onClick={async () => { if (hasSupabaseConfig) { await deleteRecord('services', service.id); await refreshServiceList(); return; } setServices((previous) => previous.filter((item) => item.id !== service.id)); }}>Delete</AdminSecondaryButton></>} />
+      <ReorderableList items={services} onReorder={saveServiceVisualOrder} getItemLabel={(service) => service.name || 'service'} renderFields={(service, idx) => <>
+        {service.active === false && <p className="admin-service-status">Hidden from online booking and the public services list.</p>}
+        <label>Service name<input value={service.name} onChange={(e) => setServices((previous) => previous.map((item) => item.id === service.id ? { ...item, name: e.target.value } : item))} /></label>
+        <p className="muted admin-service-preview">Customers see: {displayServiceName(service)}</p>
+        <label>Price<input type="number" min="0" step="0.01" value={getServicePriceNumber(service)} onChange={(e) => updateServicePrice(service.id, e.target.value)} /></label>
+        <label>Duration (minutes)<input type="number" value={service.duration_minutes || 0} onChange={(e) => setServices((previous) => previous.map((item) => item.id === service.id ? { ...item, duration_minutes: Number(e.target.value), duration: `${e.target.value} min` } : item))} /></label>
+        <label className="variable-price-row"><span>Variable price?</span><input type="checkbox" checked={Boolean(service.is_variable_price)} onChange={(e) => updateServiceVariablePrice(service.id, e.target.checked)} /></label>
+        <label className="variable-price-row service-addon-row"><span>Requires base manicure/pedicure service</span><input type="checkbox" checked={serviceRequiresBase(service)} onChange={(e) => updateServiceRequiresBase(service.id, e.target.checked)} /></label>
+        {serviceRequiresBase(service) && <p className="muted admin-service-help">This will book only with an active base service and will show an * to customers.</p>}
+        <label>Description<textarea value={service.description} onChange={(e) => setServices((previous) => previous.map((item) => item.id === service.id ? { ...item, description: e.target.value } : item))} /></label>
+        <AdminSecondaryButton onClick={() => saveService(service, idx)}>Save</AdminSecondaryButton>
+        <AdminSecondaryButton className={service.active === false ? '' : 'danger'} onClick={() => toggleServiceActive(service)}>{service.active === false ? 'Show service' : 'Hide service'}</AdminSecondaryButton>
+      </>} />
     </section>
 
     <section id="admin-gallery" className="admin-section admin-section-gallery"><h2>Gallery</h2><div className="gallery-upload-panel"><label htmlFor="gallery-file-picker">Select photo(s) to upload</label><input id="gallery-file-picker" type="file" accept="image/*" multiple onChange={(e) => { setSelectedGalleryFiles(Array.from(e.target.files || [])); setGalleryMessage({ type: '', text: '' }); }} /><label htmlFor="gallery-caption-input">Caption (optional)</label><input id="gallery-caption-input" placeholder="Caption for selected photo(s)" value={galleryCaptionDraft} onChange={(e) => setGalleryCaptionDraft(e.target.value)} /><button className="btn primary" onClick={uploadSelectedGalleryPhotos} disabled={galleryUploadBusy}>{galleryUploadBusy ? 'Uploading...' : 'Upload Selected Photos'}</button>{!!selectedGalleryFiles.length && <p className="muted">{selectedGalleryFiles.length} file(s) selected.</p>}{!!galleryMessage.text && <p className={galleryMessage.type === 'error' ? 'admin-message error' : 'admin-message success'}>{galleryMessage.text}</p>}</div>
