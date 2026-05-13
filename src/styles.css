@@ -272,7 +272,7 @@ blockquote:last-of-type{margin-bottom:0}
   mask-composite:intersect;
 }
 .service-grid{display:grid;gap:1.1rem;grid-template-columns:repeat(4,minmax(0,1fr))}
-.service-card-toggle{display:none}
+.service-card .service-card-toggle{display:none}
 .card{background:linear-gradient(180deg, rgba(252,250,254,.95), rgba(239,232,244,.88));border:1px solid var(--border);padding:1.3rem;border-radius:22px;box-shadow:var(--shadow);position:relative;overflow:hidden;text-align:center}
 
 form{display:grid;gap:.75rem;max-width:700px;margin-top:1.15rem;padding:1.3rem;border-radius:20px;border:1px solid var(--border);background:linear-gradient(180deg,rgba(250,247,252,.84),rgba(241,233,247,.8));box-shadow:var(--shadow);position:relative}
@@ -358,7 +358,7 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
   .service-card{text-align:left;padding-right:3.8rem}
   .service-card h3{text-align:left;margin:.1rem 0 .45rem}
   .service-card .meta{margin-bottom:0}
-  .service-card-toggle{
+  .service-card .service-card-toggle{
     display:inline-grid;
     position:absolute;
     top:.8rem;
