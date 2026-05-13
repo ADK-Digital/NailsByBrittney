@@ -767,6 +767,21 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
   font-weight:700;
 }
 
+
+.appointment-estimate-details{
+  display:grid;
+  gap:.12rem;
+  margin:.2rem 0 .12rem;
+  color:#5c5268;
+  font-size:.9rem;
+  line-height:1.32;
+}
+
+.appointment-estimate-details b{
+  color:var(--heading);
+  font-weight:800;
+}
+
 .appointment-booking-number{
   color:#766d80;
   font-size:.78rem;
