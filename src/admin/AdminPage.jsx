@@ -247,7 +247,11 @@ function formatBookingNumber(value) {
 
 
 function formatEstimatedTotal(appointment) {
-  if (appointment.estimated_total_text) return appointment.estimated_total_text;
+  const estimatedTotalText = String(appointment.estimated_total_text || '').trim();
+  if (estimatedTotalText) {
+    const normalizedText = estimatedTotalText.replace(/^estimated total(?:\s+(?:is|starts at))?\s*/i, '').trim();
+    return normalizedText || estimatedTotalText;
+  }
 
   const numeric = Number(appointment.estimated_total_min);
   if (!Number.isFinite(numeric)) return 'Estimated total unavailable';
@@ -274,6 +278,18 @@ function formatEstimatedDuration(minutes) {
 function getAppointmentServiceNames(appointment) {
   return (appointment.appointment_services || [])
     .map((service) => service.service_name_snapshot || service.name || service.service_name)
+    .filter(Boolean);
+}
+
+function getAppointmentBookingNotes(appointment, customer) {
+  const appointmentCreatedAt = new Date(appointment.created_at).getTime();
+  return (customer?.customer_notes || [])
+    .filter((note) => String(note.source || 'booking').toLowerCase() === 'booking')
+    .filter((note) => {
+      const noteCreatedAt = new Date(note.created_at).getTime();
+      return Number.isFinite(appointmentCreatedAt) && noteCreatedAt === appointmentCreatedAt;
+    })
+    .map((note) => String(note.note_text || '').trim())
     .filter(Boolean);
 }
 
@@ -524,7 +540,7 @@ function MessageThread({ customer, appointment = null }) {
   </section>;
 }
 
-function AppointmentCard({ appointment, onRefresh }) {
+function AppointmentCard({ appointment, customer, onRefresh }) {
   const [expanded, setExpanded] = useState(false);
   const [serviceAmount, setServiceAmount] = useState('');
   const [latePct, setLatePct] = useState('25');
@@ -545,6 +561,7 @@ function AppointmentCard({ appointment, onRefresh }) {
   const appointmentServiceList = appointmentServiceNames.length ? appointmentServiceNames.join(', ') : 'Service details unavailable';
   const estimatedTotal = formatEstimatedTotal(appointment);
   const estimatedDuration = formatEstimatedDuration(appointment.total_duration_minutes);
+  const bookingNotes = getAppointmentBookingNotes(appointment, customer || appointment.customers);
   const notificationWarnings = getAppointmentNotificationWarnings(appointment);
 
   useEffect(() => {
@@ -598,6 +615,7 @@ function AppointmentCard({ appointment, onRefresh }) {
             <span><b>Services:</b> {appointmentServiceList}</span>
             <span><b>Estimated Total:</b> {estimatedTotal}</span>
             <span><b>Estimated duration:</b> {estimatedDuration}</span>
+            {!!bookingNotes.length && <span><b>Notes:</b> {bookingNotes.join('; ')}</span>}
           </span>
           <span className="appointment-booking-number">Booking #{formatBookingNumber(appointment.booking_request_number)}</span>
         </div>
@@ -772,6 +790,7 @@ export default function AdminPage() {
     });
     return grouped;
   }, [appointments]);
+  const customersById = useMemo(() => new Map(customers.map((customer) => [customer.id, customer])), [customers]);
 
   useEffect(() => {
     if (appointmentPage > appointmentPageCount - 1) setAppointmentPage(Math.max(0, appointmentPageCount - 1));
@@ -965,7 +984,7 @@ export default function AdminPage() {
           {formatAdminStatus(status)}
         </label>)}
       </div>
-      {!bookingAdminError && <div className="admin-list">{pagedAppointments.map((appointment) => <AppointmentCard key={appointment.id} appointment={appointment} onRefresh={refreshBookingAdmin} />)}</div>}
+      {!bookingAdminError && <div className="admin-list">{pagedAppointments.map((appointment) => <AppointmentCard key={appointment.id} appointment={appointment} customer={customersById.get(appointment.customer_id)} onRefresh={refreshBookingAdmin} />)}</div>}
       {!bookingAdminError && !sortedAppointments.length && <p className="muted">No appointments match the selected filters.</p>}
       {sortedAppointments.length > APPOINTMENTS_PER_PAGE && <div className="appointment-pagination" aria-label="Appointment pagination">
         <button className="admin-secondary-button" type="button" onClick={() => setAppointmentPage((page) => Math.max(0, page - 1))} disabled={currentAppointmentPage === 0}>‹</button>
