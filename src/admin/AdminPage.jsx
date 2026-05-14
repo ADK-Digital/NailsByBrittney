@@ -946,6 +946,8 @@ function InventorySuppliesTable({ supplies, onSaveSupply, onManualAdjustment }) 
   const [drafts, setDrafts] = useState({});
   const [openAdjustmentId, setOpenAdjustmentId] = useState('');
   const [adjustmentDrafts, setAdjustmentDrafts] = useState({});
+  const [viewUnusedSupplies, setViewUnusedSupplies] = useState(false);
+  const visibleSupplies = viewUnusedSupplies ? supplies : supplies.filter((supply) => supply.active !== false);
   const updateDraft = (id, patch) => setDrafts((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
   const updateAdjustmentDraft = (id, patch) => setAdjustmentDrafts((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
 
@@ -959,9 +961,14 @@ function InventorySuppliesTable({ supplies, onSaveSupply, onManualAdjustment }) 
     setOpenAdjustmentId('');
   };
 
-  return <div className="inventory-table-wrap"><table className="inventory-table">
+  return <>
+    <label className="inventory-unused-toggle">
+      <input type="checkbox" checked={viewUnusedSupplies} onChange={(event) => setViewUnusedSupplies(event.target.checked)} />
+      <span>view unused supplies</span>
+    </label>
+    <div className="inventory-table-wrap"><table className="inventory-table">
     <thead><tr><th>Supply Name</th><th>Current Quantity</th><th>Low Threshold</th><th>Status</th><th>Actions</th></tr></thead>
-    <tbody>{supplies.map((supply) => {
+    <tbody>{visibleSupplies.map((supply) => {
       const draft = drafts[supply.id] || {};
       const adjustmentDraft = adjustmentDrafts[supply.id] || {};
       const currentQuantity = draft.current_quantity ?? supply.current_quantity;
@@ -969,15 +976,15 @@ function InventorySuppliesTable({ supplies, onSaveSupply, onManualAdjustment }) 
       const active = draft.active ?? supply.active !== false;
       const status = getInventoryStatus({ current_quantity: currentQuantity, low_threshold: lowThreshold });
       const adjustmentOpen = openAdjustmentId === supply.id;
-      return [<tr key={supply.id} className={active ? '' : 'inventory-inactive-row'}>
-        <td><strong>{supply.supply_name}</strong>{!active && <span className="muted"> Hidden</span>}</td>
+      return [<tr key={supply.id}>
+        <td><strong>{supply.supply_name}</strong>{!active && <span className="muted"> Unused</span>}</td>
         <td><input type="number" inputMode="decimal" step="1" value={currentQuantity} onChange={(e) => updateDraft(supply.id, { current_quantity: e.target.value })} /></td>
         <td><input type="number" min="0" step="0.01" value={lowThreshold} onChange={(e) => updateDraft(supply.id, { low_threshold: e.target.value })} /></td>
         <td><InventoryStatusPill status={status} /></td>
         <td><div className="inventory-actions">
           <AdminSecondaryButton onClick={() => onSaveSupply(supply.id, { current_quantity: currentQuantity, low_threshold: lowThreshold, active })}>Save Changes</AdminSecondaryButton>
           <AdminSecondaryButton onClick={() => setOpenAdjustmentId((previous) => previous === supply.id ? '' : supply.id)}>Manual adjustment</AdminSecondaryButton>
-          <AdminSecondaryButton className={active ? 'danger' : ''} onClick={() => onSaveSupply(supply.id, { current_quantity: currentQuantity, low_threshold: lowThreshold, active: !active })}>{active ? 'Hide' : 'Restore'}</AdminSecondaryButton>
+          <AdminSecondaryButton className={active ? 'danger' : ''} onClick={() => onSaveSupply(supply.id, { current_quantity: currentQuantity, low_threshold: lowThreshold, active: !active })}>{active ? 'Unused' : 'Restore'}</AdminSecondaryButton>
         </div></td>
       </tr>,
       adjustmentOpen && <tr key={`${supply.id}-adjustment`} className="inventory-adjustment-row">
@@ -993,7 +1000,8 @@ function InventorySuppliesTable({ supplies, onSaveSupply, onManualAdjustment }) 
         </td>
       </tr>];
     })}</tbody>
-  </table></div>;
+  </table>{!visibleSupplies.length && <p className="muted">No active supplies to show.</p>}</div>
+  </>;
 }
 
 function InventoryPurchaseForm({ supplies, purchases, onPurchase }) {
