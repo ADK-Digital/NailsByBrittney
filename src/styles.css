@@ -1635,3 +1635,123 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
 .service-addon-row{
   margin-top:.1rem;
 }
+
+.admin-section-inventory{max-width:1040px}
+.inventory-card{
+  margin:1rem auto;
+  text-align:left;
+}
+.inventory-card summary,
+.inventory-nested-card summary{
+  display:flex;
+  gap:.75rem;
+  align-items:center;
+  justify-content:space-between;
+  cursor:pointer;
+  color:var(--heading);
+  font-weight:800;
+  list-style:none;
+}
+.inventory-card summary::-webkit-details-marker,
+.inventory-nested-card summary::-webkit-details-marker{display:none}
+.inventory-card summary::after,
+.inventory-nested-card summary::after{
+  content:'+';
+  display:inline-grid;
+  width:1.9rem;
+  height:1.9rem;
+  place-items:center;
+  border:1px solid rgba(26,47,95,.16);
+  border-radius:999px;
+  background:rgba(255,255,255,.64);
+  color:var(--accent);
+}
+.inventory-card[open] > summary::after,
+.inventory-nested-card[open] > summary::after{content:'–'}
+.inventory-summary .muted{margin:0;font-size:.9rem;font-weight:700}
+.inventory-collapsed-preview{
+  display:grid;
+  gap:.55rem;
+  margin-top:.85rem;
+}
+.inventory-expanded-content{
+  display:grid;
+  gap:1rem;
+  margin-top:1rem;
+  animation:appointment-expand .18s ease-out;
+}
+.inventory-nested-card{
+  padding:1rem;
+  border:1px solid var(--border);
+  border-radius:18px;
+  background:rgba(255,255,255,.44);
+}
+.inventory-critical-row,
+.service-mapping-row{
+  display:flex;
+  flex-wrap:wrap;
+  gap:.55rem .75rem;
+  align-items:center;
+  justify-content:space-between;
+  padding:.65rem .75rem;
+  border:1px solid rgba(26,47,95,.12);
+  border-radius:16px;
+  background:rgba(255,255,255,.58);
+}
+.inventory-table-wrap{overflow-x:auto;margin-top:1rem}
+.inventory-table{
+  width:100%;
+  min-width:720px;
+  border-collapse:separate;
+  border-spacing:0 .55rem;
+}
+.inventory-table th{
+  color:#5c5268;
+  font-size:.74rem;
+  letter-spacing:.12em;
+  text-align:left;
+  text-transform:uppercase;
+}
+.inventory-table td{
+  padding:.65rem;
+  background:rgba(255,255,255,.58);
+  border-top:1px solid rgba(26,47,95,.11);
+  border-bottom:1px solid rgba(26,47,95,.11);
+}
+.inventory-table td:first-child{border-left:1px solid rgba(26,47,95,.11);border-radius:14px 0 0 14px}
+.inventory-table td:last-child{border-right:1px solid rgba(26,47,95,.11);border-radius:0 14px 14px 0}
+.inventory-table input{min-width:6rem}
+.inventory-actions{display:flex;flex-wrap:wrap;gap:.45rem}
+.inventory-inactive-row{opacity:.62}
+.inventory-status-healthy{border-color:rgba(67,119,82,.3);background:#e7f0e8;color:#315f3e}
+.inventory-status-low{border-color:rgba(154,119,36,.3);background:#f6edcf;color:#7a5c18}
+.inventory-status-critical{border-color:rgba(126,37,49,.34);background:#f3e1e4;color:#7e2531}
+.inventory-purchase-form{
+  display:grid;
+  gap:.75rem;
+  width:min(100%,640px);
+  margin:1rem auto 0;
+}
+.inventory-history-list{
+  display:grid;
+  gap:.35rem;
+  margin-top:1rem;
+}
+.inventory-history-list p{margin:0}
+.service-mapping-card{margin-top:1.25rem}
+.service-mapping-list{display:grid;gap:1rem;margin-top:1rem}
+.service-mapping-item{
+  display:grid;
+  gap:.55rem;
+  padding:1rem;
+  border:1px solid var(--border);
+  border-radius:18px;
+  background:rgba(255,255,255,.38);
+}
+.service-mapping-item h4{margin:0;color:var(--heading);font-size:1.1rem}
+.service-mapping-row select,.service-mapping-row input{max-width:220px}
+
+@media (max-width:720px){
+  .inventory-card summary,.inventory-nested-card summary{align-items:flex-start;flex-direction:column}
+  .inventory-critical-row,.service-mapping-row{align-items:stretch;flex-direction:column}
+}
