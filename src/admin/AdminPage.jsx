@@ -978,21 +978,20 @@ function InventorySuppliesTable({ supplies, onSaveSupply, onManualAdjustment }) 
 function InventoryPurchaseForm({ supplies, purchases, onPurchase }) {
   const [selectedSupplyId, setSelectedSupplyId] = useState('');
   const [newSupplyName, setNewSupplyName] = useState('');
-  const [startingQuantity, setStartingQuantity] = useState('0');
   const [lowThreshold, setLowThreshold] = useState('1');
-  const [quantityIncrement, setQuantityIncrement] = useState('0');
+  const [quantity, setQuantity] = useState('0');
   const [totalCost, setTotalCost] = useState('0');
   const [receiptFile, setReceiptFile] = useState(null);
   const isNewSupply = selectedSupplyId === '__new__';
+  const quantityHelpText = isNewSupply ? 'Initial stock quantity for this new supply.' : 'Amount added to the selected supply.';
 
   const submit = async (event) => {
     event.preventDefault();
-    await onPurchase({ selectedSupplyId, newSupplyName, startingQuantity, lowThreshold, quantityIncrement, totalCost, receiptFile });
+    await onPurchase({ selectedSupplyId, newSupplyName, lowThreshold, quantity, totalCost, receiptFile });
     setSelectedSupplyId('');
     setNewSupplyName('');
-    setStartingQuantity('0');
     setLowThreshold('1');
-    setQuantityIncrement('0');
+    setQuantity('0');
     setTotalCost('0');
     setReceiptFile(null);
     event.currentTarget.reset();
@@ -1006,10 +1005,9 @@ function InventoryPurchaseForm({ supplies, purchases, onPurchase }) {
     </select></label>
     {isNewSupply && <>
       <label>Supply Name<input value={newSupplyName} onChange={(e) => setNewSupplyName(e.target.value)} required /></label>
-      <label>Starting Quantity<input type="number" step="0.01" value={startingQuantity} onChange={(e) => setStartingQuantity(e.target.value)} required /></label>
       <label>Low Threshold<input type="number" min="0" step="0.01" value={lowThreshold} onChange={(e) => setLowThreshold(e.target.value)} required /></label>
     </>}
-    <label>Quantity Increment<input type="number" min="0" step="0.01" value={quantityIncrement} onChange={(e) => setQuantityIncrement(e.target.value)} required /></label>
+    <label>Quantity<input type="number" min="0" step="0.01" value={quantity} onChange={(e) => setQuantity(e.target.value)} required /><span className="muted">{quantityHelpText}</span></label>
     <label>Total Cost<input type="number" min="0" step="0.01" value={totalCost} onChange={(e) => setTotalCost(e.target.value)} required /></label>
     <label>Receipt Upload<input type="file" accept="image/*,application/pdf" onChange={(e) => setReceiptFile(e.target.files?.[0] || null)} /></label>
     <button className="btn primary" type="submit">Log purchase</button>
@@ -1360,9 +1358,10 @@ export default function AdminPage() {
     }
   };
 
-  const handleInventoryPurchase = async ({ selectedSupplyId, newSupplyName, startingQuantity, lowThreshold, quantityIncrement, totalCost, receiptFile }) => {
+  const handleInventoryPurchase = async ({ selectedSupplyId, newSupplyName, lowThreshold, quantity, totalCost, receiptFile }) => {
     try {
       if (!hasSupabaseConfig) return;
+      const isNewSupply = selectedSupplyId === '__new__';
       let receiptStorageKey = null;
       if (receiptFile) {
         const extension = receiptFile.name.includes('.') ? receiptFile.name.split('.').pop()?.toLowerCase() : 'pdf';
@@ -1370,11 +1369,11 @@ export default function AdminPage() {
         await uploadInventoryReceipt(receiptFile, receiptStorageKey);
       }
       await createInventoryPurchase({
-        supplyId: selectedSupplyId === '__new__' ? null : selectedSupplyId,
+        supplyId: isNewSupply ? null : selectedSupplyId,
         newSupplyName,
-        startingQuantity,
+        startingQuantity: 0,
         lowThreshold,
-        quantityIncrement,
+        quantityIncrement: quantity,
         totalCost,
         receiptStorageKey,
         receiptFileName: receiptFile?.name || null,
