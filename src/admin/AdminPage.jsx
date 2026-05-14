@@ -944,33 +944,54 @@ function InventorySection({ supplies, purchases, adjustments, onRefresh, onSaveS
 
 function InventorySuppliesTable({ supplies, onSaveSupply, onManualAdjustment }) {
   const [drafts, setDrafts] = useState({});
+  const [openAdjustmentId, setOpenAdjustmentId] = useState('');
+  const [adjustmentDrafts, setAdjustmentDrafts] = useState({});
   const updateDraft = (id, patch) => setDrafts((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
+  const updateAdjustmentDraft = (id, patch) => setAdjustmentDrafts((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
+
+  const submitAdjustment = async (event, supply) => {
+    event.preventDefault();
+    const draft = adjustmentDrafts[supply.id] || {};
+    const changeAmount = draft.changeAmount || '';
+    const reason = draft.reason || '';
+    await onManualAdjustment({ supplyId: supply.id, changeAmount, reason, allowNegative: Number(changeAmount) < 0 });
+    setAdjustmentDrafts((prev) => ({ ...prev, [supply.id]: { changeAmount: '', reason: '' } }));
+    setOpenAdjustmentId('');
+  };
 
   return <div className="inventory-table-wrap"><table className="inventory-table">
     <thead><tr><th>Supply Name</th><th>Current Quantity</th><th>Low Threshold</th><th>Status</th><th>Actions</th></tr></thead>
     <tbody>{supplies.map((supply) => {
       const draft = drafts[supply.id] || {};
+      const adjustmentDraft = adjustmentDrafts[supply.id] || {};
       const currentQuantity = draft.current_quantity ?? supply.current_quantity;
       const lowThreshold = draft.low_threshold ?? supply.low_threshold;
       const active = draft.active ?? supply.active !== false;
       const status = getInventoryStatus({ current_quantity: currentQuantity, low_threshold: lowThreshold });
-      return <tr key={supply.id} className={active ? '' : 'inventory-inactive-row'}>
+      const adjustmentOpen = openAdjustmentId === supply.id;
+      return [<tr key={supply.id} className={active ? '' : 'inventory-inactive-row'}>
         <td><strong>{supply.supply_name}</strong>{!active && <span className="muted"> Hidden</span>}</td>
-        <td><input type="number" step="0.01" value={currentQuantity} onChange={(e) => updateDraft(supply.id, { current_quantity: e.target.value })} /></td>
+        <td><input type="number" inputMode="decimal" step="1" value={currentQuantity} onChange={(e) => updateDraft(supply.id, { current_quantity: e.target.value })} /></td>
         <td><input type="number" min="0" step="0.01" value={lowThreshold} onChange={(e) => updateDraft(supply.id, { low_threshold: e.target.value })} /></td>
         <td><InventoryStatusPill status={status} /></td>
         <td><div className="inventory-actions">
           <AdminSecondaryButton onClick={() => onSaveSupply(supply.id, { current_quantity: currentQuantity, low_threshold: lowThreshold, active })}>Save Changes</AdminSecondaryButton>
-          <AdminSecondaryButton onClick={() => {
-            const changeAmount = window.prompt(`Adjustment amount for ${supply.supply_name} (positive or negative)`);
-            if (changeAmount === null) return;
-            const reason = window.prompt('Reason required (example: damaged product, recount correction, spilled inventory)');
-            if (!reason) return;
-            onManualAdjustment({ supplyId: supply.id, changeAmount, reason, allowNegative: Number(changeAmount) < 0 });
-          }}>Manual adjustment</AdminSecondaryButton>
+          <AdminSecondaryButton onClick={() => setOpenAdjustmentId((previous) => previous === supply.id ? '' : supply.id)}>Manual adjustment</AdminSecondaryButton>
           <AdminSecondaryButton className={active ? 'danger' : ''} onClick={() => onSaveSupply(supply.id, { current_quantity: currentQuantity, low_threshold: lowThreshold, active: !active })}>{active ? 'Hide' : 'Restore'}</AdminSecondaryButton>
         </div></td>
-      </tr>;
+      </tr>,
+      adjustmentOpen && <tr key={`${supply.id}-adjustment`} className="inventory-adjustment-row">
+        <td colSpan="5">
+          <form className="inventory-adjustment-form" onSubmit={(event) => submitAdjustment(event, supply)}>
+            <label>Adjustment Amount<input type="number" inputMode="decimal" step="any" value={adjustmentDraft.changeAmount || ''} onChange={(e) => updateAdjustmentDraft(supply.id, { changeAmount: e.target.value })} placeholder="Example: -0.5 or 2" required /></label>
+            <label>Reason<input value={adjustmentDraft.reason || ''} onChange={(e) => updateAdjustmentDraft(supply.id, { reason: e.target.value })} placeholder="Example: damaged product, recount correction, spilled inventory" required /></label>
+            <div className="inventory-actions">
+              <AdminSecondaryButton type="submit">Log adjustment</AdminSecondaryButton>
+              <AdminSecondaryButton onClick={() => setOpenAdjustmentId('')}>Cancel</AdminSecondaryButton>
+            </div>
+          </form>
+        </td>
+      </tr>];
     })}</tbody>
   </table></div>;
 }
@@ -1007,8 +1028,8 @@ function InventoryPurchaseForm({ supplies, purchases, onPurchase }) {
       <label>Supply Name<input value={newSupplyName} onChange={(e) => setNewSupplyName(e.target.value)} required /></label>
       <label>Low Threshold<input type="number" min="0" step="0.01" value={lowThreshold} onChange={(e) => setLowThreshold(e.target.value)} required /></label>
     </>}
-    <label>Quantity<input type="number" min="0" step="0.01" value={quantity} onChange={(e) => setQuantity(e.target.value)} required /><span className="muted">{quantityHelpText}</span></label>
-    <label>Total Cost<input type="number" min="0" step="0.01" value={totalCost} onChange={(e) => setTotalCost(e.target.value)} required /></label>
+    <label>Quantity<input type="number" inputMode="decimal" min="0" step="any" value={quantity} onChange={(e) => setQuantity(e.target.value)} required /><span className="muted">{quantityHelpText}</span></label>
+    <label>Total Cost ($)<input className="no-number-spinner" type="number" inputMode="decimal" min="0" step="0.01" value={totalCost} onChange={(e) => setTotalCost(e.target.value)} required /></label>
     <label>Receipt Upload<input type="file" accept="image/*,application/pdf" onChange={(e) => setReceiptFile(e.target.files?.[0] || null)} /></label>
     <button className="btn primary" type="submit">Log purchase</button>
   </form>
