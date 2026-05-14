@@ -3,12 +3,19 @@ import {
   createRecord,
   deleteGalleryImage,
   deleteRecord,
+  createInventoryManualAdjustment,
+  createInventoryPurchase,
+  deleteServiceInventoryMapping,
   fetchGalleryItems,
   fetchServices,
   fetchTestimonials,
+  fetchInventoryAdminData,
+  saveInventorySupply,
+  saveServiceInventoryMapping,
   updateOrder,
   updateRecord,
   uploadGalleryImage,
+  uploadInventoryReceipt,
 } from '../lib/api';
 import {
   adminChargeAppointment,
@@ -37,6 +44,7 @@ const adminNavItems = [
   ['admin-customers', 'Customers'],
   ['admin-testimonials', 'Testimonials'],
   ['admin-services', 'Services'],
+  ['admin-inventory', 'Inventory'],
   ['admin-gallery', 'Gallery'],
 ];
 
@@ -388,6 +396,34 @@ function formatAdminStatus(status) {
 
 function statusClassName(status) {
   return `pill status-pill status-${String(status || 'unknown').replace(/_/g, '-')}`;
+}
+
+
+
+function formatInventoryQuantity(value) {
+  const numeric = Number(value || 0);
+  if (!Number.isFinite(numeric)) return '0';
+  return Number.isInteger(numeric) ? String(numeric) : numeric.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
+}
+
+function getInventoryStatus(supply) {
+  const quantity = Number(supply?.current_quantity || 0);
+  const threshold = Number(supply?.low_threshold || 0);
+  if (quantity <= threshold) return 'critical';
+  if (quantity <= threshold * 1.5) return 'low';
+  return 'healthy';
+}
+
+function inventoryStatusClassName(status) {
+  return `pill inventory-status-pill inventory-status-${status}`;
+}
+
+function InventoryStatusPill({ status }) {
+  return <span className={inventoryStatusClassName(status)}><span>Status</span>{status}</span>;
+}
+
+function formatInventorySource(source) {
+  return String(source || '').replace(/_/g, ' ');
 }
 
 function formatServicePrice(service) {
@@ -868,6 +904,172 @@ function AppointmentArchivePanel({ open, archives, onToggle, onLoad, onDownload 
   </div>;
 }
 
+function InventorySection({ supplies, purchases, adjustments, onRefresh, onSaveSupply, onPurchase, onManualAdjustment }) {
+  const activeSupplies = supplies.filter((supply) => supply.active !== false);
+  const criticalSupplies = activeSupplies.filter((supply) => getInventoryStatus(supply) === 'critical');
+
+  return <section id="admin-inventory" className="admin-section admin-section-inventory">
+    <h2>Inventory</h2>
+    <details className="inventory-card card">
+      <summary className="inventory-summary">
+        <span>Inventory awareness</span>
+        <span className="muted">{criticalSupplies.length ? `${criticalSupplies.length} critical supply item(s)` : 'No critically low supplies'}</span>
+      </summary>
+      <div className="inventory-collapsed-preview" aria-label="Critical inventory supplies">
+        {criticalSupplies.length ? criticalSupplies.map((supply) => <div className="inventory-critical-row" key={supply.id}>
+          <strong>{supply.supply_name}</strong>
+          <span>Qty {formatInventoryQuantity(supply.current_quantity)}</span>
+          <span>Threshold {formatInventoryQuantity(supply.low_threshold)}</span>
+          <InventoryStatusPill status="critical" />
+        </div>) : <p className="muted">No critically low supplies.</p>}
+      </div>
+      <div className="inventory-expanded-content">
+        <details className="inventory-nested-card">
+          <summary>Supplies</summary>
+          <InventorySuppliesTable supplies={supplies} onSaveSupply={onSaveSupply} onManualAdjustment={onManualAdjustment} />
+        </details>
+        <details className="inventory-nested-card">
+          <summary>Purchases</summary>
+          <InventoryPurchaseForm supplies={activeSupplies} purchases={purchases} onPurchase={onPurchase} />
+        </details>
+        <details className="inventory-nested-card">
+          <summary>Adjustment History</summary>
+          <InventoryAdjustmentHistory adjustments={adjustments} />
+        </details>
+        <div className="admin-section-actions"><button className="btn" type="button" onClick={onRefresh}>Refresh Inventory</button></div>
+      </div>
+    </details>
+  </section>;
+}
+
+function InventorySuppliesTable({ supplies, onSaveSupply, onManualAdjustment }) {
+  const [drafts, setDrafts] = useState({});
+  const updateDraft = (id, patch) => setDrafts((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
+
+  return <div className="inventory-table-wrap"><table className="inventory-table">
+    <thead><tr><th>Supply Name</th><th>Current Quantity</th><th>Low Threshold</th><th>Status</th><th>Actions</th></tr></thead>
+    <tbody>{supplies.map((supply) => {
+      const draft = drafts[supply.id] || {};
+      const currentQuantity = draft.current_quantity ?? supply.current_quantity;
+      const lowThreshold = draft.low_threshold ?? supply.low_threshold;
+      const active = draft.active ?? supply.active !== false;
+      const status = getInventoryStatus({ current_quantity: currentQuantity, low_threshold: lowThreshold });
+      return <tr key={supply.id} className={active ? '' : 'inventory-inactive-row'}>
+        <td><strong>{supply.supply_name}</strong>{!active && <span className="muted"> Hidden</span>}</td>
+        <td><input type="number" step="0.01" value={currentQuantity} onChange={(e) => updateDraft(supply.id, { current_quantity: e.target.value })} /></td>
+        <td><input type="number" min="0" step="0.01" value={lowThreshold} onChange={(e) => updateDraft(supply.id, { low_threshold: e.target.value })} /></td>
+        <td><InventoryStatusPill status={status} /></td>
+        <td><div className="inventory-actions">
+          <AdminSecondaryButton onClick={() => onSaveSupply(supply.id, { current_quantity: currentQuantity, low_threshold: lowThreshold, active })}>Save Changes</AdminSecondaryButton>
+          <AdminSecondaryButton onClick={() => {
+            const changeAmount = window.prompt(`Adjustment amount for ${supply.supply_name} (positive or negative)`);
+            if (changeAmount === null) return;
+            const reason = window.prompt('Reason required (example: damaged product, recount correction, spilled inventory)');
+            if (!reason) return;
+            onManualAdjustment({ supplyId: supply.id, changeAmount, reason, allowNegative: Number(changeAmount) < 0 });
+          }}>Manual adjustment</AdminSecondaryButton>
+          <AdminSecondaryButton className={active ? 'danger' : ''} onClick={() => onSaveSupply(supply.id, { current_quantity: currentQuantity, low_threshold: lowThreshold, active: !active })}>{active ? 'Hide' : 'Restore'}</AdminSecondaryButton>
+        </div></td>
+      </tr>;
+    })}</tbody>
+  </table></div>;
+}
+
+function InventoryPurchaseForm({ supplies, purchases, onPurchase }) {
+  const [selectedSupplyId, setSelectedSupplyId] = useState('');
+  const [newSupplyName, setNewSupplyName] = useState('');
+  const [startingQuantity, setStartingQuantity] = useState('0');
+  const [lowThreshold, setLowThreshold] = useState('1');
+  const [quantityIncrement, setQuantityIncrement] = useState('0');
+  const [totalCost, setTotalCost] = useState('0');
+  const [receiptFile, setReceiptFile] = useState(null);
+  const isNewSupply = selectedSupplyId === '__new__';
+
+  const submit = async (event) => {
+    event.preventDefault();
+    await onPurchase({ selectedSupplyId, newSupplyName, startingQuantity, lowThreshold, quantityIncrement, totalCost, receiptFile });
+    setSelectedSupplyId('');
+    setNewSupplyName('');
+    setStartingQuantity('0');
+    setLowThreshold('1');
+    setQuantityIncrement('0');
+    setTotalCost('0');
+    setReceiptFile(null);
+    event.currentTarget.reset();
+  };
+
+  return <><form className="inventory-purchase-form" onSubmit={submit}>
+    <label>Existing Supply<select value={selectedSupplyId} onChange={(e) => setSelectedSupplyId(e.target.value)} required>
+      <option value="">Choose supply</option>
+      {supplies.map((supply) => <option key={supply.id} value={supply.id}>{supply.supply_name}</option>)}
+      <option value="__new__">Add New Supply</option>
+    </select></label>
+    {isNewSupply && <>
+      <label>Supply Name<input value={newSupplyName} onChange={(e) => setNewSupplyName(e.target.value)} required /></label>
+      <label>Starting Quantity<input type="number" step="0.01" value={startingQuantity} onChange={(e) => setStartingQuantity(e.target.value)} required /></label>
+      <label>Low Threshold<input type="number" min="0" step="0.01" value={lowThreshold} onChange={(e) => setLowThreshold(e.target.value)} required /></label>
+    </>}
+    <label>Quantity Increment<input type="number" min="0" step="0.01" value={quantityIncrement} onChange={(e) => setQuantityIncrement(e.target.value)} required /></label>
+    <label>Total Cost<input type="number" min="0" step="0.01" value={totalCost} onChange={(e) => setTotalCost(e.target.value)} required /></label>
+    <label>Receipt Upload<input type="file" accept="image/*,application/pdf" onChange={(e) => setReceiptFile(e.target.files?.[0] || null)} /></label>
+    <button className="btn primary" type="submit">Log purchase</button>
+  </form>
+  <div className="inventory-history-list">
+    {purchases.slice(0, 8).map((purchase) => <p key={purchase.id}><b>{purchase.inventory_supplies?.supply_name || 'Supply'}</b> +{formatInventoryQuantity(purchase.quantity_increment)} • ${Number(purchase.total_cost || 0).toFixed(2)} • {new Date(purchase.created_at).toLocaleString()}{purchase.inventory_receipt_attachments?.length ? ' • receipt attached' : ''}</p>)}
+    {!purchases.length && <p className="muted">No purchases logged yet.</p>}
+  </div></>;
+}
+
+function InventoryAdjustmentHistory({ adjustments }) {
+  return <div className="inventory-table-wrap"><table className="inventory-table">
+    <thead><tr><th>Timestamp</th><th>Supply</th><th>Change</th><th>Resulting Quantity</th><th>Source</th></tr></thead>
+    <tbody>{adjustments.map((log) => <tr key={log.id}>
+      <td>{new Date(log.created_at).toLocaleString()}</td>
+      <td>{log.inventory_supplies?.supply_name || 'Supply'}</td>
+      <td>{formatInventoryQuantity(log.change_amount)}</td>
+      <td>{formatInventoryQuantity(log.resulting_quantity)}</td>
+      <td>{formatInventorySource(log.source_type)}{log.reason ? ` — ${log.reason}` : ''}</td>
+    </tr>)}</tbody>
+  </table>{!adjustments.length && <p className="muted">No inventory adjustments yet.</p>}</div>;
+}
+
+function ServiceInventoryMappings({ services, supplies, mappings, onSaveMapping, onDeleteMapping }) {
+  const [drafts, setDrafts] = useState({});
+  const [mappingDrafts, setMappingDrafts] = useState({});
+  const mappingsByService = useMemo(() => {
+    const grouped = new Map();
+    mappings.forEach((mapping) => grouped.set(mapping.service_id, [...(grouped.get(mapping.service_id) || []), mapping]));
+    return grouped;
+  }, [mappings]);
+
+  return <details className="inventory-card card service-mapping-card">
+    <summary className="inventory-summary"><span>Service inventory mappings</span><span className="muted">Automatic depletion when appointments are completed</span></summary>
+    <div className="service-mapping-list">{services.filter((service) => service.active !== false).map((service) => {
+      const serviceMappings = mappingsByService.get(service.id) || [];
+      const draft = drafts[service.id] || { supplyId: supplies[0]?.id || '', amountConsumed: '0' };
+      return <div className="service-mapping-item" key={service.id}>
+        <h4>{service.name}</h4>
+        {serviceMappings.map((mapping) => {
+          const amount = mappingDrafts[mapping.id] ?? mapping.amount_consumed;
+          return <div className="service-mapping-row" key={mapping.id}>
+            <span>{mapping.inventory_supplies?.supply_name || 'Supply'}</span>
+            <input aria-label={`Amount consumed for ${mapping.inventory_supplies?.supply_name || 'supply'}`} type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setMappingDrafts((prev) => ({ ...prev, [mapping.id]: e.target.value }))} />
+            <AdminSecondaryButton onClick={() => onSaveMapping({ id: mapping.id, serviceId: service.id, supplyId: mapping.supply_id, amountConsumed: amount })}>Save</AdminSecondaryButton>
+            <AdminSecondaryButton className="danger" onClick={() => onDeleteMapping(mapping.id)}>Remove</AdminSecondaryButton>
+          </div>;
+        })}
+        <div className="service-mapping-row">
+          <select value={draft.supplyId} onChange={(e) => setDrafts((prev) => ({ ...prev, [service.id]: { ...draft, supplyId: e.target.value } }))}>
+            {supplies.map((supply) => <option key={supply.id} value={supply.id}>{supply.supply_name}</option>)}
+          </select>
+          <input type="number" min="0.01" step="0.01" value={draft.amountConsumed} onChange={(e) => setDrafts((prev) => ({ ...prev, [service.id]: { ...draft, amountConsumed: e.target.value } }))} />
+          <AdminSecondaryButton onClick={() => onSaveMapping({ serviceId: service.id, supplyId: draft.supplyId, amountConsumed: draft.amountConsumed })}>Add mapping</AdminSecondaryButton>
+        </div>
+      </div>;
+    })}</div>
+  </details>;
+}
+
 export default function AdminPage() {
   const [session, setSession] = useState(null);
   const [services, setServices] = useState([]);
@@ -892,6 +1094,8 @@ export default function AdminPage() {
   const [addAvailabilityOpen, setAddAvailabilityOpen] = useState(false);
   const [bookingAdminError, setBookingAdminError] = useState('');
   const [visibleOptionalAppointmentStatuses, setVisibleOptionalAppointmentStatuses] = useState(() => new Set());
+  const [inventoryData, setInventoryData] = useState({ supplies: [], purchases: [], adjustments: [], mappings: [] });
+  const [inventoryMessage, setInventoryMessage] = useState({ type: '', text: '' });
 
   const filteredAppointments = useMemo(() => appointments.filter((appointment) => shouldShowAppointment(appointment, visibleOptionalAppointmentStatuses)), [appointments, visibleOptionalAppointmentStatuses]);
   const sortedAppointments = useMemo(() => sortAppointmentsForAdmin(filteredAppointments), [filteredAppointments]);
@@ -955,6 +1159,10 @@ export default function AdminPage() {
 
   const refreshServiceList = async () => setServices(await fetchServices({ includeInactive: true }));
   const refreshGalleryList = async () => setGallery(await fetchGalleryItems());
+  const refreshInventoryList = async () => {
+    if (!hasSupabaseConfig) return;
+    setInventoryData(await fetchInventoryAdminData());
+  };
 
   const saveVisualOrder = async (table, items, setItems, refreshList, saveTokenRef) => {
     const orderedItems = items.map((item, index) => ({ ...item, display_order: index + 1 }));
@@ -1001,10 +1209,11 @@ export default function AdminPage() {
   }, []);
 
   useEffect(() => {
-    Promise.all([fetchServices({ includeInactive: true }), fetchTestimonials(), fetchGalleryItems()]).then(([serviceData, testimonialData, galleryData]) => {
+    Promise.all([fetchServices({ includeInactive: true }), fetchTestimonials(), fetchGalleryItems(), hasSupabaseConfig ? fetchInventoryAdminData() : Promise.resolve({ supplies: [], purchases: [], adjustments: [], mappings: [] })]).then(([serviceData, testimonialData, galleryData, inventoryAdminData]) => {
       setServices(serviceData);
       setTestimonials(testimonialData);
       setGallery(galleryData);
+      setInventoryData(inventoryAdminData);
     });
   }, []);
 
@@ -1039,9 +1248,7 @@ export default function AdminPage() {
       for (const [index, file] of selectedGalleryFiles.entries()) {
         const extension = file.name.includes('.') ? file.name.split('.').pop()?.toLowerCase() : 'jpg';
         const storageKey = `uploads/${Date.now()}-${crypto.randomUUID()}.${extension || 'jpg'}`;
-        // eslint-disable-next-line no-await-in-loop
         await uploadGalleryImage(file, storageKey);
-        // eslint-disable-next-line no-await-in-loop
         await createRecord('gallery_items', { storage_key: storageKey, caption: galleryCaptionDraft.trim(), display_order: baseDisplayOrder + index + 1 });
       }
       await refreshGalleryList();
@@ -1054,6 +1261,79 @@ export default function AdminPage() {
       setGalleryUploadBusy(false);
     }
     return undefined;
+  };
+
+
+
+  const handleSaveInventorySupply = async (supplyId, payload) => {
+    try {
+      if (!hasSupabaseConfig) return;
+      await saveInventorySupply(supplyId, payload);
+      await refreshInventoryList();
+      setInventoryMessage({ type: 'success', text: 'Supply saved.' });
+    } catch (error) {
+      setInventoryMessage({ type: 'error', text: error?.message || 'Unable to save supply.' });
+    }
+  };
+
+  const handleManualInventoryAdjustment = async (payload) => {
+    try {
+      if (!hasSupabaseConfig) return;
+      await createInventoryManualAdjustment(payload);
+      await refreshInventoryList();
+      setInventoryMessage({ type: 'success', text: 'Manual adjustment logged.' });
+    } catch (error) {
+      setInventoryMessage({ type: 'error', text: error?.message || 'Unable to log adjustment.' });
+    }
+  };
+
+  const handleInventoryPurchase = async ({ selectedSupplyId, newSupplyName, startingQuantity, lowThreshold, quantityIncrement, totalCost, receiptFile }) => {
+    try {
+      if (!hasSupabaseConfig) return;
+      let receiptStorageKey = null;
+      if (receiptFile) {
+        const extension = receiptFile.name.includes('.') ? receiptFile.name.split('.').pop()?.toLowerCase() : 'pdf';
+        receiptStorageKey = `receipts/${Date.now()}-${crypto.randomUUID()}.${extension || 'pdf'}`;
+        await uploadInventoryReceipt(receiptFile, receiptStorageKey);
+      }
+      await createInventoryPurchase({
+        supplyId: selectedSupplyId === '__new__' ? null : selectedSupplyId,
+        newSupplyName,
+        startingQuantity,
+        lowThreshold,
+        quantityIncrement,
+        totalCost,
+        receiptStorageKey,
+        receiptFileName: receiptFile?.name || null,
+        receiptContentType: receiptFile?.type || null,
+      });
+      await refreshInventoryList();
+      setInventoryMessage({ type: 'success', text: 'Purchase logged and inventory updated.' });
+    } catch (error) {
+      setInventoryMessage({ type: 'error', text: error?.message || 'Unable to log purchase.' });
+    }
+  };
+
+  const handleSaveServiceInventoryMapping = async (payload) => {
+    try {
+      if (!hasSupabaseConfig) return;
+      await saveServiceInventoryMapping(payload);
+      await refreshInventoryList();
+      setInventoryMessage({ type: 'success', text: 'Service inventory mapping saved.' });
+    } catch (error) {
+      setInventoryMessage({ type: 'error', text: error?.message || 'Unable to save mapping.' });
+    }
+  };
+
+  const handleDeleteServiceInventoryMapping = async (mappingId) => {
+    try {
+      if (!hasSupabaseConfig) return;
+      await deleteServiceInventoryMapping(mappingId);
+      await refreshInventoryList();
+      setInventoryMessage({ type: 'success', text: 'Service inventory mapping removed.' });
+    } catch (error) {
+      setInventoryMessage({ type: 'error', text: error?.message || 'Unable to remove mapping.' });
+    }
   };
 
   const updateServicePrice = (serviceId, nextValue) => {
@@ -1204,7 +1484,26 @@ export default function AdminPage() {
         <AdminSecondaryButton onClick={() => saveService(service, idx)}>Save</AdminSecondaryButton>
         <AdminSecondaryButton className={service.active === false ? '' : 'danger'} onClick={() => toggleServiceActive(service)}>{service.active === false ? 'Show service' : 'Hide service'}</AdminSecondaryButton>
       </>} />
+      <ServiceInventoryMappings
+        services={services}
+        supplies={inventoryData.supplies.filter((supply) => supply.active !== false)}
+        mappings={inventoryData.mappings}
+        onSaveMapping={handleSaveServiceInventoryMapping}
+        onDeleteMapping={handleDeleteServiceInventoryMapping}
+      />
     </section>
+
+
+    <InventorySection
+      supplies={inventoryData.supplies}
+      purchases={inventoryData.purchases}
+      adjustments={inventoryData.adjustments}
+      onRefresh={() => refreshInventoryList().catch(() => setInventoryMessage({ type: 'error', text: 'Unable to refresh inventory.' }))}
+      onSaveSupply={handleSaveInventorySupply}
+      onPurchase={handleInventoryPurchase}
+      onManualAdjustment={handleManualInventoryAdjustment}
+    />
+    {!!inventoryMessage.text && <p className={`admin-message ${inventoryMessage.type}`} role={inventoryMessage.type === 'error' ? 'alert' : 'status'}>{inventoryMessage.text}</p>}
 
     <section id="admin-gallery" className="admin-section admin-section-gallery"><h2>Gallery</h2><div className="gallery-upload-panel"><label htmlFor="gallery-file-picker">Select photo(s) to upload</label><input id="gallery-file-picker" type="file" accept="image/*" multiple onChange={(e) => { setSelectedGalleryFiles(Array.from(e.target.files || [])); setGalleryMessage({ type: '', text: '' }); }} /><label htmlFor="gallery-caption-input">Caption (optional)</label><input id="gallery-caption-input" placeholder="Caption for selected photo(s)" value={galleryCaptionDraft} onChange={(e) => setGalleryCaptionDraft(e.target.value)} /><button className="btn primary" onClick={uploadSelectedGalleryPhotos} disabled={galleryUploadBusy}>{galleryUploadBusy ? 'Uploading...' : 'Upload Selected Photos'}</button>{!!selectedGalleryFiles.length && <p className="muted">{selectedGalleryFiles.length} file(s) selected.</p>}{!!galleryMessage.text && <p className={galleryMessage.type === 'error' ? 'admin-message error' : 'admin-message success'}>{galleryMessage.text}</p>}</div>
       <ReorderableList items={gallery} onReorder={saveGalleryVisualOrder} getItemLabel={(galleryItem) => galleryItem.caption || 'gallery item'} renderFields={(galleryItem) => <div className="gallery-admin-item">{(galleryItem.imageUrl || galleryItem.local_path) ? <img src={galleryItem.imageUrl || galleryItem.local_path} alt="Gallery" /> : <div className="missing-image">No image</div>}<input placeholder="Caption" value={galleryItem.caption || ''} onChange={(e) => setGallery((previous) => previous.map((item) => item.id === galleryItem.id ? { ...item, caption: e.target.value } : item))} /><AdminSecondaryButton onClick={async () => { if (!hasSupabaseConfig) return; await updateRecord('gallery_items', galleryItem.id, { caption: galleryItem.caption || '' }); await refreshGalleryList(); }}>Save</AdminSecondaryButton><AdminSecondaryButton className="danger" onClick={async () => { if (hasSupabaseConfig) { await deleteGalleryImage(galleryItem.storage_key); await deleteRecord('gallery_items', galleryItem.id); await refreshGalleryList(); return; } setGallery((previous) => previous.filter((item) => item.id !== galleryItem.id)); }}>Delete</AdminSecondaryButton></div>} />

@@ -1149,3 +1149,277 @@ create policy "auth manage booking intake audit" on booking_intake_audit
   for all to authenticated
   using (true)
   with check (true);
+
+-- Lightweight operational inventory + purchase receipt tracking
+
+do $$
+begin
+  if not exists (select 1 from pg_type where typname = 'inventory_adjustment_source') then
+    create type inventory_adjustment_source as enum ('purchase', 'service_completion', 'manual_adjustment');
+  end if;
+end
+$$;
+
+create table if not exists inventory_supplies (
+  id uuid primary key default gen_random_uuid(),
+  supply_name text not null unique,
+  current_quantity numeric(12,2) not null default 0,
+  low_threshold numeric(12,2) not null default 0,
+  active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  check (current_quantity >= 0),
+  check (low_threshold >= 0)
+);
+
+-- Negative inventory is blocked by service/purchase/save functions and allowed only by
+-- explicit manual adjustment, so do not keep a table-level nonnegative check.
+alter table inventory_supplies drop constraint if exists inventory_supplies_current_quantity_check;
+
+create table if not exists inventory_purchase_logs (
+  id uuid primary key default gen_random_uuid(),
+  supply_id uuid not null references inventory_supplies(id),
+  quantity_increment numeric(12,2) not null check (quantity_increment >= 0),
+  total_cost numeric(12,2) not null default 0 check (total_cost >= 0),
+  created_at timestamptz not null default now()
+);
+
+create table if not exists inventory_receipt_attachments (
+  id uuid primary key default gen_random_uuid(),
+  purchase_id uuid not null references inventory_purchase_logs(id) on delete cascade,
+  storage_key text not null,
+  file_name text not null,
+  content_type text not null check (content_type like 'image/%' or content_type = 'application/pdf'),
+  created_at timestamptz not null default now()
+);
+
+create table if not exists service_inventory_mappings (
+  id uuid primary key default gen_random_uuid(),
+  service_id uuid not null references services(id) on delete cascade,
+  supply_id uuid not null references inventory_supplies(id),
+  amount_consumed numeric(12,2) not null check (amount_consumed > 0),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (service_id, supply_id)
+);
+
+create table if not exists inventory_adjustment_logs (
+  id uuid primary key default gen_random_uuid(),
+  supply_id uuid not null references inventory_supplies(id),
+  change_amount numeric(12,2) not null,
+  resulting_quantity numeric(12,2) not null,
+  source_type inventory_adjustment_source not null,
+  reason text,
+  appointment_id uuid references appointments(id) on delete set null,
+  service_id uuid references services(id) on delete set null,
+  purchase_id uuid references inventory_purchase_logs(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+alter table appointments add column if not exists inventory_deducted_at timestamptz;
+
+create index if not exists idx_inventory_adjustments_created on inventory_adjustment_logs(created_at desc);
+create index if not exists idx_service_inventory_mappings_service on service_inventory_mappings(service_id);
+
+create or replace function admin_update_inventory_supply(
+  p_supply_id uuid,
+  p_current_quantity numeric,
+  p_low_threshold numeric,
+  p_active boolean default null
+)
+returns inventory_supplies
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_supply inventory_supplies;
+begin
+  if not is_service_admin() then raise exception 'Admin access required'; end if;
+  if p_current_quantity < 0 then raise exception 'Supply quantity cannot be negative'; end if;
+  if p_low_threshold < 0 then raise exception 'Low threshold cannot be negative'; end if;
+
+  update inventory_supplies
+  set current_quantity = p_current_quantity,
+      low_threshold = p_low_threshold,
+      active = coalesce(p_active, active),
+      updated_at = now()
+  where id = p_supply_id
+  returning * into v_supply;
+
+  if v_supply.id is null then raise exception 'Supply not found'; end if;
+  return v_supply;
+end;
+$$;
+
+create or replace function admin_create_inventory_manual_adjustment(
+  p_supply_id uuid,
+  p_change_amount numeric,
+  p_reason text,
+  p_allow_negative boolean default false
+)
+returns inventory_adjustment_logs
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_supply inventory_supplies;
+  v_result numeric;
+  v_log inventory_adjustment_logs;
+begin
+  if not is_service_admin() then raise exception 'Admin access required'; end if;
+  if p_change_amount = 0 then raise exception 'Adjustment amount must not be zero'; end if;
+  if btrim(coalesce(p_reason, '')) = '' then raise exception 'Adjustment reason is required'; end if;
+
+  select * into v_supply from inventory_supplies where id = p_supply_id for update;
+  if v_supply.id is null then raise exception 'Supply not found'; end if;
+  v_result := v_supply.current_quantity + p_change_amount;
+  if v_result < 0 and not p_allow_negative then raise exception 'Adjustment would make inventory negative'; end if;
+
+  update inventory_supplies set current_quantity = v_result, updated_at = now() where id = p_supply_id;
+  insert into inventory_adjustment_logs(supply_id, change_amount, resulting_quantity, source_type, reason)
+  values (p_supply_id, p_change_amount, v_result, 'manual_adjustment', btrim(p_reason))
+  returning * into v_log;
+  return v_log;
+end;
+$$;
+
+create or replace function admin_create_inventory_purchase(
+  p_supply_id uuid,
+  p_new_supply_name text,
+  p_starting_quantity numeric,
+  p_low_threshold numeric,
+  p_quantity_increment numeric,
+  p_total_cost numeric,
+  p_receipt_storage_key text default null,
+  p_receipt_file_name text default null,
+  p_receipt_content_type text default null
+)
+returns inventory_purchase_logs
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_supply_id uuid;
+  v_result numeric;
+  v_purchase inventory_purchase_logs;
+begin
+  if not is_service_admin() then raise exception 'Admin access required'; end if;
+  if p_quantity_increment < 0 then raise exception 'Quantity increment cannot be negative'; end if;
+  if p_total_cost < 0 then raise exception 'Total cost cannot be negative'; end if;
+
+  if p_supply_id is null then
+    if btrim(coalesce(p_new_supply_name, '')) = '' then raise exception 'Supply name is required'; end if;
+    if p_starting_quantity < 0 then raise exception 'Starting quantity cannot be negative'; end if;
+    if p_low_threshold < 0 then raise exception 'Low threshold cannot be negative'; end if;
+    insert into inventory_supplies(supply_name, current_quantity, low_threshold)
+    values (btrim(p_new_supply_name), p_starting_quantity, p_low_threshold)
+    returning id into v_supply_id;
+  else
+    select id into v_supply_id from inventory_supplies where id = p_supply_id and active = true;
+    if v_supply_id is null then raise exception 'Active supply not found'; end if;
+  end if;
+
+  update inventory_supplies
+  set current_quantity = current_quantity + p_quantity_increment,
+      updated_at = now()
+  where id = v_supply_id
+  returning current_quantity into v_result;
+
+  insert into inventory_purchase_logs(supply_id, quantity_increment, total_cost)
+  values (v_supply_id, p_quantity_increment, p_total_cost)
+  returning * into v_purchase;
+
+  if p_receipt_storage_key is not null then
+    insert into inventory_receipt_attachments(purchase_id, storage_key, file_name, content_type)
+    values (v_purchase.id, p_receipt_storage_key, coalesce(p_receipt_file_name, 'receipt'), coalesce(p_receipt_content_type, 'application/pdf'));
+  end if;
+
+  insert into inventory_adjustment_logs(supply_id, change_amount, resulting_quantity, source_type, purchase_id)
+  values (v_supply_id, p_quantity_increment, v_result, 'purchase', v_purchase.id);
+
+  return v_purchase;
+end;
+$$;
+
+create or replace function deduct_inventory_for_completed_appointment(p_appointment_id uuid)
+returns int
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_count int := 0;
+  r record;
+  v_result numeric;
+begin
+  update appointments
+  set inventory_deducted_at = now(), updated_at = now()
+  where id = p_appointment_id
+    and status = 'completed'
+    and inventory_deducted_at is null;
+
+  get diagnostics v_count = row_count;
+  if v_count = 0 then return 0; end if;
+
+  for r in
+    select aps.service_id, sim.supply_id, sum(sim.amount_consumed) as amount_consumed
+    from appointment_services aps
+    join service_inventory_mappings sim on sim.service_id = aps.service_id
+    join inventory_supplies inv on inv.id = sim.supply_id and inv.active = true
+    where aps.appointment_id = p_appointment_id
+    group by aps.service_id, sim.supply_id
+  loop
+    update inventory_supplies
+    set current_quantity = current_quantity - r.amount_consumed,
+        updated_at = now()
+    where id = r.supply_id
+      and current_quantity - r.amount_consumed >= 0
+    returning current_quantity into v_result;
+
+    if v_result is null then
+      raise exception 'Inventory deduction would make a supply negative';
+    end if;
+
+    insert into inventory_adjustment_logs(supply_id, change_amount, resulting_quantity, source_type, appointment_id, service_id)
+    values (r.supply_id, -r.amount_consumed, v_result, 'service_completion', p_appointment_id, r.service_id);
+  end loop;
+
+  return 1;
+end;
+$$;
+
+alter table inventory_supplies enable row level security;
+alter table inventory_purchase_logs enable row level security;
+alter table inventory_receipt_attachments enable row level security;
+alter table service_inventory_mappings enable row level security;
+alter table inventory_adjustment_logs enable row level security;
+
+drop policy if exists "auth manage inventory supplies" on inventory_supplies;
+drop policy if exists "auth manage inventory purchases" on inventory_purchase_logs;
+drop policy if exists "auth manage inventory receipts" on inventory_receipt_attachments;
+drop policy if exists "auth manage service inventory mappings" on service_inventory_mappings;
+drop policy if exists "auth manage inventory adjustments" on inventory_adjustment_logs;
+
+create policy "auth manage inventory supplies" on inventory_supplies
+  for all to authenticated using (is_service_admin()) with check (is_service_admin());
+create policy "auth manage inventory purchases" on inventory_purchase_logs
+  for all to authenticated using (is_service_admin()) with check (is_service_admin());
+create policy "auth manage inventory receipts" on inventory_receipt_attachments
+  for all to authenticated using (is_service_admin()) with check (is_service_admin());
+create policy "auth manage service inventory mappings" on service_inventory_mappings
+  for all to authenticated using (is_service_admin()) with check (is_service_admin());
+create policy "auth manage inventory adjustments" on inventory_adjustment_logs
+  for all to authenticated using (is_service_admin()) with check (is_service_admin());
+
+insert into storage.buckets (id, name, public)
+values ('inventory-receipts', 'inventory-receipts', false)
+on conflict (id) do nothing;
+
+drop policy if exists "auth manage inventory receipt files" on storage.objects;
+create policy "auth manage inventory receipt files" on storage.objects
+  for all to authenticated
+  using (bucket_id = 'inventory-receipts' and is_service_admin())
+  with check (bucket_id = 'inventory-receipts' and is_service_admin());

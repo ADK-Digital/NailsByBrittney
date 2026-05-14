@@ -182,7 +182,17 @@ export async function transitionAppointment(appointmentId, nextStatus, context =
     patch.cancelled_at = nowIso;
   }
 
-  await supabaseAdmin.from('appointments').update(patch).eq('id', appointmentId);
+  const { error: updateError } = await supabaseAdmin.from('appointments').update(patch).eq('id', appointmentId);
+  if (updateError) throw updateError;
+
+  if (nextStatus === 'completed') {
+    const { error: inventoryError } = await supabaseAdmin.rpc('deduct_inventory_for_completed_appointment', { p_appointment_id: appointmentId });
+    if (inventoryError) {
+      await supabaseAdmin.from('appointments').update({ status: appointment.status, updated_at: new Date().toISOString() }).eq('id', appointmentId);
+      throw inventoryError;
+    }
+  }
+
   await logAudit(appointmentId, `status_${nextStatus}`, context.initiatedBy || 'dashboard', context.note, context.commandText || null);
   await notifyCustomerStatus(appointment, services, nextStatus, context);
 }
