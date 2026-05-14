@@ -1033,41 +1033,114 @@ function InventoryAdjustmentHistory({ adjustments }) {
   </table>{!adjustments.length && <p className="muted">No inventory adjustments yet.</p>}</div>;
 }
 
-function ServiceInventoryMappings({ services, supplies, mappings, onSaveMapping, onDeleteMapping }) {
-  const [drafts, setDrafts] = useState({});
-  const [mappingDrafts, setMappingDrafts] = useState({});
-  const mappingsByService = useMemo(() => {
-    const grouped = new Map();
-    mappings.forEach((mapping) => grouped.set(mapping.service_id, [...(grouped.get(mapping.service_id) || []), mapping]));
-    return grouped;
-  }, [mappings]);
+function hasValidInventoryAmount(value) {
+  const text = String(value ?? '').trim();
+  if (!text || !/^\d+(?:\.\d{1,3})?$/.test(text)) return false;
+  const numeric = Number(text);
+  return Number.isFinite(numeric) && numeric > 0;
+}
 
-  return <details className="inventory-card card service-mapping-card">
-    <summary className="inventory-summary"><span>Service inventory mappings</span><span className="muted">Automatic depletion when appointments are completed</span></summary>
-    <div className="service-mapping-list">{services.filter((service) => service.active !== false).map((service) => {
-      const serviceMappings = mappingsByService.get(service.id) || [];
-      const draft = drafts[service.id] || { supplyId: supplies[0]?.id || '', amountConsumed: '0' };
-      return <div className="service-mapping-item" key={service.id}>
-        <h4>{service.name}</h4>
-        {serviceMappings.map((mapping) => {
-          const amount = mappingDrafts[mapping.id] ?? mapping.amount_consumed;
-          return <div className="service-mapping-row" key={mapping.id}>
-            <span>{mapping.inventory_supplies?.supply_name || 'Supply'}</span>
-            <input aria-label={`Amount consumed for ${mapping.inventory_supplies?.supply_name || 'supply'}`} type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setMappingDrafts((prev) => ({ ...prev, [mapping.id]: e.target.value }))} />
-            <AdminSecondaryButton onClick={() => onSaveMapping({ id: mapping.id, serviceId: service.id, supplyId: mapping.supply_id, amountConsumed: amount })}>Save</AdminSecondaryButton>
-            <AdminSecondaryButton className="danger" onClick={() => onDeleteMapping(mapping.id)}>Remove</AdminSecondaryButton>
-          </div>;
-        })}
-        <div className="service-mapping-row">
-          <select value={draft.supplyId} onChange={(e) => setDrafts((prev) => ({ ...prev, [service.id]: { ...draft, supplyId: e.target.value } }))}>
-            {supplies.map((supply) => <option key={supply.id} value={supply.id}>{supply.supply_name}</option>)}
+function getSupplyName(supplies, supplyId) {
+  return supplies.find((supply) => supply.id === supplyId)?.supply_name || 'Supply';
+}
+
+function ServiceSuppliesUsed({ service, supplies, mappings, onSaveMapping, onDeleteMapping }) {
+  const activeSupplies = useMemo(() => supplies.filter((supply) => supply.active !== false), [supplies]);
+  const [addDraft, setAddDraft] = useState({ supplyId: '', amountConsumed: '' });
+  const [mappingDrafts, setMappingDrafts] = useState({});
+  const [message, setMessage] = useState({ type: '', text: '' });
+  const serviceMappings = useMemo(() => mappings.filter((mapping) => mapping.service_id === service.id), [mappings, service.id]);
+
+  const updateMappingDraft = (mappingId, updates) => {
+    setMappingDrafts((previous) => ({
+      ...previous,
+      [mappingId]: { ...(previous[mappingId] || {}), ...updates },
+    }));
+  };
+
+  const validateDraft = ({ supplyId, amountConsumed, currentMappingId = null }) => {
+    if (!supplyId) return 'Choose an active supply.';
+    if (!activeSupplies.some((supply) => supply.id === supplyId)) return 'Choose an active supply.';
+    if (!hasValidInventoryAmount(amountConsumed)) return 'Enter a positive quantity with up to 3 decimal places.';
+    const duplicate = serviceMappings.some((mapping) => mapping.supply_id === supplyId && mapping.id !== currentMappingId);
+    if (duplicate) return 'This supply is already mapped to this service.';
+    return '';
+  };
+
+  const saveExisting = async (mapping) => {
+    const draft = mappingDrafts[mapping.id] || {};
+    const payload = {
+      id: mapping.id,
+      serviceId: service.id,
+      supplyId: draft.supplyId ?? mapping.supply_id,
+      amountConsumed: draft.amountConsumed ?? mapping.amount_consumed,
+    };
+    const validationMessage = validateDraft({ ...payload, currentMappingId: mapping.id });
+    if (validationMessage) {
+      setMessage({ type: 'error', text: validationMessage });
+      return;
+    }
+    const saved = await onSaveMapping(payload);
+    if (saved !== false) {
+      setMappingDrafts((previous) => {
+        const next = { ...previous };
+        delete next[mapping.id];
+        return next;
+      });
+      setMessage({ type: '', text: '' });
+    }
+  };
+
+  const addMapping = async () => {
+    const validationMessage = validateDraft(addDraft);
+    if (validationMessage) {
+      setMessage({ type: 'error', text: validationMessage });
+      return;
+    }
+    const saved = await onSaveMapping({ serviceId: service.id, supplyId: addDraft.supplyId, amountConsumed: addDraft.amountConsumed });
+    if (saved !== false) {
+      setAddDraft({ supplyId: '', amountConsumed: '' });
+      setMessage({ type: '', text: '' });
+    }
+  };
+
+  return <section className="service-supplies-used" aria-label={`Supplies used by ${service.name || 'service'}`}>
+    <div className="service-supplies-head">
+      <h4>Supplies Used</h4>
+      <p className="muted">Automatically deducted when this service is completed.</p>
+    </div>
+    <div className="service-supplies-list">
+      {serviceMappings.map((mapping) => {
+        const draft = mappingDrafts[mapping.id] || {};
+        const selectedSupplyId = draft.supplyId ?? mapping.supply_id;
+        const amountConsumed = draft.amountConsumed ?? mapping.amount_consumed;
+        const selectedSupply = supplies.find((supply) => supply.id === selectedSupplyId);
+        const selectedSupplyInactive = selectedSupply && selectedSupply.active === false;
+        return <div className="service-supplies-row" key={mapping.id}>
+          <select aria-label={`Supply used for ${service.name || 'service'}`} value={selectedSupplyId || ''} onChange={(e) => updateMappingDraft(mapping.id, { supplyId: e.target.value })}>
+            {selectedSupplyInactive && <option value={selectedSupply.id} disabled>{selectedSupply.supply_name} (inactive)</option>}
+            <option value="" disabled>Choose supply</option>
+            {activeSupplies.map((supply) => <option key={supply.id} value={supply.id}>{supply.supply_name}</option>)}
           </select>
-          <input type="number" min="0.01" step="0.01" value={draft.amountConsumed} onChange={(e) => setDrafts((prev) => ({ ...prev, [service.id]: { ...draft, amountConsumed: e.target.value } }))} />
-          <AdminSecondaryButton onClick={() => onSaveMapping({ serviceId: service.id, supplyId: draft.supplyId, amountConsumed: draft.amountConsumed })}>Add mapping</AdminSecondaryButton>
-        </div>
-      </div>;
-    })}</div>
-  </details>;
+          <input aria-label={`Quantity of ${getSupplyName(supplies, selectedSupplyId)} consumed by ${service.name || 'service'}`} type="number" inputMode="decimal" min="0.001" step="0.001" placeholder="Qty" value={amountConsumed} onChange={(e) => updateMappingDraft(mapping.id, { amountConsumed: e.target.value })} />
+          <div className="service-supplies-actions">
+            <AdminSecondaryButton onClick={() => saveExisting(mapping)}>Save</AdminSecondaryButton>
+            <AdminSecondaryButton className="danger" onClick={() => onDeleteMapping(mapping.id)}>Remove</AdminSecondaryButton>
+          </div>
+        </div>;
+      })}
+      {!serviceMappings.length && <p className="muted service-supplies-empty">No supplies mapped yet.</p>}
+      <div className="service-supplies-row service-supplies-add-row">
+        <select aria-label={`Add supply used for ${service.name || 'service'}`} value={addDraft.supplyId} onChange={(e) => setAddDraft((previous) => ({ ...previous, supplyId: e.target.value }))}>
+          <option value="" disabled>Choose supply</option>
+          {activeSupplies.map((supply) => <option key={supply.id} value={supply.id}>{supply.supply_name}</option>)}
+        </select>
+        <input aria-label={`Quantity consumed by ${service.name || 'service'}`} type="number" inputMode="decimal" min="0.001" step="0.001" placeholder="Qty" value={addDraft.amountConsumed} onChange={(e) => setAddDraft((previous) => ({ ...previous, amountConsumed: e.target.value }))} />
+        <AdminSecondaryButton onClick={addMapping}>+ Add</AdminSecondaryButton>
+      </div>
+    </div>
+    {message.text && <p className={`admin-message ${message.type}`} role={message.type === 'error' ? 'alert' : 'status'}>{message.text}</p>}
+  </section>;
 }
 
 export default function AdminPage() {
@@ -1314,25 +1387,44 @@ export default function AdminPage() {
     }
   };
 
+  const validateServiceInventoryMapping = (payload) => {
+    const activeSupply = inventoryData.supplies.some((supply) => supply.id === payload.supplyId && supply.active !== false);
+    if (!activeSupply) return 'Choose an active supply.';
+    if (!hasValidInventoryAmount(payload.amountConsumed)) return 'Enter a positive quantity with up to 3 decimal places.';
+    const duplicate = inventoryData.mappings.some((mapping) => mapping.service_id === payload.serviceId && mapping.supply_id === payload.supplyId && mapping.id !== payload.id);
+    if (duplicate) return 'This supply is already mapped to this service.';
+    return '';
+  };
+
   const handleSaveServiceInventoryMapping = async (payload) => {
+    const validationMessage = validateServiceInventoryMapping(payload);
+    if (validationMessage) {
+      setInventoryMessage({ type: 'error', text: validationMessage });
+      return false;
+    }
+
     try {
-      if (!hasSupabaseConfig) return;
+      if (!hasSupabaseConfig) return false;
       await saveServiceInventoryMapping(payload);
       await refreshInventoryList();
       setInventoryMessage({ type: 'success', text: 'Service inventory mapping saved.' });
+      return true;
     } catch (error) {
       setInventoryMessage({ type: 'error', text: error?.message || 'Unable to save mapping.' });
+      return false;
     }
   };
 
   const handleDeleteServiceInventoryMapping = async (mappingId) => {
     try {
-      if (!hasSupabaseConfig) return;
+      if (!hasSupabaseConfig) return false;
       await deleteServiceInventoryMapping(mappingId);
       await refreshInventoryList();
       setInventoryMessage({ type: 'success', text: 'Service inventory mapping removed.' });
+      return true;
     } catch (error) {
       setInventoryMessage({ type: 'error', text: error?.message || 'Unable to remove mapping.' });
+      return false;
     }
   };
 
@@ -1481,16 +1573,16 @@ export default function AdminPage() {
         <label className="variable-price-row service-addon-row"><span>Requires base manicure/pedicure service</span><input type="checkbox" checked={serviceRequiresBase(service)} onChange={(e) => updateServiceRequiresBase(service.id, e.target.checked)} /></label>
         {serviceRequiresBase(service) && <p className="muted admin-service-help">This will book only with an active base service and will show an * to customers.</p>}
         <label>Description<textarea value={service.description} onChange={(e) => setServices((previous) => previous.map((item) => item.id === service.id ? { ...item, description: e.target.value } : item))} /></label>
+        <ServiceSuppliesUsed
+          service={service}
+          supplies={inventoryData.supplies}
+          mappings={inventoryData.mappings}
+          onSaveMapping={handleSaveServiceInventoryMapping}
+          onDeleteMapping={handleDeleteServiceInventoryMapping}
+        />
         <AdminSecondaryButton onClick={() => saveService(service, idx)}>Save</AdminSecondaryButton>
         <AdminSecondaryButton className={service.active === false ? '' : 'danger'} onClick={() => toggleServiceActive(service)}>{service.active === false ? 'Show service' : 'Hide service'}</AdminSecondaryButton>
       </>} />
-      <ServiceInventoryMappings
-        services={services}
-        supplies={inventoryData.supplies.filter((supply) => supply.active !== false)}
-        mappings={inventoryData.mappings}
-        onSaveMapping={handleSaveServiceInventoryMapping}
-        onDeleteMapping={handleDeleteServiceInventoryMapping}
-      />
     </section>
 
 
