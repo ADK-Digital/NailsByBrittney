@@ -1722,6 +1722,21 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
 .inventory-table td:last-child{border-right:1px solid rgba(26,47,95,.11);border-radius:0 14px 14px 0}
 .inventory-table input{min-width:6rem}
 .inventory-actions{display:flex;flex-wrap:wrap;gap:.45rem}
+.inventory-adjustment-row td{
+  background:rgba(255,255,255,.72);
+  border:1px solid rgba(26,47,95,.11);
+  border-top:0;
+  border-radius:0 0 14px 14px;
+}
+.inventory-adjustment-form{
+  display:grid;
+  gap:.7rem;
+  max-width:560px;
+}
+.inventory-adjustment-form label{
+  display:grid;
+  gap:.35rem;
+}
 .inventory-inactive-row{opacity:.62}
 .inventory-status-healthy{border-color:rgba(67,119,82,.3);background:#e7f0e8;color:#315f3e}
 .inventory-status-low{border-color:rgba(154,119,36,.3);background:#f6edcf;color:#7a5c18}
