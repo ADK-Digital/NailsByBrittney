@@ -1732,6 +1732,15 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
   width:min(100%,640px);
   margin:1rem auto 0;
 }
+.inventory-purchase-form .no-number-spinner::-webkit-outer-spin-button,
+.inventory-purchase-form .no-number-spinner::-webkit-inner-spin-button{
+  -webkit-appearance:none;
+  margin:0;
+}
+.inventory-purchase-form .no-number-spinner{
+  appearance:textfield;
+  -moz-appearance:textfield;
+}
 .inventory-history-list{
   display:grid;
   gap:.35rem;

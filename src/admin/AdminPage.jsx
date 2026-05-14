@@ -1007,8 +1007,8 @@ function InventoryPurchaseForm({ supplies, purchases, onPurchase }) {
       <label>Supply Name<input value={newSupplyName} onChange={(e) => setNewSupplyName(e.target.value)} required /></label>
       <label>Low Threshold<input type="number" min="0" step="0.01" value={lowThreshold} onChange={(e) => setLowThreshold(e.target.value)} required /></label>
     </>}
-    <label>Quantity<input type="number" min="0" step="0.01" value={quantity} onChange={(e) => setQuantity(e.target.value)} required /><span className="muted">{quantityHelpText}</span></label>
-    <label>Total Cost<input type="number" min="0" step="0.01" value={totalCost} onChange={(e) => setTotalCost(e.target.value)} required /></label>
+    <label>Quantity<input type="number" inputMode="decimal" min="0" step="any" value={quantity} onChange={(e) => setQuantity(e.target.value)} required /><span className="muted">{quantityHelpText}</span></label>
+    <label>Total Cost ($)<input className="no-number-spinner" type="number" inputMode="decimal" min="0" step="0.01" value={totalCost} onChange={(e) => setTotalCost(e.target.value)} required /></label>
     <label>Receipt Upload<input type="file" accept="image/*,application/pdf" onChange={(e) => setReceiptFile(e.target.files?.[0] || null)} /></label>
     <button className="btn primary" type="submit">Log purchase</button>
   </form>
