@@ -1687,7 +1687,7 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
   background:rgba(255,255,255,.44);
 }
 .inventory-critical-row,
-.service-mapping-row{
+.service-supplies-row{
   display:flex;
   flex-wrap:wrap;
   gap:.55rem .75rem;
@@ -1738,20 +1738,33 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
   margin-top:1rem;
 }
 .inventory-history-list p{margin:0}
-.service-mapping-card{margin-top:1.25rem}
-.service-mapping-list{display:grid;gap:1rem;margin-top:1rem}
-.service-mapping-item{
+.service-supplies-used{
   display:grid;
-  gap:.55rem;
-  padding:1rem;
-  border:1px solid var(--border);
+  gap:.7rem;
+  padding:.9rem;
+  border:1px solid rgba(26,47,95,.12);
   border-radius:18px;
-  background:rgba(255,255,255,.38);
+  background:rgba(255,255,255,.42);
 }
-.service-mapping-item h4{margin:0;color:var(--heading);font-size:1.1rem}
-.service-mapping-row select,.service-mapping-row input{max-width:220px}
+.service-supplies-head{display:grid;gap:.15rem}
+.service-supplies-head h4{margin:0;color:var(--heading);font-size:1.05rem}
+.service-supplies-head .muted{margin:0;font-size:.9rem}
+.service-supplies-list{display:grid;gap:.55rem}
+.service-supplies-row{
+  justify-content:start;
+  display:grid;
+  grid-template-columns:minmax(150px,1.2fr) minmax(5.5rem,.55fr) auto;
+}
+.service-supplies-row select,.service-supplies-row input{width:100%;min-width:0}
+.service-supplies-row input{max-width:8rem}
+.service-supplies-actions{display:flex;flex-wrap:wrap;gap:.45rem}
+.service-supplies-add-row{background:rgba(248,244,250,.7)}
+.service-supplies-empty{margin:.1rem 0}
 
 @media (max-width:720px){
   .inventory-card summary,.inventory-nested-card summary{align-items:flex-start;flex-direction:column}
-  .inventory-critical-row,.service-mapping-row{align-items:stretch;flex-direction:column}
+  .inventory-critical-row{align-items:stretch;flex-direction:column}
+  .service-supplies-row{grid-template-columns:1fr;align-items:stretch}
+  .service-supplies-row input{max-width:none}
+  .service-supplies-actions{display:grid}
 }
