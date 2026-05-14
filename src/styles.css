@@ -1698,6 +1698,16 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
   border-radius:16px;
   background:rgba(255,255,255,.58);
 }
+.inventory-unused-toggle{
+  display:inline-flex;
+  gap:.45rem;
+  align-items:center;
+  margin-top:1rem;
+  color:var(--heading);
+  font-weight:700;
+  text-transform:capitalize;
+}
+.inventory-unused-toggle input{width:auto;min-width:0}
 .inventory-table-wrap{overflow-x:auto;margin-top:1rem}
 .inventory-table{
   width:100%;
@@ -1737,7 +1747,6 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
   display:grid;
   gap:.35rem;
 }
-.inventory-inactive-row{opacity:.62}
 .inventory-status-healthy{border-color:rgba(67,119,82,.3);background:#e7f0e8;color:#315f3e}
 .inventory-status-low{border-color:rgba(154,119,36,.3);background:#f6edcf;color:#7a5c18}
 .inventory-status-critical{border-color:rgba(126,37,49,.34);background:#f3e1e4;color:#7e2531}
