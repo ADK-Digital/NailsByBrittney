@@ -486,6 +486,7 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
 }
 
 .admin-wrap{
+  --admin-master-card-max-width:1040px;
   width:min(1180px,92%);
   margin:0 auto;
   padding:3rem 0 4rem;
@@ -556,11 +557,11 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
 }
 
 
-.admin-section-appointments{max-width:1040px}
-.admin-section-customers{max-width:980px}
+.admin-section-appointments,
+.admin-section-customers,
 .admin-section-testimonials,
-.admin-section-services{max-width:860px}
-.admin-section-gallery{max-width:920px}
+.admin-section-services,
+.admin-section-gallery{max-width:var(--admin-master-card-max-width)}
 
 .admin-list,
 .admin-edit-list{
@@ -1032,7 +1033,7 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
 
 
 .admin-section-blocks{
-  max-width:900px;
+  max-width:var(--admin-master-card-max-width);
 }
 
 .add-block-panel{
@@ -1747,7 +1748,7 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
   margin-top:.1rem;
 }
 
-.admin-section-inventory{max-width:1040px}
+.admin-section-inventory{max-width:var(--admin-master-card-max-width)}
 .inventory-nested-card summary,
 .payment-advanced-card summary,
 .payment-event-history summary{
