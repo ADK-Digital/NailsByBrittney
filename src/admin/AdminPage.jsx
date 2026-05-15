@@ -414,7 +414,70 @@ function statusClassName(status) {
   return `pill status-pill status-${String(status || 'unknown').replace(/_/g, '-')}`;
 }
 
+const SERVICE_PAYMENT_PILL_STATUSES = new Set(['pending_confirmation', 'pending', 'confirmed', 'completed']);
+const HIDDEN_PAYMENT_PILL_STATUSES = new Set(['declined', 'cancelled', 'expired']);
+const LATE_FEE_RELEVANT_STATUSES = new Set(['late_cancellation', 'late_cancelled']);
 
+function normalizeAppointmentStatus(status) {
+  return String(status || '').toLowerCase();
+}
+
+function normalizePaymentStatus(status) {
+  return String(status || 'unpaid').toLowerCase();
+}
+
+function shouldShowServicePaymentPill(appointmentStatus, servicePaymentStatus) {
+  const normalizedStatus = normalizeAppointmentStatus(appointmentStatus);
+  if (!SERVICE_PAYMENT_PILL_STATUSES.has(normalizedStatus)) return false;
+  return normalizePaymentStatus(servicePaymentStatus) !== 'paid';
+}
+
+function shouldShowLateFeePill(appointmentStatus, lateFeeStatus) {
+  const normalizedStatus = normalizeAppointmentStatus(appointmentStatus);
+  if (HIDDEN_PAYMENT_PILL_STATUSES.has(normalizedStatus)) return false;
+  if (!LATE_FEE_RELEVANT_STATUSES.has(normalizedStatus)) return false;
+  return normalizePaymentStatus(lateFeeStatus) !== 'paid';
+}
+
+function shouldShowNoShowFeePill(appointmentStatus, noShowFeeStatus) {
+  const normalizedStatus = normalizeAppointmentStatus(appointmentStatus);
+  if (normalizedStatus !== 'no_show') return false;
+  return normalizePaymentStatus(noShowFeeStatus) !== 'paid';
+}
+
+function getAppointmentPaymentPills(appointment, servicePaymentStatus) {
+  const appointmentStatus = appointment?.status;
+  const pills = [];
+
+  if (shouldShowServicePaymentPill(appointmentStatus, servicePaymentStatus)) {
+    pills.push({
+      key: 'service-payment',
+      label: 'Service payment',
+      value: servicePaymentStatus,
+      className: 'pill meta-pill',
+    });
+  }
+
+  if (shouldShowLateFeePill(appointmentStatus, appointment?.late_fee_status)) {
+    pills.push({
+      key: 'late-fee',
+      label: 'Late fee',
+      value: appointment?.late_fee_status || 'unpaid',
+      className: 'pill meta-pill appointment-pill-late-fee',
+    });
+  }
+
+  if (shouldShowNoShowFeePill(appointmentStatus, appointment?.no_show_fee_status)) {
+    pills.push({
+      key: 'no-show-fee',
+      label: 'No-show fee',
+      value: appointment?.no_show_fee_status || 'unpaid',
+      className: 'pill meta-pill appointment-pill-no-show-fee',
+    });
+  }
+
+  return pills;
+}
 
 function formatInventoryQuantity(value) {
   const numeric = Number(value || 0);
@@ -737,6 +800,7 @@ function AppointmentCard({ appointment, customer, onRefresh }) {
   const defaultRefundAmount = formatDollarAmount(Math.max(0, paymentTotals.serviceCents) / 100);
   const defaultOperationalAmount = paymentDirection === 'refund' ? defaultRefundAmount : defaultPaymentAmount;
   const operationalPaymentStatus = deriveOperationalPaymentStatus(estimatedCents, paymentTotals.serviceCents);
+  const appointmentPaymentPills = getAppointmentPaymentPills(appointment, operationalPaymentStatus);
   const sortedEvents = [...events].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   const serviceChargedCents = getSucceededEventTotal(events, 'service_charge');
   const serviceRefundedCents = getSucceededEventTotal(events, 'refund_service');
@@ -880,9 +944,7 @@ function AppointmentCard({ appointment, customer, onRefresh }) {
         </div>
         <div className="appointment-meta" aria-label="Booking status details">
           <span className={statusClassName(appointment.status)}><span>Status</span>{formatAdminStatus(appointment.status)}</span>
-          <span className="pill meta-pill"><span>Service payment</span>{appointment.service_payment_status || 'unpaid'}</span>
-          <span className="pill meta-pill"><span>Late fee</span>{appointment.late_fee_status || 'unpaid'}</span>
-          <span className="pill meta-pill"><span>No-show fee</span>{appointment.no_show_fee_status || 'unpaid'}</span>
+          {appointmentPaymentPills.map((pill) => <span key={pill.key} className={pill.className}><span>{pill.label}</span>{formatPaymentStatus(pill.value)}</span>)}
           <button type="button" className="appointment-arrow appointment-collapse-button" onClick={() => setExpanded(false)} aria-label="Collapse appointment" aria-expanded={expanded}>⌃</button>
         </div>
       </div>
