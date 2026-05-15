@@ -715,9 +715,18 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
 }
 
 .appointment-card{
+  position:relative;
   text-align:left;
   padding:0;
   overflow:hidden;
+}
+
+.appointment-collapsed-row{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  gap:.65rem;
+  align-items:center;
+  padding-right:3.65rem;
 }
 
 .appointment-toggle{
@@ -726,7 +735,7 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
   gap:1rem;
   align-items:center;
   justify-content:space-between;
-  padding:1.05rem 1.15rem;
+  padding:1.05rem 0 1.05rem 1.15rem;
   border:0;
   background:transparent;
   color:inherit;
@@ -737,6 +746,21 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
 
 .appointment-toggle:hover{
   background:rgba(255,255,255,.36);
+}
+
+.appointment-quick-confirm{
+  align-self:center;
+  min-height:2.15rem;
+  padding:.45rem .85rem;
+  border-color:rgba(67,119,82,.26);
+  background:rgba(231,240,232,.82);
+  color:#315f3e;
+  font-size:.88rem;
+  white-space:nowrap;
+}
+
+.appointment-quick-confirm:hover{
+  background:#e7f0e8;
 }
 
 .appointment-toggle-status{
@@ -760,6 +784,16 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
 }
 
 
+.appointment-card-chevron{
+  position:absolute;
+  top:.9rem;
+  right:1rem;
+  z-index:2;
+  padding:0;
+  cursor:pointer;
+  font:inherit;
+}
+
 .appointment-collapse-button{
   flex:0 0 auto;
   padding:0;
@@ -772,12 +806,14 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
 }
 
 .appointment-details{
+  position:relative;
   padding:0 1.15rem 1.15rem;
   animation:appointment-expand .18s ease-out;
 }
 
 .appointment-card.expanded .appointment-details{
   padding-top:1.15rem;
+  padding-right:3.65rem;
 }
 
 @keyframes appointment-expand{
@@ -852,6 +888,63 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
   flex-wrap:wrap;
   gap:.55rem;
   justify-content:flex-end;
+  padding-right:.25rem;
+}
+
+.appointment-status-actions{
+  margin:.25rem 0 .85rem;
+}
+
+.appointment-action-notice{
+  padding:0 1.15rem 1rem;
+}
+
+.appointment-messages-card{
+  margin:.85rem 0 1rem;
+  border:1px solid rgba(26,47,95,.12);
+  border-radius:18px;
+  background:rgba(255,255,255,.44);
+  overflow:hidden;
+}
+
+.appointment-messages-card summary{
+  display:flex;
+  gap:.65rem;
+  align-items:center;
+  justify-content:space-between;
+  min-height:3rem;
+  padding:.72rem .85rem;
+  color:var(--heading);
+  cursor:pointer;
+  font-weight:800;
+  list-style:none;
+}
+
+.appointment-messages-card summary::-webkit-details-marker{display:none}
+
+.appointment-messages-card summary::after{
+  content:'⌄';
+  display:inline-grid;
+  flex:0 0 auto;
+  width:1.9rem;
+  height:1.9rem;
+  place-items:center;
+  border:1px solid rgba(26,47,95,.16);
+  border-radius:999px;
+  background:rgba(255,255,255,.64);
+  color:var(--accent);
+  font-family:inherit;
+  font-size:1.1rem;
+  line-height:1;
+}
+
+.appointment-messages-card[open] > summary::after{content:'⌃'}
+
+.appointment-messages-content{
+  display:grid;
+  gap:.75rem;
+  padding:0 .85rem .85rem;
+  animation:appointment-expand .18s ease-out;
 }
 
 .admin-wrap .pill{
@@ -1196,9 +1289,14 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
   .appointment-filter-label{flex-basis:100%;text-align:center}
   .admin-item{padding:.85rem}
   .appointment-head{display:grid}
-  .appointment-toggle{display:grid}
+  .appointment-collapsed-row{grid-template-columns:1fr;padding-right:3.2rem}
+  .appointment-toggle{display:grid;padding-right:0}
+  .appointment-quick-confirm{justify-self:start;margin:0 0 .9rem 1.15rem}
   .appointment-toggle-status{display:flex;flex-direction:row;align-items:center;justify-content:space-between}
-  .appointment-meta{display:grid;grid-template-columns:1fr;gap:.45rem}
+  .appointment-meta{display:grid;grid-template-columns:1fr;gap:.45rem;padding-right:0}
+  .appointment-card.expanded .appointment-details{padding-right:3.2rem}
+  .appointment-status-actions{grid-template-columns:1fr}
+  .appointment-messages-card summary{align-items:flex-start;flex-direction:column;padding-right:3rem}
   .admin-wrap .pill{white-space:normal;justify-content:space-between;width:100%}
   .admin-action-grid{grid-template-columns:1fr}
   .admin-card-grid{grid-template-columns:1fr}
@@ -1658,10 +1756,13 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
 .inventory-nested-card summary,
 .payment-advanced-card summary,
 .payment-event-history summary{
+  position:relative;
   display:flex;
   gap:.75rem;
   align-items:center;
   justify-content:space-between;
+  min-height:2.35rem;
+  padding-right:2.55rem;
   cursor:pointer;
   color:var(--heading);
   font-weight:800;
@@ -1676,6 +1777,9 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
 .payment-advanced-card summary::after,
 .payment-event-history summary::after{
   content:'⌄';
+  position:absolute;
+  top:.15rem;
+  right:0;
   display:inline-grid;
   width:1.9rem;
   height:1.9rem;
