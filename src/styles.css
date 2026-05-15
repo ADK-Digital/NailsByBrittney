@@ -1801,3 +1801,154 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
   .service-supplies-row input{max-width:none}
   .service-supplies-actions{display:grid}
 }
+
+.appointment-payments-panel{
+  margin:1rem 0;
+  padding:.9rem;
+  border:1px solid rgba(26,47,95,.12);
+  border-radius:20px;
+  background:rgba(255,255,255,.48);
+}
+
+.appointment-payments-head{
+  display:flex;
+  flex-wrap:wrap;
+  gap:.6rem;
+  align-items:center;
+  justify-content:space-between;
+  margin-bottom:.75rem;
+}
+
+.appointment-payments-head h4{
+  margin:0;
+  color:var(--heading);
+  font-family:'Cormorant Garamond', Georgia, serif;
+  font-size:1.35rem;
+}
+
+.payment-status-pill{
+  text-transform:capitalize;
+}
+
+.payment-status-paid{background:#e8f4ed;color:#255d3d;border-color:rgba(37,93,61,.18)}
+.payment-status-partially-paid{background:#fff6dd;color:#765416;border-color:rgba(118,84,22,.18)}
+.payment-status-overpaid{background:#eef0ff;color:#38428f;border-color:rgba(56,66,143,.18)}
+.payment-status-unpaid{background:#f8ecef;color:#7e2531;border-color:rgba(126,37,49,.18)}
+
+.payment-summary-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(130px,1fr));
+  gap:.55rem;
+}
+
+.payment-summary-grid div{
+  display:grid;
+  gap:.12rem;
+  padding:.65rem .75rem;
+  border:1px solid rgba(26,47,95,.10);
+  border-radius:16px;
+  background:rgba(255,255,255,.62);
+}
+
+.payment-summary-grid span,
+.payment-form-grid label,
+.payment-entry-card label{
+  color:#5c5268;
+  font-size:.72rem;
+  font-weight:800;
+  letter-spacing:.11em;
+  text-transform:uppercase;
+}
+
+.payment-summary-grid strong{
+  color:var(--heading);
+  font-size:1rem;
+}
+
+.payment-entry-card{
+  display:grid;
+  gap:.7rem;
+  margin-top:.75rem;
+}
+
+.payment-quick-actions{
+  display:flex;
+  flex-wrap:wrap;
+  gap:.45rem;
+}
+
+.payment-quick-actions .admin-secondary-button{
+  padding:.42rem .68rem;
+  font-size:.78rem;
+}
+
+.payment-form-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(145px,1fr));
+  gap:.6rem;
+}
+
+.payment-form-grid label{
+  display:grid;
+  gap:.3rem;
+}
+
+.payment-entry-card .btn{
+  justify-self:start;
+}
+
+.payment-record-list{
+  display:grid;
+  gap:.45rem;
+  margin:.75rem 0 0;
+  padding:0;
+  list-style:none;
+}
+
+.payment-record-list li{
+  display:flex;
+  flex-wrap:wrap;
+  gap:.35rem .75rem;
+  align-items:center;
+  justify-content:space-between;
+  padding:.55rem .65rem;
+  border-radius:14px;
+  background:rgba(255,255,255,.55);
+  color:#5c5268;
+  font-size:.9rem;
+}
+
+.payment-record-list li.refund-row{
+  border:1px solid rgba(126,37,49,.12);
+  background:rgba(248,236,239,.66);
+}
+
+.payment-history-badge{
+  display:inline-flex;
+  align-items:center;
+  margin-left:.35rem;
+  padding:.12rem .42rem;
+  border:1px solid rgba(126,37,49,.16);
+  border-radius:999px;
+  background:rgba(255,255,255,.58);
+  color:#7e2531;
+  font-size:.68rem;
+  font-style:normal;
+  font-weight:800;
+  letter-spacing:.08em;
+  line-height:1.15;
+  text-transform:uppercase;
+}
+
+.payment-record-list strong{
+  color:var(--heading);
+}
+
+.payment-record-list li.refund-row strong{
+  color:#7e2531;
+}
+
+@media (max-width:560px){
+  .payment-entry-card .btn,
+  .payment-quick-actions .admin-secondary-button{width:100%}
+}

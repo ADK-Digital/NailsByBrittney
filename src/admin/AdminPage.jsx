@@ -20,11 +20,13 @@ import {
 import {
   adminChargeAppointment,
   adminRefundAppointment,
+  applyAppointmentPayment,
   createAdditionalAvailability,
   createBlockedTime,
   deleteAdditionalAvailability,
   deleteBlockedTime,
   downloadArchivedAppointment,
+  downloadPaymentsCsv,
   fetchAdminAppointments,
   fetchArchivedAppointments,
   setAppointmentStatus,
@@ -53,6 +55,28 @@ const BOOKING_WINDOW_DAYS = 90;
 const BLOCK_INTERVAL_MINUTES = 15;
 const DEFAULT_LATE_FEE_PERCENT = 25;
 const DEFAULT_NO_SHOW_FEE_PERCENT = 50;
+const PAYMENT_METHOD_OPTIONS = [
+  ['cash', 'Cash'],
+  ['cashapp', 'Cash App'],
+  ['venmo', 'Venmo'],
+  ['zelle', 'Zelle'],
+  ['apple_cash', 'Apple Cash'],
+  ['other_card', 'Other Card'],
+  ['other', 'Other'],
+  ['square_manual', 'Square Manual'],
+];
+const PAYMENT_METHOD_LABELS = new Map([
+  ['square_on_file', 'Square on file'],
+  ['square_manual', 'Square manual'],
+  ['cash', 'Cash'],
+  ['cashapp', 'Cash App'],
+  ['venmo', 'Venmo'],
+  ['zelle', 'Zelle'],
+  ['apple_cash', 'Apple Cash'],
+  ['other_card', 'Other card'],
+  ['other', 'Other'],
+]);
+
 
 const blockMonthFormatter = new Intl.DateTimeFormat('en-US', {
   month: 'long',
@@ -483,6 +507,31 @@ function getSucceededEventTotal(events, eventType) {
     .reduce((sum, event) => sum + Number(event.amount_cents || 0), 0);
 }
 
+function getPaymentRecordTotals(records) {
+  return records.reduce((totals, record) => {
+    const sign = record.payment_direction === 'refund' ? -1 : 1;
+    return {
+      serviceCents: totals.serviceCents + (sign * Number(record.amount_cents || 0)),
+      tipCents: totals.tipCents + (sign * Number(record.tip_amount_cents || 0)),
+    };
+  }, { serviceCents: 0, tipCents: 0 });
+}
+
+function deriveOperationalPaymentStatus(estimatedCents, paidServiceCents) {
+  if (paidServiceCents <= 0) return 'unpaid';
+  if (paidServiceCents < estimatedCents) return 'partially_paid';
+  if (paidServiceCents === estimatedCents) return 'paid';
+  return 'overpaid';
+}
+
+function formatPaymentStatus(status) {
+  return String(status || 'unpaid').replace(/_/g, ' ');
+}
+
+function formatPaymentMethod(method) {
+  return PAYMENT_METHOD_LABELS.get(method) || String(method || 'Other').replace(/_/g, ' ');
+}
+
 function getAppointmentSortPriority(status) {
   const normalizedStatus = String(status || '').toLowerCase();
   if (normalizedStatus === 'pending_confirmation' || normalizedStatus === 'pending') return 0;
@@ -668,10 +717,25 @@ function AppointmentCard({ appointment, customer, onRefresh }) {
   const [serviceAmount, setServiceAmount] = useState(defaultServiceAmount);
   const [lateFeeAmount, setLateFeeAmount] = useState(defaultLateFeeAmount);
   const [noShowFeeAmount, setNoShowFeeAmount] = useState(defaultNoShowFeeAmount);
+  const [paymentMethod, setPaymentMethod] = useState('cash');
+  const [paymentDirection, setPaymentDirection] = useState('payment');
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentTip, setPaymentTip] = useState('');
+  const [paymentReference, setPaymentReference] = useState('');
+  const [paymentNote, setPaymentNote] = useState('');
   const [actionNotice, setActionNotice] = useState({ type: '', text: '' });
   const [actionBusy, setActionBusy] = useState(false);
 
   const events = appointment.appointment_financial_events || [];
+  const paymentRecords = appointment.appointment_payment_records || [];
+  const sortedPaymentRecords = [...paymentRecords].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  const paymentTotals = getPaymentRecordTotals(paymentRecords);
+  const estimatedCents = Math.round(Number(estimatedTotalDollars || 0) * 100);
+  const remainingCents = estimatedCents - paymentTotals.serviceCents;
+  const defaultPaymentAmount = formatDollarAmount(Math.max(0, remainingCents) / 100);
+  const defaultRefundAmount = formatDollarAmount(Math.max(0, paymentTotals.serviceCents) / 100);
+  const defaultOperationalAmount = paymentDirection === 'refund' ? defaultRefundAmount : defaultPaymentAmount;
+  const operationalPaymentStatus = deriveOperationalPaymentStatus(estimatedCents, paymentTotals.serviceCents);
   const sortedEvents = [...events].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   const serviceChargedCents = getSucceededEventTotal(events, 'service_charge');
   const serviceRefundedCents = getSucceededEventTotal(events, 'refund_service');
@@ -696,6 +760,17 @@ function AppointmentCard({ appointment, customer, onRefresh }) {
   useEffect(() => {
     setServiceRefundAmount(serviceRefundableDollars);
   }, [appointment.id, serviceRefundableDollars]);
+
+  useEffect(() => {
+    setPaymentDirection('payment');
+  }, [appointment.id]);
+
+  useEffect(() => {
+    setPaymentAmount(defaultOperationalAmount);
+    setPaymentTip('');
+    setPaymentReference('');
+    setPaymentNote('');
+  }, [appointment.id, defaultOperationalAmount, paymentDirection]);
 
   const call = async (fn, successText = 'Appointment action completed.') => {
     setActionBusy(true);
@@ -724,6 +799,19 @@ function AppointmentCard({ appointment, customer, onRefresh }) {
   const chargeService = () => call(
     () => adminChargeAppointment({ appointmentId: appointment.id, target: 'service', amount: parseCurrencyAmount(serviceAmount) }),
     'Service charge completed successfully.',
+  );
+
+  const applyPayment = () => call(
+    () => applyAppointmentPayment({
+      appointmentId: appointment.id,
+      paymentMethod,
+      paymentDirection,
+      amount: parseCurrencyAmount(paymentAmount),
+      tip: parseCurrencyAmount(paymentTip),
+      externalReference: paymentReference.trim() || null,
+      note: paymentNote.trim() || null,
+    }),
+    paymentDirection === 'refund' ? 'Refund recorded successfully.' : 'Payment recorded successfully.',
   );
 
   const formatChargeAmountField = (setter) => (event) => {
@@ -772,6 +860,48 @@ function AppointmentCard({ appointment, customer, onRefresh }) {
       </div>}
 
       <MessageThread customer={appointment.customers} appointment={appointment} />
+
+      <section className="appointment-payments-panel" aria-label="Payments">
+        <div className="appointment-payments-head">
+          <h4>Payments</h4>
+          <span className={`pill payment-status-pill payment-status-${operationalPaymentStatus}`}>{formatPaymentStatus(operationalPaymentStatus)}</span>
+        </div>
+        <div className="payment-summary-grid">
+          <div><span>Estimated Total</span><strong>${centsToDollars(estimatedCents)}</strong></div>
+          <div><span>Total Paid</span><strong>${centsToDollars(paymentTotals.serviceCents)}</strong></div>
+          <div><span>Remaining Balance</span><strong>${centsToDollars(remainingCents)}</strong></div>
+          <div><span>Tips</span><strong>${centsToDollars(paymentTotals.tipCents)}</strong></div>
+        </div>
+        <div className="payment-entry-card">
+          <div className="payment-quick-actions">
+            {PAYMENT_METHOD_OPTIONS.filter(([value]) => !value.startsWith('square')).map(([value, label]) => (
+              <button key={value} type="button" className="admin-secondary-button" onClick={() => setPaymentMethod(value)}>Apply Payment — {label}</button>
+            ))}
+          </div>
+          <div className="payment-form-grid">
+            <label>Method<select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)}>
+              {PAYMENT_METHOD_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select></label>
+            <label>Type<select value={paymentDirection} onChange={(event) => setPaymentDirection(event.target.value)}>
+              <option value="payment">Payment</option>
+              <option value="refund">Refund</option>
+            </select></label>
+            <label>Amount<input type="text" inputMode="decimal" value={paymentAmount} onChange={(event) => setPaymentAmount(event.target.value)} onBlur={formatChargeAmountField(setPaymentAmount)} placeholder="$0.00" /></label>
+            <label>Tip<input type="text" inputMode="decimal" value={paymentTip} onChange={(event) => setPaymentTip(event.target.value)} onBlur={formatChargeAmountField(setPaymentTip)} placeholder="Optional" /></label>
+            <label>Confirmation #<input value={paymentReference} onChange={(event) => setPaymentReference(event.target.value)} placeholder="Optional" /></label>
+            <label>Note<input value={paymentNote} onChange={(event) => setPaymentNote(event.target.value)} placeholder="Optional" /></label>
+          </div>
+          <button type="button" className="btn primary" disabled={actionBusy} onClick={applyPayment}>Apply Payment</button>
+        </div>
+        {!!sortedPaymentRecords.length && <ul className="payment-record-list">{sortedPaymentRecords.map((record) => {
+          const isRefund = record.payment_direction === 'refund';
+          const sign = isRefund ? '-' : '';
+          return <li key={record.id} className={isRefund ? 'refund-row' : 'payment-row'}>
+            <span>{new Date(record.created_at).toLocaleString()} • {formatPaymentMethod(record.payment_method)} {isRefund && <em className="payment-history-badge">Refund</em>}</span>
+            <strong>{sign}${centsToDollars(record.amount_cents)}{Number(record.tip_amount_cents || 0) > 0 ? ` + ${sign}$${centsToDollars(record.tip_amount_cents)} tip` : ''}</strong>
+          </li>;
+        })}</ul>}
+      </section>
 
       <div className="admin-action-grid">
         {['confirmed', 'declined', 'cancelled', 'completed', 'no_show'].map((status) => <button key={status} className="btn" disabled={actionBusy} onClick={() => call(() => setAppointmentStatus(appointment.id, status), `Appointment marked ${formatAdminStatus(status)}.`)}>{formatAdminStatus(status)}</button>)}
@@ -1535,7 +1665,7 @@ export default function AdminPage() {
       {adminNavItems.map(([id, label]) => <a key={id} href={`#${id}`}>{label}</a>)}
     </nav>
 
-    <section id="admin-appointments" className="admin-section admin-section-appointments"><h2>Appointments</h2><div className="admin-section-actions"><button className="btn" onClick={() => refreshBookingAdmin().catch(() => {})}>Refresh</button></div>
+    <section id="admin-appointments" className="admin-section admin-section-appointments"><h2>Appointments</h2><div className="admin-section-actions"><button className="btn" onClick={() => refreshBookingAdmin().catch(() => {})}>Refresh</button><button className="btn" onClick={() => downloadPaymentsCsv().catch((error) => setBookingAdminError(error.message || 'Unable to export payments.'))}>Export Payments CSV</button></div>
       {bookingAdminError && <p className="admin-message error" role="alert">{bookingAdminError}</p>}
       <div className="appointment-filter-panel" aria-label="Appointment status filters">
         <span className="appointment-filter-label">Show hidden statuses:</span>

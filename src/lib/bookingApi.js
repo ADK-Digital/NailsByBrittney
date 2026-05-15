@@ -50,13 +50,13 @@ export async function fetchArchivedAppointments() {
   return res.json();
 }
 
-export async function downloadArchivedAppointment(fileName) {
-  const res = await fetch(`/.netlify/functions/admin-appointments?archive=${encodeURIComponent(fileName)}`, {
+async function downloadCsvFromAdminAppointments(queryString, fallbackFileName, failureMessage) {
+  const res = await fetch(`/.netlify/functions/admin-appointments?${queryString}`, {
     headers: await getAdminAuthHeaders(),
   });
 
   if (!res.ok) {
-    let message = 'Failed to download archive';
+    let message = failureMessage;
     try {
       const body = await res.json();
       message = body.error || message;
@@ -66,6 +66,8 @@ export async function downloadArchivedAppointment(fileName) {
     throw new Error(message);
   }
 
+  const disposition = res.headers.get('Content-Disposition') || '';
+  const fileName = disposition.match(/filename="?([^";]+)"?/i)?.[1] || fallbackFileName;
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -76,6 +78,14 @@ export async function downloadArchivedAppointment(fileName) {
   link.remove();
   URL.revokeObjectURL(url);
   return { ok: true };
+}
+
+export async function downloadArchivedAppointment(fileName) {
+  return downloadCsvFromAdminAppointments(`archive=${encodeURIComponent(fileName)}`, fileName, 'Failed to download archive');
+}
+
+export async function downloadPaymentsCsv() {
+  return downloadCsvFromAdminAppointments('payments=1', 'payments.csv', 'Failed to export payments');
 }
 
 async function postAdminAppointmentAction(payload) {
@@ -102,6 +112,10 @@ export async function adminChargeAppointment(payload) {
 
 export async function adminRefundAppointment(payload) {
   return postAdminAppointmentAction({ action: 'refund', ...payload });
+}
+
+export async function applyAppointmentPayment(payload) {
+  return postAdminAppointmentAction({ action: 'apply_payment', ...payload });
 }
 
 export async function fetchAppointmentStatusSummary(requestNumber) {

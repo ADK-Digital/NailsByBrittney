@@ -903,6 +903,77 @@ create table if not exists appointment_financial_events (
 create index if not exists idx_appointment_financial_events_appointment_id on appointment_financial_events(appointment_id);
 create index if not exists idx_appointment_financial_events_type on appointment_financial_events(event_type);
 
+-- Lightweight operational payment tracking. This complements (but does not replace)
+-- Square/processor-oriented appointment_financial_events.
+do $$
+begin
+  if not exists (select 1 from pg_type where typname = 'appointment_payment_method') then
+    create type appointment_payment_method as enum (
+      'square_on_file',
+      'square_manual',
+      'cash',
+      'cashapp',
+      'venmo',
+      'zelle',
+      'apple_cash',
+      'other_card',
+      'other'
+    );
+  end if;
+  if not exists (select 1 from pg_type where typname = 'appointment_payment_direction') then
+    create type appointment_payment_direction as enum ('payment', 'refund');
+  end if;
+  if not exists (select 1 from pg_type where typname = 'appointment_payment_processor') then
+    create type appointment_payment_processor as enum ('square', 'manual', 'external');
+  end if;
+end
+$$;
+
+create table if not exists appointment_payment_records (
+  id uuid primary key default gen_random_uuid(),
+  appointment_id uuid not null references appointments(id) on delete restrict,
+  customer_id uuid not null references customers(id) on delete restrict,
+  amount_cents int not null check (amount_cents >= 0),
+  tip_amount_cents int not null default 0 check (tip_amount_cents >= 0),
+  payment_method appointment_payment_method not null,
+  payment_direction appointment_payment_direction not null default 'payment',
+  processor appointment_payment_processor not null default 'manual',
+  external_reference text,
+  note text,
+  linked_financial_event_id uuid references appointment_financial_events(id) on delete restrict,
+  created_by text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  check (amount_cents > 0 or tip_amount_cents > 0)
+);
+
+create index if not exists idx_appointment_payment_records_appointment_id on appointment_payment_records(appointment_id, created_at desc);
+create index if not exists idx_appointment_payment_records_customer_id on appointment_payment_records(customer_id, created_at desc);
+create index if not exists idx_appointment_payment_records_created_at on appointment_payment_records(created_at desc);
+create index if not exists idx_appointment_payment_records_method on appointment_payment_records(payment_method);
+create unique index if not exists appointment_payment_records_linked_financial_event_key
+  on appointment_payment_records(linked_financial_event_id)
+  where linked_financial_event_id is not null;
+
+create or replace function prevent_appointment_payment_record_mutation()
+returns trigger
+language plpgsql
+as $$
+begin
+  raise exception 'appointment_payment_records are immutable; create an offsetting payment/refund record instead';
+end;
+$$;
+
+drop trigger if exists appointment_payment_records_no_update on appointment_payment_records;
+create trigger appointment_payment_records_no_update
+  before update on appointment_payment_records
+  for each row execute function prevent_appointment_payment_record_mutation();
+
+drop trigger if exists appointment_payment_records_no_delete on appointment_payment_records;
+create trigger appointment_payment_records_no_delete
+  before delete on appointment_payment_records
+  for each row execute function prevent_appointment_payment_record_mutation();
+
 create table if not exists appointment_action_audit (
   id uuid primary key default gen_random_uuid(),
   appointment_id uuid not null references appointments(id) on delete cascade,
@@ -1090,9 +1161,14 @@ $$;
 
 alter table appointment_financial_events enable row level security;
 alter table appointment_action_audit enable row level security;
+alter table appointment_payment_records enable row level security;
 
 drop policy if exists "auth manage financial events" on appointment_financial_events;
 drop policy if exists "auth manage appointment action audit" on appointment_action_audit;
+drop policy if exists "auth read payment records" on appointment_payment_records;
+drop policy if exists "auth insert payment records" on appointment_payment_records;
+drop policy if exists "admin read payment records" on appointment_payment_records;
+drop policy if exists "admin insert payment records" on appointment_payment_records;
 
 create policy "auth manage financial events" on appointment_financial_events
   for all to authenticated
@@ -1103,6 +1179,14 @@ create policy "auth manage appointment action audit" on appointment_action_audit
   for all to authenticated
   using (true)
   with check (true);
+
+create policy "admin read payment records" on appointment_payment_records
+  for select to authenticated
+  using (is_service_admin());
+
+create policy "admin insert payment records" on appointment_payment_records
+  for insert to authenticated
+  with check (is_service_admin());
 
 -- Phase 2 correction pass: enforce cancellation timing + orphaned Square artifact auditing
 alter table appointments add column if not exists cancelled_at timestamptz;

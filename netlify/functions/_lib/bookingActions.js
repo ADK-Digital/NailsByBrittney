@@ -20,6 +20,20 @@ const PAYMENT_TARGET = {
   no_show: { chargeType: 'no_show_fee', refundType: 'refund_no_show', statusField: 'no_show_fee_status' },
 };
 
+const OPERATIONAL_PAYMENT_METHODS = new Set([
+  'square_on_file',
+  'square_manual',
+  'cash',
+  'cashapp',
+  'venmo',
+  'zelle',
+  'apple_cash',
+  'other_card',
+  'other',
+]);
+const OPERATIONAL_PAYMENT_DIRECTIONS = new Set(['payment', 'refund']);
+
+
 function dollarsToCents(value) {
   return Math.round(Number(value || 0) * 100);
 }
@@ -252,6 +266,114 @@ async function createFinancialEvent(params) {
   return row;
 }
 
+export async function createOperationalPaymentRecord({
+  appointmentId,
+  customerId,
+  amountCents,
+  tipAmountCents = 0,
+  paymentMethod,
+  paymentDirection = 'payment',
+  processor = 'manual',
+  externalReference,
+  note,
+  linkedFinancialEventId,
+  createdBy,
+}) {
+  if (!appointmentId) throw new Error('Appointment is required.');
+  const normalizedMethod = String(paymentMethod || '').trim();
+  if (!OPERATIONAL_PAYMENT_METHODS.has(normalizedMethod)) throw new Error('Unsupported payment method.');
+  const normalizedDirection = String(paymentDirection || 'payment').trim();
+  if (!OPERATIONAL_PAYMENT_DIRECTIONS.has(normalizedDirection)) throw new Error('Unsupported payment direction.');
+
+  let resolvedCustomerId = customerId || null;
+  if (!resolvedCustomerId) {
+    const { data: appointment, error } = await supabaseAdmin
+      .from('appointments')
+      .select('customer_id')
+      .eq('id', appointmentId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!appointment) throw new Error('Appointment not found.');
+    resolvedCustomerId = appointment.customer_id;
+  }
+
+  const serviceCents = Math.round(finiteNumber(amountCents));
+  const tipCents = Math.round(finiteNumber(tipAmountCents));
+  if (serviceCents < 0 || tipCents < 0) throw new Error('Payment amounts cannot be negative.');
+  if (serviceCents <= 0 && tipCents <= 0) throw new Error('Payment or tip amount must be greater than zero.');
+
+  const payload = {
+    appointment_id: appointmentId,
+    customer_id: resolvedCustomerId,
+    amount_cents: serviceCents,
+    tip_amount_cents: tipCents,
+    payment_method: normalizedMethod,
+    payment_direction: normalizedDirection,
+    processor,
+    external_reference: externalReference || null,
+    note: note || null,
+    linked_financial_event_id: linkedFinancialEventId || null,
+    created_by: createdBy || null,
+  };
+
+  const { error } = await supabaseAdmin.from('appointment_payment_records').insert(payload);
+  if (error && error.code === '23505' && linkedFinancialEventId) {
+    const { data: existing } = await supabaseAdmin
+      .from('appointment_payment_records')
+      .select('*')
+      .eq('linked_financial_event_id', linkedFinancialEventId)
+      .single();
+    return existing;
+  }
+  if (error) throw error;
+
+  const { data: row, error: readError } = await supabaseAdmin
+    .from('appointment_payment_records')
+    .select('*')
+    .eq('appointment_id', appointmentId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single();
+  if (readError) throw readError;
+  return row;
+}
+
+export async function applyManualAppointmentPayment({
+  appointmentId,
+  amountDollars,
+  tipDollars = 0,
+  paymentMethod,
+  paymentDirection = 'payment',
+  externalReference,
+  note,
+  createdBy,
+}) {
+  const { appointment } = await loadAppointment(appointmentId);
+  const amountCents = dollarsToCents(amountDollars);
+  const tipAmountCents = dollarsToCents(tipDollars);
+  const processor = paymentMethod === 'square_manual'
+    ? 'square'
+    : ['cashapp', 'venmo', 'zelle', 'apple_cash', 'other_card'].includes(paymentMethod)
+      ? 'external'
+      : 'manual';
+
+  const record = await createOperationalPaymentRecord({
+    appointmentId,
+    customerId: appointment.customer_id,
+    amountCents,
+    tipAmountCents,
+    paymentMethod,
+    paymentDirection,
+    processor,
+    externalReference,
+    note,
+    createdBy,
+  });
+
+  await logAudit(appointmentId, `${paymentDirection === 'refund' ? 'manual_refund' : 'manual_payment'}_${paymentMethod}`, 'dashboard', note, externalReference || null);
+  return record;
+}
+
 async function assertChargeEligibility(appointment, target, allowAdditionalServiceCharge = false) {
   const startMs = new Date(appointment.start_at).getTime();
   const nowMs = Date.now();
@@ -346,7 +468,24 @@ export async function chargeAppointment({
   );
 
   const existingEvent = await findFinancialEventByIdempotencyKey(idempotencyKey);
-  if (existingEvent) return existingEvent;
+  if (existingEvent) {
+    if (target === 'service') {
+      await createOperationalPaymentRecord({
+        appointmentId,
+        customerId: appointment.customer_id,
+        amountCents,
+        tipAmountCents: 0,
+        paymentMethod: 'square_on_file',
+        paymentDirection: 'payment',
+        processor: 'square',
+        externalReference: existingEvent.processor_reference,
+        note,
+        linkedFinancialEventId: existingEvent.id,
+        createdBy: initiatedBy,
+      });
+    }
+    return existingEvent;
+  }
 
   const charge = await chargeCardOnFile({
     appointmentId,
@@ -369,6 +508,22 @@ export async function chargeAppointment({
     commandSource: commandText,
     idempotencyKey,
   });
+
+  if (target === 'service') {
+    await createOperationalPaymentRecord({
+      appointmentId,
+      customerId: appointment.customer_id,
+      amountCents,
+      tipAmountCents: 0,
+      paymentMethod: 'square_on_file',
+      paymentDirection: 'payment',
+      processor: 'square',
+      externalReference: charge.paymentId,
+      note,
+      linkedFinancialEventId: event.id,
+      createdBy: initiatedBy,
+    });
+  }
 
   await updatePaymentStatusFields(appointmentId, target);
   await logAudit(appointmentId, `charge_${target}`, initiatedBy, note, commandText || null);
@@ -462,6 +617,22 @@ export async function refundAppointment({ appointmentId, target, percentOverride
 
     const existingEvent = await findFinancialEventByIdempotencyKey(idempotencyKey);
     if (existingEvent) {
+      if (target === 'service') {
+        const { appointment } = await loadAppointment(appointmentId);
+        await createOperationalPaymentRecord({
+          appointmentId,
+          customerId: appointment.customer_id,
+          amountCents: allocationCents,
+          tipAmountCents: 0,
+          paymentMethod: 'square_on_file',
+          paymentDirection: 'refund',
+          processor: 'square',
+          externalReference: existingEvent.processor_reference,
+          note,
+          linkedFinancialEventId: existingEvent.id,
+          createdBy: initiatedBy,
+        });
+      }
       createdEvents.push(existingEvent);
       remainingRefundCents -= allocationCents;
       continue;
@@ -487,6 +658,23 @@ export async function refundAppointment({ appointmentId, target, percentOverride
       relatedEventId: item.charge.id,
       idempotencyKey,
     });
+
+    if (target === 'service') {
+      const { appointment } = await loadAppointment(appointmentId);
+      await createOperationalPaymentRecord({
+        appointmentId,
+        customerId: appointment.customer_id,
+        amountCents: allocationCents,
+        tipAmountCents: 0,
+        paymentMethod: 'square_on_file',
+        paymentDirection: 'refund',
+        processor: 'square',
+        externalReference: refund.refundId,
+        note,
+        linkedFinancialEventId: event.id,
+        createdBy: initiatedBy,
+      });
+    }
 
     createdEvents.push(event);
     remainingRefundCents -= allocationCents;
