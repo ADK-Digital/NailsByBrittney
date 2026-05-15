@@ -1642,7 +1642,9 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
   text-align:left;
 }
 .inventory-card summary,
-.inventory-nested-card summary{
+.inventory-nested-card summary,
+.payment-advanced-card summary,
+.payment-event-history summary{
   display:flex;
   gap:.75rem;
   align-items:center;
@@ -1653,9 +1655,13 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
   list-style:none;
 }
 .inventory-card summary::-webkit-details-marker,
-.inventory-nested-card summary::-webkit-details-marker{display:none}
+.inventory-nested-card summary::-webkit-details-marker,
+.payment-advanced-card summary::-webkit-details-marker,
+.payment-event-history summary::-webkit-details-marker{display:none}
 .inventory-card summary::after,
-.inventory-nested-card summary::after{
+.inventory-nested-card summary::after,
+.payment-advanced-card summary::after,
+.payment-event-history summary::after{
   content:'+';
   display:inline-grid;
   width:1.9rem;
@@ -1667,7 +1673,9 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
   color:var(--accent);
 }
 .inventory-card[open] > summary::after,
-.inventory-nested-card[open] > summary::after{content:'–'}
+.inventory-nested-card[open] > summary::after,
+.payment-advanced-card[open] > summary::after,
+.payment-event-history[open] > summary::after{content:'–'}
 .inventory-summary .muted{margin:0;font-size:.9rem;font-weight:700}
 .inventory-collapsed-preview{
   display:grid;
@@ -1795,7 +1803,7 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
 .service-supplies-empty{margin:.1rem 0}
 
 @media (max-width:720px){
-  .inventory-card summary,.inventory-nested-card summary{align-items:flex-start;flex-direction:column}
+  .inventory-card summary,.inventory-nested-card summary,.payment-advanced-card summary,.payment-event-history summary{align-items:flex-start;flex-direction:column}
   .inventory-critical-row{align-items:stretch;flex-direction:column}
   .service-supplies-row{grid-template-columns:1fr;align-items:stretch}
   .service-supplies-row input{max-width:none}
@@ -1924,6 +1932,7 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
 .payment-card-on-file-action{
   display:grid;
   gap:.35rem;
+  margin-top:.75rem;
   padding:.75rem;
   border:1px solid rgba(183,134,154,.18);
   border-radius:18px;
@@ -1939,6 +1948,39 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
   justify-content:center;
 }
 
+.payment-advanced-card,
+.payment-event-history{
+  margin-top:.75rem;
+  padding:.85rem;
+  border:1px solid rgba(26,47,95,.12);
+  border-radius:18px;
+  background:rgba(255,255,255,.42);
+}
+
+.payment-advanced-summary{
+  letter-spacing:.02em;
+}
+
+.payment-advanced-content{
+  display:grid;
+  gap:.85rem;
+  margin-top:.85rem;
+  animation:appointment-expand .18s ease-out;
+}
+
+.payment-advanced-content .admin-action-grid{
+  margin-top:0;
+}
+
+.payment-event-history ul{
+  display:grid;
+  gap:.45rem;
+  margin:.75rem 0 0;
+  padding-left:1.1rem;
+  color:#5c5268;
+  font-size:.9rem;
+}
+
 .payment-form-grid{
   display:grid;
   grid-template-columns:repeat(auto-fit,minmax(145px,1fr));
@@ -1952,6 +1994,10 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
 
 .payment-entry-card .btn{
   justify-self:start;
+}
+
+.payment-advanced-content .payment-entry-card{
+  margin-top:0;
 }
 
 .payment-record-list{
