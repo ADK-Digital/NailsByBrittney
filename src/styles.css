@@ -881,6 +881,19 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
   background:rgba(255,255,255,.62);
 }
 
+.appointment-pill-late-fee,
+.appointment-pill-no-show-fee{
+  border-color:rgba(142,52,68,.2);
+  background:linear-gradient(135deg, rgba(252,236,239,.92), rgba(250,226,231,.82));
+  color:#8a3543;
+  box-shadow:0 8px 18px rgba(142,52,68,.08);
+}
+
+.appointment-pill-late-fee span,
+.appointment-pill-no-show-fee span{
+  color:#9b5060;
+}
+
 .status-pending-confirmation,
 .status-pending{
   border-color:rgba(154,119,36,.3);
