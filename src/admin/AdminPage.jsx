@@ -432,6 +432,28 @@ function shouldShowServicePaymentPill(appointmentStatus, servicePaymentStatus) {
   return normalizePaymentStatus(servicePaymentStatus) !== 'paid';
 }
 
+function isLateFeeRelevantAppointment(appointment) {
+  const normalizedStatus = normalizeAppointmentStatus(appointment?.status);
+  if (!['cancelled', 'declined'].includes(normalizedStatus)) return false;
+  if (!appointment?.cancelled_at || !appointment?.start_at) return false;
+
+  const startMs = new Date(appointment.start_at).getTime();
+  const cancelledMs = new Date(appointment.cancelled_at).getTime();
+  const hoursBeforeStart = (startMs - cancelledMs) / (60 * 60 * 1000);
+
+  return Number.isFinite(hoursBeforeStart) && hoursBeforeStart > 0 && hoursBeforeStart <= 24;
+}
+
+function shouldShowLateFeePill(appointment, lateFeeStatus) {
+  if (!isLateFeeRelevantAppointment(appointment)) return false;
+  return normalizePaymentStatus(lateFeeStatus) !== 'paid';
+}
+
+function isUnappliedNoShowFee(appointment) {
+  return normalizeAppointmentStatus(appointment?.status) === 'no_show'
+    && normalizePaymentStatus(appointment?.no_show_fee_status) === 'unpaid';
+}
+
 function shouldShowLateFeePill(appointmentStatus, lateFeeStatus) {
   const normalizedStatus = normalizeAppointmentStatus(appointmentStatus);
   if (HIDDEN_PAYMENT_PILL_STATUSES.has(normalizedStatus)) return false;
@@ -458,6 +480,7 @@ function getAppointmentPaymentPills(appointment, servicePaymentStatus) {
     });
   }
 
+  if (shouldShowLateFeePill(appointment, appointment?.late_fee_status)) {
   if (shouldShowLateFeePill(appointmentStatus, appointment?.late_fee_status)) {
     pills.push({
       key: 'late-fee',
@@ -616,7 +639,9 @@ function sortAppointmentsForAdmin(items) {
 
 function shouldShowAppointment(appointment, visibleOptionalStatuses) {
   const normalizedStatus = String(appointment.status || '').toLowerCase();
-  return DEFAULT_APPOINTMENT_STATUSES.has(normalizedStatus) || visibleOptionalStatuses.has(normalizedStatus);
+  return DEFAULT_APPOINTMENT_STATUSES.has(normalizedStatus)
+    || visibleOptionalStatuses.has(normalizedStatus)
+    || isUnappliedNoShowFee(appointment);
 }
 
 function sortCustomersAlphabetically(items) {
