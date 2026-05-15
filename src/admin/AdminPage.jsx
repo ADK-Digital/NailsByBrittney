@@ -898,6 +898,108 @@ function AppointmentCard({ appointment, customer, onRefresh }) {
   const hasSavedSquareCard = appointment.customers?.card_on_file_status === 'on_file' && !!appointment.customers?.square_card_id;
   const savedCardDescription = getSavedCardDescription(appointment.customers);
   const chargeOnFileAmount = centsToDollars(chargeableRemainingCents);
+  const paymentsStatusPill = <span className={`pill payment-status-pill payment-status-${operationalPaymentStatus}`}>{formatPaymentStatus(operationalPaymentStatus)}</span>;
+
+  const renderPaymentsPanel = () => <section className="appointment-payments-panel" aria-label="Payments">
+    <div className="appointment-payments-head">
+      <h4>Payments</h4>
+      {paymentsStatusPill}
+    </div>
+    <div className="payment-summary-grid">
+      <div><span>Estimated Total</span><strong>${centsToDollars(estimatedCents)}</strong></div>
+      <div><span>Total Paid</span><strong>${centsToDollars(paymentTotals.serviceCents)}</strong></div>
+      <div><span>Remaining Balance</span><strong>${centsToDollars(remainingCents)}</strong></div>
+      <div><span>Tips</span><strong>${centsToDollars(paymentTotals.tipCents)}</strong></div>
+    </div>
+    {hasSavedSquareCard && <div className="payment-card-on-file-action">
+      <button
+        type="button"
+        className="btn primary payment-card-on-file-button"
+        disabled={actionBusy || chargeableRemainingCents <= 0}
+        onClick={chargeOnFileFullAmount}
+      >
+        Charge On-File Card Full Amount
+      </button>
+      <p className="muted">Charges ${chargeOnFileAmount} to saved {savedCardDescription}. Tips stay separate.</p>
+    </div>}
+    {!!sortedPaymentRecords.length && <ul className="payment-record-list">{sortedPaymentRecords.map((record) => {
+      const isRefund = record.payment_direction === 'refund';
+      const sign = isRefund ? '-' : '';
+      return <li key={record.id} className={isRefund ? 'refund-row' : 'payment-row'}>
+        <span>{new Date(record.created_at).toLocaleString()} • {formatPaymentMethod(record.payment_method)} {isRefund && <em className="payment-history-badge">Refund</em>}</span>
+        <strong>{sign}${centsToDollars(record.amount_cents)}{Number(record.tip_amount_cents || 0) > 0 ? ` + ${sign}$${centsToDollars(record.tip_amount_cents)} tip` : ''}</strong>
+      </li>;
+    })}</ul>}
+    {!!sortedEvents.length && <details className="payment-event-history"><summary>Payment history ({sortedEvents.length})</summary><ul>{sortedEvents.map((event) => <li key={event.id}>{new Date(event.created_at).toLocaleString()} • {event.event_type} • ${centsToDollars(event.amount_cents)} • {event.status} • {event.initiated_by}</li>)}</ul></details>}
+    <details className="payment-advanced-card">
+      <summary className="payment-advanced-summary">Advanced Payment Actions</summary>
+      <div className="payment-advanced-content">
+        <div className="payment-entry-card">
+          <div className="payment-form-grid">
+            <label>Method<select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)}>
+              {PAYMENT_METHOD_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select></label>
+            <label>Type<select value={paymentDirection} onChange={(event) => setPaymentDirection(event.target.value)}>
+              <option value="payment">Payment</option>
+              <option value="refund">Refund</option>
+            </select></label>
+            <label>Amount<input type="text" inputMode="decimal" value={paymentAmount} onChange={(event) => setPaymentAmount(event.target.value)} onBlur={formatChargeAmountField(setPaymentAmount)} placeholder="$0.00" /></label>
+            <label>Tip<input type="text" inputMode="decimal" value={paymentTip} onChange={(event) => setPaymentTip(event.target.value)} onBlur={formatChargeAmountField(setPaymentTip)} placeholder="Optional" /></label>
+            <label>Confirmation #<input value={paymentReference} onChange={(event) => setPaymentReference(event.target.value)} placeholder="Optional" /></label>
+            <label>Note<input value={paymentNote} onChange={(event) => setPaymentNote(event.target.value)} placeholder="Optional" /></label>
+          </div>
+          <button type="button" className="btn primary" disabled={actionBusy} onClick={applyPayment}>Apply Payment</button>
+        </div>
+        <div className="admin-action-grid">
+          <button className="btn" disabled={actionBusy} onClick={chargeLateFee}>Charge late fee (defaulted to 25%)</button>
+          <input
+            type="text"
+            inputMode="decimal"
+            value={lateFeeAmount}
+            onChange={(e) => setLateFeeAmount(e.target.value)}
+            onBlur={formatChargeAmountField(setLateFeeAmount)}
+            placeholder="Type late fee amount (e.g. $15.25)"
+            aria-label="Late fee dollar amount"
+          />
+          <button className="btn" disabled={actionBusy} onClick={chargeNoShowFee}>Charge no-show fee (defaulted to 50%)</button>
+          <input
+            type="text"
+            inputMode="decimal"
+            value={noShowFeeAmount}
+            onChange={(e) => setNoShowFeeAmount(e.target.value)}
+            onBlur={formatChargeAmountField(setNoShowFeeAmount)}
+            placeholder="Type no-show fee amount (e.g. $30.50)"
+            aria-label="No-show fee dollar amount"
+          />
+          <button className="btn" disabled={actionBusy} onClick={chargeService}>Charge services (estimated total)</button>
+          <input
+            type="text"
+            inputMode="decimal"
+            value={serviceAmount}
+            onChange={(e) => setServiceAmount(e.target.value)}
+            onBlur={formatChargeAmountField(setServiceAmount)}
+            placeholder="Type service amount (e.g. $85.00)"
+            aria-label="Service charge dollar amount"
+          />
+        </div>
+        <div className="admin-action-grid">
+          <button className="btn" disabled={actionBusy} onClick={() => call(() => adminRefundAppointment({ appointmentId: appointment.id, target: 'late' }), 'Late fee refunded successfully.')}>Refund late fee</button>
+          <button className="btn" disabled={actionBusy} onClick={() => call(() => adminRefundAppointment({ appointmentId: appointment.id, target: 'no_show' }), 'No-show fee refunded successfully.')}>Refund no-show fee</button>
+          <button className="btn" disabled={actionBusy} onClick={() => call(() => adminRefundAppointment({ appointmentId: appointment.id, target: 'service' }), 'Service charge refunded successfully.')}>Refund services full</button>
+          <button className="btn" disabled={actionBusy} onClick={() => call(() => adminRefundAppointment({ appointmentId: appointment.id, target: 'service', amount: parseCurrencyAmount(serviceRefundAmount) }), 'Service refund completed successfully.')}>Refund services</button>
+          <input
+            type="text"
+            inputMode="decimal"
+            value={serviceRefundAmount}
+            onChange={(e) => setServiceRefundAmount(parseCurrencyInput(e.target.value))}
+            placeholder={serviceRefundableDollars}
+            aria-label="Service refund dollar amount"
+          />
+        </div>
+        <p className="muted refund-helper">Refundable service amount: ${serviceRefundableDollars} of ${centsToDollars(serviceChargedCents)} charged.</p>
+      </div>
+    </details>
+  </section>;
 
   useEffect(() => {
     setServiceAmount(defaultServiceAmount);
@@ -1055,106 +1157,16 @@ function AppointmentCard({ appointment, customer, onRefresh }) {
         </div>
       </details>
 
-      <section className="appointment-payments-panel" aria-label="Payments">
-        <div className="appointment-payments-head">
-          <h4>Payments</h4>
-          <span className={`pill payment-status-pill payment-status-${operationalPaymentStatus}`}>{formatPaymentStatus(operationalPaymentStatus)}</span>
-        </div>
-        <div className="payment-summary-grid">
-          <div><span>Estimated Total</span><strong>${centsToDollars(estimatedCents)}</strong></div>
-          <div><span>Total Paid</span><strong>${centsToDollars(paymentTotals.serviceCents)}</strong></div>
-          <div><span>Remaining Balance</span><strong>${centsToDollars(remainingCents)}</strong></div>
-          <div><span>Tips</span><strong>${centsToDollars(paymentTotals.tipCents)}</strong></div>
-        </div>
-        {hasSavedSquareCard && <div className="payment-card-on-file-action">
-          <button
-            type="button"
-            className="btn primary payment-card-on-file-button"
-            disabled={actionBusy || chargeableRemainingCents <= 0}
-            onClick={chargeOnFileFullAmount}
-          >
-            Charge On-File Card Full Amount
-          </button>
-          <p className="muted">Charges ${chargeOnFileAmount} to saved {savedCardDescription}. Tips stay separate.</p>
-        </div>}
-        {!!sortedPaymentRecords.length && <ul className="payment-record-list">{sortedPaymentRecords.map((record) => {
-          const isRefund = record.payment_direction === 'refund';
-          const sign = isRefund ? '-' : '';
-          return <li key={record.id} className={isRefund ? 'refund-row' : 'payment-row'}>
-            <span>{new Date(record.created_at).toLocaleString()} • {formatPaymentMethod(record.payment_method)} {isRefund && <em className="payment-history-badge">Refund</em>}</span>
-            <strong>{sign}${centsToDollars(record.amount_cents)}{Number(record.tip_amount_cents || 0) > 0 ? ` + ${sign}$${centsToDollars(record.tip_amount_cents)} tip` : ''}</strong>
-          </li>;
-        })}</ul>}
-        {!!sortedEvents.length && <details className="payment-event-history"><summary>Payment history ({sortedEvents.length})</summary><ul>{sortedEvents.map((event) => <li key={event.id}>{new Date(event.created_at).toLocaleString()} • {event.event_type} • ${centsToDollars(event.amount_cents)} • {event.status} • {event.initiated_by}</li>)}</ul></details>}
-        <details className="payment-advanced-card">
-          <summary className="payment-advanced-summary">Advanced Payment Actions</summary>
-          <div className="payment-advanced-content">
-            <div className="payment-entry-card">
-              <div className="payment-form-grid">
-                <label>Method<select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)}>
-                  {PAYMENT_METHOD_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                </select></label>
-                <label>Type<select value={paymentDirection} onChange={(event) => setPaymentDirection(event.target.value)}>
-                  <option value="payment">Payment</option>
-                  <option value="refund">Refund</option>
-                </select></label>
-                <label>Amount<input type="text" inputMode="decimal" value={paymentAmount} onChange={(event) => setPaymentAmount(event.target.value)} onBlur={formatChargeAmountField(setPaymentAmount)} placeholder="$0.00" /></label>
-                <label>Tip<input type="text" inputMode="decimal" value={paymentTip} onChange={(event) => setPaymentTip(event.target.value)} onBlur={formatChargeAmountField(setPaymentTip)} placeholder="Optional" /></label>
-                <label>Confirmation #<input value={paymentReference} onChange={(event) => setPaymentReference(event.target.value)} placeholder="Optional" /></label>
-                <label>Note<input value={paymentNote} onChange={(event) => setPaymentNote(event.target.value)} placeholder="Optional" /></label>
-              </div>
-              <button type="button" className="btn primary" disabled={actionBusy} onClick={applyPayment}>Apply Payment</button>
-            </div>
-            <div className="admin-action-grid">
-              <button className="btn" disabled={actionBusy} onClick={chargeLateFee}>Charge late fee (defaulted to 25%)</button>
-              <input
-                type="text"
-                inputMode="decimal"
-                value={lateFeeAmount}
-                onChange={(e) => setLateFeeAmount(e.target.value)}
-                onBlur={formatChargeAmountField(setLateFeeAmount)}
-                placeholder="Type late fee amount (e.g. $15.25)"
-                aria-label="Late fee dollar amount"
-              />
-              <button className="btn" disabled={actionBusy} onClick={chargeNoShowFee}>Charge no-show fee (defaulted to 50%)</button>
-              <input
-                type="text"
-                inputMode="decimal"
-                value={noShowFeeAmount}
-                onChange={(e) => setNoShowFeeAmount(e.target.value)}
-                onBlur={formatChargeAmountField(setNoShowFeeAmount)}
-                placeholder="Type no-show fee amount (e.g. $30.50)"
-                aria-label="No-show fee dollar amount"
-              />
-              <button className="btn" disabled={actionBusy} onClick={chargeService}>Charge services (estimated total)</button>
-              <input
-                type="text"
-                inputMode="decimal"
-                value={serviceAmount}
-                onChange={(e) => setServiceAmount(e.target.value)}
-                onBlur={formatChargeAmountField(setServiceAmount)}
-                placeholder="Type service amount (e.g. $85.00)"
-                aria-label="Service charge dollar amount"
-              />
-            </div>
-            <div className="admin-action-grid">
-              <button className="btn" disabled={actionBusy} onClick={() => call(() => adminRefundAppointment({ appointmentId: appointment.id, target: 'late' }), 'Late fee refunded successfully.')}>Refund late fee</button>
-              <button className="btn" disabled={actionBusy} onClick={() => call(() => adminRefundAppointment({ appointmentId: appointment.id, target: 'no_show' }), 'No-show fee refunded successfully.')}>Refund no-show fee</button>
-              <button className="btn" disabled={actionBusy} onClick={() => call(() => adminRefundAppointment({ appointmentId: appointment.id, target: 'service' }), 'Service charge refunded successfully.')}>Refund services full</button>
-              <button className="btn" disabled={actionBusy} onClick={() => call(() => adminRefundAppointment({ appointmentId: appointment.id, target: 'service', amount: parseCurrencyAmount(serviceRefundAmount) }), 'Service refund completed successfully.')}>Refund services</button>
-              <input
-                type="text"
-                inputMode="decimal"
-                value={serviceRefundAmount}
-                onChange={(e) => setServiceRefundAmount(parseCurrencyInput(e.target.value))}
-                placeholder={serviceRefundableDollars}
-                aria-label="Service refund dollar amount"
-              />
-            </div>
-            <p className="muted refund-helper">Refundable service amount: ${serviceRefundableDollars} of ${centsToDollars(serviceChargedCents)} charged.</p>
-          </div>
-        </details>
-      </section>
+      <div className="desktop-payments-panel">{renderPaymentsPanel()}</div>
+      <details className="mobile-payments-collapse">
+        <summary className="mobile-payments-summary">
+          <span className="mobile-payments-summary-title">Payments</span>
+          <span className="mobile-payments-summary-status">{paymentsStatusPill}</span>
+          <span className="mobile-payments-summary-balance"><span>Remaining</span><strong>${centsToDollars(remainingCents)}</strong></span>
+          <span className="mobile-payments-summary-paid"><span>Paid</span><strong>${centsToDollars(paymentTotals.serviceCents)}</strong></span>
+        </summary>
+        {renderPaymentsPanel()}
+      </details>
 
       {showChargeOnFileModal && <div className="admin-modal-overlay" role="presentation">
         <div className="admin-modal" role="dialog" aria-modal="true" aria-labelledby={`charge-card-title-${appointment.id}`}>
@@ -1247,42 +1259,46 @@ function AppointmentArchivePanel({ open, archives, onToggle, onLoad, onDownload 
   </div>;
 }
 
-function InventorySection({ supplies, purchases, adjustments, onRefresh, onSaveSupply, onPurchase, onManualAdjustment }) {
+function InventorySection({ supplies, purchases, adjustments, open, onToggle, onRefresh, onSaveSupply, onPurchase, onManualAdjustment }) {
   const activeSupplies = supplies.filter((supply) => supply.active !== false);
   const criticalSupplies = activeSupplies.filter((supply) => getInventoryStatus(supply) === 'critical');
 
-  return <section id="admin-inventory" className="admin-section admin-section-inventory">
-    <h2>Inventory</h2>
-    <details className="inventory-card card">
-      <summary className="inventory-summary">
-        <span>Inventory awareness</span>
+  return <DashboardSection
+    id="admin-inventory"
+    className="admin-section-inventory"
+    title="Inventory"
+    meta={`(${activeSupplies.length})`}
+    open={open}
+    onToggle={onToggle}
+  >
+    <div className="inventory-critical-preview" aria-label="Critical inventory supplies">
+      <div className="inventory-critical-preview-head">
+        <strong>Critical inventory preview</strong>
         <span className="muted">{criticalSupplies.length ? `${criticalSupplies.length} critical supply item(s)` : 'No critically low supplies'}</span>
-      </summary>
-      <div className="inventory-collapsed-preview" aria-label="Critical inventory supplies">
-        {criticalSupplies.length ? criticalSupplies.map((supply) => <div className="inventory-critical-row" key={supply.id}>
-          <strong>{supply.supply_name}</strong>
-          <span>Qty {formatInventoryQuantity(supply.current_quantity)}</span>
-          <span>Threshold {formatInventoryQuantity(supply.low_threshold)}</span>
-          <InventoryStatusPill status="critical" />
-        </div>) : <p className="muted">No critically low supplies.</p>}
       </div>
-      <div className="inventory-expanded-content">
-        <details className="inventory-nested-card">
-          <summary>Supplies</summary>
-          <InventorySuppliesTable supplies={supplies} onSaveSupply={onSaveSupply} onManualAdjustment={onManualAdjustment} />
-        </details>
-        <details className="inventory-nested-card">
-          <summary>Purchases</summary>
-          <InventoryPurchaseForm supplies={activeSupplies} purchases={purchases} onPurchase={onPurchase} />
-        </details>
-        <details className="inventory-nested-card">
-          <summary>Adjustment History</summary>
-          <InventoryAdjustmentHistory adjustments={adjustments} />
-        </details>
-        <div className="admin-section-actions"><button className="btn" type="button" onClick={onRefresh}>Refresh Inventory</button></div>
-      </div>
-    </details>
-  </section>;
+      {criticalSupplies.length ? criticalSupplies.map((supply) => <div className="inventory-critical-row" key={supply.id}>
+        <strong>{supply.supply_name}</strong>
+        <span>Qty {formatInventoryQuantity(supply.current_quantity)}</span>
+        <span>Threshold {formatInventoryQuantity(supply.low_threshold)}</span>
+        <InventoryStatusPill status="critical" />
+      </div>) : <p className="muted">No critically low supplies.</p>}
+    </div>
+    <div className="inventory-expanded-content">
+      <details className="inventory-nested-card">
+        <summary>Supplies</summary>
+        <InventorySuppliesTable supplies={supplies} onSaveSupply={onSaveSupply} onManualAdjustment={onManualAdjustment} />
+      </details>
+      <details className="inventory-nested-card">
+        <summary>Purchases</summary>
+        <InventoryPurchaseForm supplies={activeSupplies} purchases={purchases} onPurchase={onPurchase} />
+      </details>
+      <details className="inventory-nested-card">
+        <summary>Adjustment History</summary>
+        <InventoryAdjustmentHistory adjustments={adjustments} />
+      </details>
+      <div className="admin-section-actions"><button className="btn" type="button" onClick={onRefresh}>Refresh Inventory</button></div>
+    </div>
+  </DashboardSection>;
 }
 
 function InventorySuppliesTable({ supplies, onSaveSupply, onManualAdjustment }) {
@@ -1539,6 +1555,7 @@ export default function AdminPage() {
     customers: false,
     testimonials: false,
     services: false,
+    inventory: false,
     gallery: false,
   });
   const [archivesOpen, setArchivesOpen] = useState(false);
@@ -2041,6 +2058,8 @@ export default function AdminPage() {
       supplies={inventoryData.supplies}
       purchases={inventoryData.purchases}
       adjustments={inventoryData.adjustments}
+      open={dashboardSectionsOpen.inventory}
+      onToggle={() => toggleDashboardSection('inventory')}
       onRefresh={() => refreshInventoryList().catch(() => setInventoryMessage({ type: 'error', text: 'Unable to refresh inventory.' }))}
       onSaveSupply={handleSaveInventorySupply}
       onPurchase={handleInventoryPurchase}
