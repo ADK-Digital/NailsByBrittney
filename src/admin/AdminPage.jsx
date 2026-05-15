@@ -35,8 +35,8 @@ import {
 } from '../lib/bookingApi';
 import { hasSupabaseConfig, supabase } from '../lib/supabase';
 
-const APPOINTMENTS_PER_PAGE = 20;
-const CUSTOMERS_PER_PAGE = 20;
+const APPOINTMENTS_PER_PAGE = 10;
+const CUSTOMERS_PER_PAGE = 10;
 const DEFAULT_APPOINTMENT_STATUSES = new Set(['pending_confirmation', 'pending', 'confirmed']);
 const OPTIONAL_APPOINTMENT_STATUSES = ['completed', 'cancelled', 'declined', 'no_show', 'expired'];
 const adminNavItems = [
@@ -55,6 +55,8 @@ const BOOKING_WINDOW_DAYS = 90;
 const BLOCK_INTERVAL_MINUTES = 15;
 const DEFAULT_LATE_FEE_PERCENT = 25;
 const DEFAULT_NO_SHOW_FEE_PERCENT = 50;
+const CHEVRON_DOWN = '⌄';
+const CHEVRON_UP = '⌃';
 const PAYMENT_METHOD_OPTIONS = [
   ['cash', 'Cash'],
   ['cashapp', 'Cash App'],
@@ -415,8 +417,6 @@ function statusClassName(status) {
 }
 
 const SERVICE_PAYMENT_PILL_STATUSES = new Set(['pending_confirmation', 'pending', 'confirmed', 'completed']);
-const HIDDEN_PAYMENT_PILL_STATUSES = new Set(['declined', 'cancelled', 'expired']);
-const LATE_FEE_RELEVANT_STATUSES = new Set(['late_cancellation', 'late_cancelled']);
 
 function normalizeAppointmentStatus(status) {
   return String(status || '').toLowerCase();
@@ -454,12 +454,6 @@ function isUnappliedNoShowFee(appointment) {
     && normalizePaymentStatus(appointment?.no_show_fee_status) === 'unpaid';
 }
 
-function shouldShowLateFeePill(appointmentStatus, lateFeeStatus) {
-  const normalizedStatus = normalizeAppointmentStatus(appointmentStatus);
-  if (HIDDEN_PAYMENT_PILL_STATUSES.has(normalizedStatus)) return false;
-  if (!LATE_FEE_RELEVANT_STATUSES.has(normalizedStatus)) return false;
-  return normalizePaymentStatus(lateFeeStatus) !== 'paid';
-}
 
 function shouldShowNoShowFeePill(appointmentStatus, noShowFeeStatus) {
   const normalizedStatus = normalizeAppointmentStatus(appointmentStatus);
@@ -481,7 +475,6 @@ function getAppointmentPaymentPills(appointment, servicePaymentStatus) {
   }
 
   if (shouldShowLateFeePill(appointment, appointment?.late_fee_status)) {
-  if (shouldShowLateFeePill(appointmentStatus, appointment?.late_fee_status)) {
     pills.push({
       key: 'late-fee',
       label: 'Late fee',
@@ -654,6 +647,68 @@ function sortCustomersAlphabetically(items) {
 
 function AdminSecondaryButton({ className = '', ...props }) {
   return <button type="button" className={`admin-secondary-button${className ? ` ${className}` : ''}`} {...props} />;
+}
+
+
+function PaginationControls({ label, currentPage, pageCount, onPrevious, onNext }) {
+  if (pageCount <= 1) return null;
+
+  return <div className="appointment-pagination" aria-label={label}>
+    <button className="admin-secondary-button" type="button" onClick={onPrevious} disabled={currentPage === 0} aria-label="Previous page">‹</button>
+    <span>Page {currentPage + 1} of {pageCount}</span>
+    <button className="admin-secondary-button" type="button" onClick={onNext} disabled={currentPage >= pageCount - 1} aria-label="Next page">›</button>
+  </div>;
+}
+
+function DashboardSection({ id, className = '', title, meta = '', actions = null, open, onToggle, alwaysContent = null, children }) {
+  const expanded = Boolean(open);
+
+  return <section id={id} className={`admin-section dashboard-section ${className}${expanded ? ' expanded' : ''}`}>
+    <div className="dashboard-section-card card">
+      <div className="dashboard-section-header">
+        <button type="button" className="dashboard-section-title" onClick={onToggle} aria-expanded={expanded} aria-controls={`${id}-panel`}>
+          <span>{title}{meta ? <span className="dashboard-section-meta"> {meta}</span> : null}</span>
+        </button>
+        <div className="dashboard-section-header-actions">
+          {actions}
+          <button type="button" className="appointment-arrow dashboard-section-chevron" onClick={onToggle} aria-label={`${expanded ? 'Collapse' : 'Expand'} ${title}`} aria-expanded={expanded}>{expanded ? CHEVRON_UP : CHEVRON_DOWN}</button>
+        </div>
+      </div>
+      {alwaysContent && <div className="dashboard-section-persistent-content">{alwaysContent}</div>}
+      {expanded && <div id={`${id}-panel`} className="dashboard-section-content">{children}</div>}
+    </div>
+  </section>;
+}
+
+function getLocalDateKey(value) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return '';
+  return toLocalIsoDate(date);
+}
+
+function isFutureWindow(row) {
+  const end = new Date(row?.end_at || row?.start_at).getTime();
+  return Number.isFinite(end) && end >= Date.now();
+}
+
+function getDefaultAppointmentDay(appointmentsForDisplay) {
+  const todayKey = toLocalIsoDate(new Date());
+  if (appointmentsForDisplay.some((appointment) => getLocalDateKey(appointment.start_at) === todayKey)) return todayKey;
+
+  return appointmentsForDisplay
+    .map((appointment) => getLocalDateKey(appointment.start_at))
+    .filter((dateKey) => dateKey && dateKey >= todayKey)
+    .sort()[0] || todayKey;
+}
+
+function filterCustomersBySearch(customers, query) {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return customers;
+  return customers.filter((customer) => [
+    `${customer.first_name || ''} ${customer.last_name || ''}`,
+    customer.email,
+    customer.phone,
+  ].some((value) => String(value || '').toLowerCase().includes(needle)));
 }
 
 
@@ -950,7 +1005,7 @@ function AppointmentCard({ appointment, customer, onRefresh }) {
       </span>
       <span className="appointment-toggle-status">
         <span className={statusClassName(appointment.status)}><span>Status</span>{formatAdminStatus(appointment.status)}</span>
-        <span className="appointment-arrow" aria-hidden="true">⌄</span>
+        <span className="appointment-arrow" aria-hidden="true">{CHEVRON_DOWN}</span>
       </span>
     </button>}
 
@@ -970,7 +1025,7 @@ function AppointmentCard({ appointment, customer, onRefresh }) {
         <div className="appointment-meta" aria-label="Booking status details">
           <span className={statusClassName(appointment.status)}><span>Status</span>{formatAdminStatus(appointment.status)}</span>
           {appointmentPaymentPills.map((pill) => <span key={pill.key} className={pill.className}><span>{pill.label}</span>{formatPaymentStatus(pill.value)}</span>)}
-          <button type="button" className="appointment-arrow appointment-collapse-button" onClick={() => setExpanded(false)} aria-label="Collapse appointment" aria-expanded={expanded}>⌃</button>
+          <button type="button" className="appointment-arrow appointment-collapse-button" onClick={() => setExpanded(false)} aria-label="Collapse appointment" aria-expanded={expanded}>{CHEVRON_UP}</button>
         </div>
       </div>
       <p className="muted">Communication preference: {formatCommunicationPreference(appointment.customers?.communication_preference)} • Card: {appointment.customers?.card_on_file_status || 'missing'} {appointment.customers?.card_brand ? `(${appointment.customers.card_brand} ••••${appointment.customers.card_last4 || ''})` : ''}</p>
@@ -1124,7 +1179,7 @@ function CustomerCard({ customer, appointments }) {
       </span>
       <span className="appointment-toggle-status">
         <span className="pill meta-pill"><span>Appointments</span>{sortedCustomerAppointments.length}</span>
-        <span className="appointment-arrow" aria-hidden="true">⌄</span>
+        <span className="appointment-arrow" aria-hidden="true">{CHEVRON_DOWN}</span>
       </span>
     </button>}
 
@@ -1138,7 +1193,7 @@ function CustomerCard({ customer, appointments }) {
         <div className="appointment-meta">
           <span className="pill meta-pill"><span>Preference</span>{formatCommunicationPreference(customer.communication_preference)}</span>
           <span className="pill meta-pill"><span>Card</span>{customer.card_on_file_status || 'missing'}</span>
-          <button type="button" className="appointment-arrow appointment-collapse-button" onClick={() => setExpanded(false)} aria-label="Collapse customer" aria-expanded={expanded}>⌃</button>
+          <button type="button" className="appointment-arrow appointment-collapse-button" onClick={() => setExpanded(false)} aria-label="Collapse customer" aria-expanded={expanded}>{CHEVRON_UP}</button>
         </div>
       </div>
 
@@ -1460,6 +1515,16 @@ export default function AdminPage() {
   const serviceOrderSaveToken = useRef(0);
   const [appointmentPage, setAppointmentPage] = useState(0);
   const [customerPage, setCustomerPage] = useState(0);
+  const [appointmentListExpanded, setAppointmentListExpanded] = useState(false);
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [dashboardSectionsOpen, setDashboardSectionsOpen] = useState({
+    blocks: false,
+    additionalAvailability: false,
+    customers: false,
+    testimonials: false,
+    services: false,
+    gallery: false,
+  });
   const [archivesOpen, setArchivesOpen] = useState(false);
   const [appointmentArchives, setAppointmentArchives] = useState([]);
   const [addBlockOpen, setAddBlockOpen] = useState(false);
@@ -1471,17 +1536,23 @@ export default function AdminPage() {
 
   const filteredAppointments = useMemo(() => appointments.filter((appointment) => shouldShowAppointment(appointment, visibleOptionalAppointmentStatuses)), [appointments, visibleOptionalAppointmentStatuses]);
   const sortedAppointments = useMemo(() => sortAppointmentsForAdmin(filteredAppointments), [filteredAppointments]);
+  const defaultAppointmentDay = useMemo(() => getDefaultAppointmentDay(sortedAppointments), [sortedAppointments]);
+  const defaultDayAppointments = useMemo(() => sortedAppointments.filter((appointment) => getLocalDateKey(appointment.start_at) === defaultAppointmentDay), [defaultAppointmentDay, sortedAppointments]);
+  const appointmentListItems = appointmentListExpanded ? sortedAppointments : defaultDayAppointments;
   const appointmentPageCount = Math.max(1, Math.ceil(sortedAppointments.length / APPOINTMENTS_PER_PAGE));
   const currentAppointmentPage = Math.min(appointmentPage, appointmentPageCount - 1);
   const appointmentPageStart = currentAppointmentPage * APPOINTMENTS_PER_PAGE;
   const appointmentPageEnd = Math.min(appointmentPageStart + APPOINTMENTS_PER_PAGE, sortedAppointments.length);
-  const pagedAppointments = sortedAppointments.slice(appointmentPageStart, appointmentPageEnd);
+  const pagedAppointments = appointmentListExpanded ? sortedAppointments.slice(appointmentPageStart, appointmentPageEnd) : appointmentListItems;
   const sortedCustomers = useMemo(() => sortCustomersAlphabetically(customers), [customers]);
-  const customerPageCount = Math.max(1, Math.ceil(sortedCustomers.length / CUSTOMERS_PER_PAGE));
+  const searchedCustomers = useMemo(() => filterCustomersBySearch(sortedCustomers, customerSearch), [customerSearch, sortedCustomers]);
+  const customerPageCount = Math.max(1, Math.ceil(searchedCustomers.length / CUSTOMERS_PER_PAGE));
   const currentCustomerPage = Math.min(customerPage, customerPageCount - 1);
   const customerPageStart = currentCustomerPage * CUSTOMERS_PER_PAGE;
-  const customerPageEnd = Math.min(customerPageStart + CUSTOMERS_PER_PAGE, sortedCustomers.length);
-  const pagedCustomers = sortedCustomers.slice(customerPageStart, customerPageEnd);
+  const customerPageEnd = Math.min(customerPageStart + CUSTOMERS_PER_PAGE, searchedCustomers.length);
+  const pagedCustomers = searchedCustomers.slice(customerPageStart, customerPageEnd);
+  const futureBlockedTimes = useMemo(() => blockedTimes.filter(isFutureWindow), [blockedTimes]);
+  const futureAdditionalAvailability = useMemo(() => additionalAvailability.filter(isFutureWindow), [additionalAvailability]);
   const appointmentsByCustomerId = useMemo(() => {
     const grouped = new Map();
     appointments.forEach((appointment) => {
@@ -1509,6 +1580,14 @@ export default function AdminPage() {
   useEffect(() => {
     if (customerPage > customerPageCount - 1) setCustomerPage(Math.max(0, customerPageCount - 1));
   }, [customerPage, customerPageCount]);
+
+  useEffect(() => {
+    setCustomerPage(0);
+  }, [customerSearch]);
+
+  const toggleDashboardSection = (sectionKey) => {
+    setDashboardSectionsOpen((previous) => ({ ...previous, [sectionKey]: !previous[sectionKey] }));
+  };
 
   const refreshBookingAdmin = async () => {
     setBookingAdminError('');
@@ -1807,84 +1886,140 @@ export default function AdminPage() {
       {adminNavItems.map(([id, label]) => <a key={id} href={`#${id}`}>{label}</a>)}
     </nav>
 
-    <section id="admin-appointments" className="admin-section admin-section-appointments"><h2>Appointments</h2><div className="admin-section-actions"><button className="btn" onClick={() => refreshBookingAdmin().catch(() => {})}>Refresh</button><button className="btn" onClick={() => downloadPaymentsCsv().catch((error) => setBookingAdminError(error.message || 'Unable to export payments.'))}>Export Payments CSV</button></div>
-      {bookingAdminError && <p className="admin-message error" role="alert">{bookingAdminError}</p>}
-      <div className="appointment-filter-panel" aria-label="Appointment status filters">
-        <span className="appointment-filter-label">Show hidden statuses:</span>
-        {OPTIONAL_APPOINTMENT_STATUSES.map((status) => <label key={status} className={`appointment-filter-pill${visibleOptionalAppointmentStatuses.has(status) ? ' active' : ''}`}>
-          <input type="checkbox" checked={visibleOptionalAppointmentStatuses.has(status)} onChange={() => toggleOptionalAppointmentStatus(status)} />
-          {formatAdminStatus(status)}
-        </label>)}
+    <section id="admin-appointments" className="admin-section admin-section-appointments dashboard-section expanded">
+      <div className="dashboard-section-card card">
+        <div className="dashboard-section-header always-open">
+          <h2>Appointments</h2>
+          <div className="dashboard-section-header-actions"><button className="btn" onClick={() => refreshBookingAdmin().catch(() => {})}>Refresh</button><button className="btn" onClick={() => downloadPaymentsCsv().catch((error) => setBookingAdminError(error.message || 'Unable to export payments.'))}>Export Payments CSV</button></div>
+        </div>
+        <div className="dashboard-section-content">
+          {bookingAdminError && <p className="admin-message error" role="alert">{bookingAdminError}</p>}
+          <div className="appointment-filter-panel" aria-label="Appointment status filters">
+            <span className="appointment-filter-label">Show hidden statuses:</span>
+            {OPTIONAL_APPOINTMENT_STATUSES.map((status) => <label key={status} className={`appointment-filter-pill${visibleOptionalAppointmentStatuses.has(status) ? ' active' : ''}`}>
+              <input type="checkbox" checked={visibleOptionalAppointmentStatuses.has(status)} onChange={() => toggleOptionalAppointmentStatus(status)} />
+              {formatAdminStatus(status)}
+            </label>)}
+          </div>
+          <div className="appointment-list-toolbar">
+            <div>
+              <strong>{appointmentListExpanded ? 'All appointments' : `Showing ${defaultAppointmentDay === toLocalIsoDate(new Date()) ? 'today' : appointmentDateFormatter.format(parseLocalIsoDate(defaultAppointmentDay))}`}</strong>
+              <p className="muted">{appointmentListExpanded ? 'Browse the full appointment list with pagination.' : 'Expand to view appointment history and future appointments.'}</p>
+            </div>
+            <button type="button" className="admin-secondary-button appointment-list-toggle" onClick={() => { setAppointmentListExpanded((expanded) => !expanded); setAppointmentPage(0); }} aria-expanded={appointmentListExpanded}>
+              {appointmentListExpanded ? 'Show today / next day' : 'Show all appointments'} <span className="appointment-arrow" aria-hidden="true">{appointmentListExpanded ? CHEVRON_UP : CHEVRON_DOWN}</span>
+            </button>
+          </div>
+          {!bookingAdminError && <div className="admin-list">{pagedAppointments.map((appointment) => <AppointmentCard key={appointment.id} appointment={appointment} customer={customersById.get(appointment.customer_id)} onRefresh={refreshBookingAdmin} />)}</div>}
+          {!bookingAdminError && !appointmentListItems.length && <p className="muted">No appointments match the selected filters.</p>}
+          {appointmentListExpanded && <PaginationControls
+            label="Appointment pagination"
+            currentPage={currentAppointmentPage}
+            pageCount={appointmentPageCount}
+            onPrevious={() => setAppointmentPage((page) => Math.max(0, page - 1))}
+            onNext={() => setAppointmentPage((page) => Math.min(appointmentPageCount - 1, page + 1))}
+          />}
+          <AppointmentArchivePanel open={archivesOpen} archives={appointmentArchives} onToggle={() => setArchivesOpen((value) => !value)} onLoad={refreshAppointmentArchives} onDownload={downloadArchivedAppointment} />
+        </div>
       </div>
-      {!bookingAdminError && <div className="admin-list">{pagedAppointments.map((appointment) => <AppointmentCard key={appointment.id} appointment={appointment} customer={customersById.get(appointment.customer_id)} onRefresh={refreshBookingAdmin} />)}</div>}
-      {!bookingAdminError && !sortedAppointments.length && <p className="muted">No appointments match the selected filters.</p>}
-      {sortedAppointments.length > APPOINTMENTS_PER_PAGE && <div className="appointment-pagination" aria-label="Appointment pagination">
-        <button className="admin-secondary-button" type="button" onClick={() => setAppointmentPage((page) => Math.max(0, page - 1))} disabled={currentAppointmentPage === 0}>‹</button>
-        <span>{sortedAppointments.length ? appointmentPageStart + 1 : 0}-{appointmentPageEnd} of {sortedAppointments.length}</span>
-        <button className="admin-secondary-button" type="button" onClick={() => setAppointmentPage((page) => Math.min(appointmentPageCount - 1, page + 1))} disabled={currentAppointmentPage >= appointmentPageCount - 1}>›</button>
-      </div>}
-      <AppointmentArchivePanel open={archivesOpen} archives={appointmentArchives} onToggle={() => setArchivesOpen((value) => !value)} onLoad={refreshAppointmentArchives} onDownload={downloadArchivedAppointment} />
     </section>
 
-    <section id="admin-blocks" className="admin-section admin-section-blocks"><h2>Blocked Times</h2>
-      <div className="admin-section-actions"><button className="btn" type="button" onClick={() => setAddBlockOpen((open) => !open)}>{addBlockOpen ? 'Close Add Block' : 'Add Block'}</button></div>
+    <DashboardSection
+      id="admin-blocks"
+      className="admin-section-blocks"
+      title="Blocked Times"
+      open={dashboardSectionsOpen.blocks}
+      onToggle={() => toggleDashboardSection('blocks')}
+      actions={<button className="btn" type="button" onClick={(event) => { event.stopPropagation(); setAddBlockOpen((open) => !open); setDashboardSectionsOpen((previous) => ({ ...previous, blocks: true })); }}>{addBlockOpen ? 'Close Add Block' : 'Add Block'}</button>}
+    >
       {addBlockOpen && <AddBlockPanel onCreate={async (payload) => {
         const result = await createBlockedTime(payload);
         if (result?.error) throw new Error(result.error);
         await refreshBookingAdmin();
       }} />}
-      <div className="blocked-time-list">{blockedTimes.map((block) => <div className="blocked-time-item" key={block.id}><span>{new Date(block.start_at).toLocaleString()} - {new Date(block.end_at).toLocaleString()} ({block.reason})</span> <AdminSecondaryButton onClick={async () => { await deleteBlockedTime(block.id); refreshBookingAdmin(); }}>Delete</AdminSecondaryButton></div>)}</div>
-    </section>
+      <div className="blocked-time-list">{futureBlockedTimes.map((block) => <div className="blocked-time-item" key={block.id}><span>{new Date(block.start_at).toLocaleString()} - {new Date(block.end_at).toLocaleString()} ({block.reason})</span> <AdminSecondaryButton onClick={async () => { await deleteBlockedTime(block.id); refreshBookingAdmin(); }}>Delete</AdminSecondaryButton></div>)}</div>
+      {!futureBlockedTimes.length && <p className="muted">No upcoming blocked times.</p>}
+    </DashboardSection>
 
-    <section id="admin-additional-availability" className="admin-section admin-section-blocks"><h2>Additional Times</h2>
-      <div className="admin-section-actions"><button className="btn" type="button" onClick={() => setAddAvailabilityOpen((open) => !open)}>{addAvailabilityOpen ? 'Close Add Availability' : 'Add Availability'}</button></div>
+    <DashboardSection
+      id="admin-additional-availability"
+      className="admin-section-blocks"
+      title="Additional Times"
+      open={dashboardSectionsOpen.additionalAvailability}
+      onToggle={() => toggleDashboardSection('additionalAvailability')}
+      actions={<button className="btn" type="button" onClick={(event) => { event.stopPropagation(); setAddAvailabilityOpen((open) => !open); setDashboardSectionsOpen((previous) => ({ ...previous, additionalAvailability: true })); }}>{addAvailabilityOpen ? 'Close Add Availability' : 'Add Availability'}</button>}
+    >
       {addAvailabilityOpen && <AddAvailabilityPanel onCreate={async (payload) => {
         const result = await createAdditionalAvailability(payload);
         if (result?.error) throw new Error(result.error);
         await refreshBookingAdmin();
       }} />}
-      <div className="blocked-time-list">{additionalAvailability.map((availability) => <div className="blocked-time-item" key={availability.id}><span>{new Date(availability.start_at).toLocaleString()} - {new Date(availability.end_at).toLocaleString()}{availability.note ? ` (${availability.note})` : ''}</span> <AdminSecondaryButton onClick={async () => { await deleteAdditionalAvailability(availability.id); refreshBookingAdmin(); }}>Delete</AdminSecondaryButton></div>)}</div>
-    </section>
+      <div className="blocked-time-list">{futureAdditionalAvailability.map((availability) => <div className="blocked-time-item" key={availability.id}><span>{new Date(availability.start_at).toLocaleString()} - {new Date(availability.end_at).toLocaleString()}{availability.note ? ` (${availability.note})` : ''}</span> <AdminSecondaryButton onClick={async () => { await deleteAdditionalAvailability(availability.id); refreshBookingAdmin(); }}>Delete</AdminSecondaryButton></div>)}</div>
+      {!futureAdditionalAvailability.length && <p className="muted">No upcoming additional availability.</p>}
+    </DashboardSection>
 
-    <section id="admin-customers" className="admin-section admin-section-customers"><h2>Customers</h2><div className="admin-list customer-list">{pagedCustomers.map((customer) => <CustomerCard key={customer.id} customer={customer} appointments={appointmentsByCustomerId.get(customer.id) || []} />)}</div>
-      {sortedCustomers.length > CUSTOMERS_PER_PAGE && <div className="appointment-pagination" aria-label="Customer pagination">
-        <button className="admin-secondary-button" type="button" onClick={() => setCustomerPage((page) => Math.max(0, page - 1))} disabled={currentCustomerPage === 0}>‹</button>
-        <span>{customerPageStart + 1}-{customerPageEnd} of {sortedCustomers.length}</span>
-        <button className="admin-secondary-button" type="button" onClick={() => setCustomerPage((page) => Math.min(customerPageCount - 1, page + 1))} disabled={currentCustomerPage >= customerPageCount - 1}>›</button>
-      </div>}
-    </section>
+    <DashboardSection id="admin-customers" className="admin-section-customers" title="Customers" meta={`(${customers.length})`} open={dashboardSectionsOpen.customers} onToggle={() => toggleDashboardSection('customers')}>
+      <label className="admin-search-field">Search customers<input value={customerSearch} onChange={(event) => setCustomerSearch(event.target.value)} placeholder="Name, email, or phone" /></label>
+      <div className="admin-list customer-list">{pagedCustomers.map((customer) => <CustomerCard key={customer.id} customer={customer} appointments={appointmentsByCustomerId.get(customer.id) || []} />)}</div>
+      {!searchedCustomers.length && <p className="muted">No customers match your search.</p>}
+      <PaginationControls
+        label="Customer pagination"
+        currentPage={currentCustomerPage}
+        pageCount={customerPageCount}
+        onPrevious={() => setCustomerPage((page) => Math.max(0, page - 1))}
+        onNext={() => setCustomerPage((page) => Math.min(customerPageCount - 1, page + 1))}
+      />
+    </DashboardSection>
 
-    <section id="admin-testimonials" className="admin-section admin-section-testimonials"><h2>Testimonials</h2><div className="admin-section-actions"><button className="btn" onClick={async () => { const item = { customer: 'Customer Name', quote: 'Editable testimonial quote.', display_order: testimonials.length + 1 }; const created = hasSupabaseConfig ? await createRecord('testimonials', item) : { ...item, id: crypto.randomUUID() }; setTestimonials((previous) => [...previous, created]); }}>Add Testimonial</button></div>
+    <DashboardSection
+      id="admin-testimonials"
+      className="admin-section-testimonials"
+      title="Testimonials"
+      meta={`(${testimonials.length})`}
+      open={dashboardSectionsOpen.testimonials}
+      onToggle={() => toggleDashboardSection('testimonials')}
+    >
+      <div className="admin-section-actions"><button className="btn" onClick={async () => { const item = { customer: 'Customer Name', quote: 'Editable testimonial quote.', display_order: testimonials.length + 1 }; const created = hasSupabaseConfig ? await createRecord('testimonials', item) : { ...item, id: crypto.randomUUID() }; setTestimonials((previous) => [...previous, created]); }}>Add Testimonial</button></div>
       <ReorderableList items={testimonials} onReorder={saveTestimonialVisualOrder} getItemLabel={(testimonial) => testimonial.customer || 'testimonial'} renderFields={(testimonial) => <><input value={testimonial.customer} onChange={(e) => setTestimonials((previous) => previous.map((item) => item.id === testimonial.id ? { ...item, customer: e.target.value } : item))} /><textarea value={testimonial.quote} onChange={(e) => setTestimonials((previous) => previous.map((item) => item.id === testimonial.id ? { ...item, quote: e.target.value } : item))} /><AdminSecondaryButton onClick={async () => hasSupabaseConfig && updateRecord('testimonials', testimonial.id, { customer: testimonial.customer, quote: testimonial.quote })}>Save</AdminSecondaryButton><AdminSecondaryButton className="danger" onClick={async () => { if (hasSupabaseConfig) await deleteRecord('testimonials', testimonial.id); setTestimonials((previous) => previous.filter((item) => item.id !== testimonial.id)); }}>Delete</AdminSecondaryButton></>} />
-    </section>
+    </DashboardSection>
 
-    <section id="admin-services" className="admin-section admin-section-services"><h2>Services</h2><div className="admin-section-actions"><button className="btn" onClick={async () => {
-      const item = { name: 'New Service', price_text: '$0', price_min_numeric: 0, duration: '30 min', duration_minutes: 30, is_variable_price: false, description: 'Service details', type: 'base', requires_service_ids: [], requires_service_names: [], display_order: services.length + 1, active: true };
-      const created = hasSupabaseConfig ? await createRecord('services', item) : { ...item, id: crypto.randomUUID() };
-      if (hasSupabaseConfig) await refreshServiceList(); else setServices((previous) => [...previous, created]);
-    }}>Add Service</button></div>
-      <ReorderableList items={services} onReorder={saveServiceVisualOrder} getItemLabel={(service) => service.name || 'service'} renderFields={(service, idx) => <>
-        {service.active === false && <p className="admin-service-status">Hidden from online booking and the public services list.</p>}
-        <label>Service name<input value={service.name} onChange={(e) => setServices((previous) => previous.map((item) => item.id === service.id ? { ...item, name: e.target.value } : item))} /></label>
-        <p className="muted admin-service-preview">Customers see: {displayServiceName(service)}</p>
-        <label>Price<input type="number" min="0" step="0.01" value={getServicePriceNumber(service)} onChange={(e) => updateServicePrice(service.id, e.target.value)} /></label>
-        <label>Duration (minutes)<input type="number" value={service.duration_minutes || 0} onChange={(e) => setServices((previous) => previous.map((item) => item.id === service.id ? { ...item, duration_minutes: Number(e.target.value), duration: `${e.target.value} min` } : item))} /></label>
-        <label className="variable-price-row"><span>Variable price?</span><input type="checkbox" checked={Boolean(service.is_variable_price)} onChange={(e) => updateServiceVariablePrice(service.id, e.target.checked)} /></label>
-        <label className="variable-price-row service-addon-row"><span>Requires base manicure/pedicure service</span><input type="checkbox" checked={serviceRequiresBase(service)} onChange={(e) => updateServiceRequiresBase(service.id, e.target.checked)} /></label>
-        {serviceRequiresBase(service) && <p className="muted admin-service-help">This will book only with an active base service and will show an * to customers.</p>}
-        <label>Description<textarea value={service.description} onChange={(e) => setServices((previous) => previous.map((item) => item.id === service.id ? { ...item, description: e.target.value } : item))} /></label>
-        <ServiceSuppliesUsed
-          service={service}
-          supplies={inventoryData.supplies}
-          mappings={inventoryData.mappings}
-          onSaveMapping={handleSaveServiceInventoryMapping}
-          onDeleteMapping={handleDeleteServiceInventoryMapping}
-        />
-        <AdminSecondaryButton onClick={() => saveService(service, idx)}>Save</AdminSecondaryButton>
-        <AdminSecondaryButton className={service.active === false ? '' : 'danger'} onClick={() => toggleServiceActive(service)}>{service.active === false ? 'Show service' : 'Hide service'}</AdminSecondaryButton>
-      </>} />
-    </section>
-
+    <DashboardSection
+      id="admin-services"
+      className="admin-section-services"
+      title="Services"
+      meta={`(${services.length})`}
+      open={dashboardSectionsOpen.services}
+      onToggle={() => toggleDashboardSection('services')}
+    >
+      <div className="admin-section-actions"><button className="btn" onClick={async () => {
+        const item = { name: 'New Service', price_text: '$0', price_min_numeric: 0, duration: '30 min', duration_minutes: 30, is_variable_price: false, description: 'Service details', type: 'base', requires_service_ids: [], requires_service_names: [], display_order: services.length + 1, active: true };
+        const created = hasSupabaseConfig ? await createRecord('services', item) : { ...item, id: crypto.randomUUID() };
+        if (hasSupabaseConfig) await refreshServiceList(); else setServices((previous) => [...previous, created]);
+      }}>Add Service</button></div>
+      <ReorderableList items={services} onReorder={saveServiceVisualOrder} getItemLabel={(service) => service.name || 'service'} renderFields={(service, idx) => <details className="service-collapsible-card">
+        <summary>{service.name || 'Untitled service'}</summary>
+        <div className="service-collapsible-content">
+          {service.active === false && <p className="admin-service-status">Hidden from online booking and the public services list.</p>}
+          <label>Service name<input value={service.name} onChange={(e) => setServices((previous) => previous.map((item) => item.id === service.id ? { ...item, name: e.target.value } : item))} /></label>
+          <p className="muted admin-service-preview">Customers see: {displayServiceName(service)}</p>
+          <label>Price<input type="number" min="0" step="0.01" value={getServicePriceNumber(service)} onChange={(e) => updateServicePrice(service.id, e.target.value)} /></label>
+          <label>Duration (minutes)<input type="number" value={service.duration_minutes || 0} onChange={(e) => setServices((previous) => previous.map((item) => item.id === service.id ? { ...item, duration_minutes: Number(e.target.value), duration: `${e.target.value} min` } : item))} /></label>
+          <label className="variable-price-row"><span>Variable price?</span><input type="checkbox" checked={Boolean(service.is_variable_price)} onChange={(e) => updateServiceVariablePrice(service.id, e.target.checked)} /></label>
+          <label className="variable-price-row service-addon-row"><span>Requires base manicure/pedicure service</span><input type="checkbox" checked={serviceRequiresBase(service)} onChange={(e) => updateServiceRequiresBase(service.id, e.target.checked)} /></label>
+          {serviceRequiresBase(service) && <p className="muted admin-service-help">This will book only with an active base service and will show an * to customers.</p>}
+          <label>Description<textarea value={service.description} onChange={(e) => setServices((previous) => previous.map((item) => item.id === service.id ? { ...item, description: e.target.value } : item))} /></label>
+          <ServiceSuppliesUsed
+            service={service}
+            supplies={inventoryData.supplies}
+            mappings={inventoryData.mappings}
+            onSaveMapping={handleSaveServiceInventoryMapping}
+            onDeleteMapping={handleDeleteServiceInventoryMapping}
+          />
+          <AdminSecondaryButton onClick={() => saveService(service, idx)}>Save</AdminSecondaryButton>
+          <AdminSecondaryButton className={service.active === false ? '' : 'danger'} onClick={() => toggleServiceActive(service)}>{service.active === false ? 'Show service' : 'Hide service'}</AdminSecondaryButton>
+        </div>
+      </details>} />
+    </DashboardSection>
 
     <InventorySection
       supplies={inventoryData.supplies}
@@ -1897,8 +2032,15 @@ export default function AdminPage() {
     />
     {!!inventoryMessage.text && <p className={`admin-message ${inventoryMessage.type}`} role={inventoryMessage.type === 'error' ? 'alert' : 'status'}>{inventoryMessage.text}</p>}
 
-    <section id="admin-gallery" className="admin-section admin-section-gallery"><h2>Gallery</h2><div className="gallery-upload-panel"><label htmlFor="gallery-file-picker">Select photo(s) to upload</label><input id="gallery-file-picker" type="file" accept="image/*" multiple onChange={(e) => { setSelectedGalleryFiles(Array.from(e.target.files || [])); setGalleryMessage({ type: '', text: '' }); }} /><label htmlFor="gallery-caption-input">Caption (optional)</label><input id="gallery-caption-input" placeholder="Caption for selected photo(s)" value={galleryCaptionDraft} onChange={(e) => setGalleryCaptionDraft(e.target.value)} /><button className="btn primary" onClick={uploadSelectedGalleryPhotos} disabled={galleryUploadBusy}>{galleryUploadBusy ? 'Uploading...' : 'Upload Selected Photos'}</button>{!!selectedGalleryFiles.length && <p className="muted">{selectedGalleryFiles.length} file(s) selected.</p>}{!!galleryMessage.text && <p className={galleryMessage.type === 'error' ? 'admin-message error' : 'admin-message success'}>{galleryMessage.text}</p>}</div>
+    <DashboardSection
+      id="admin-gallery"
+      className="admin-section-gallery"
+      title="Gallery"
+      open={dashboardSectionsOpen.gallery}
+      onToggle={() => toggleDashboardSection('gallery')}
+      alwaysContent={<div className="gallery-upload-panel"><label htmlFor="gallery-file-picker">Select photo(s) to upload</label><input id="gallery-file-picker" type="file" accept="image/*" multiple onChange={(e) => { setSelectedGalleryFiles(Array.from(e.target.files || [])); setGalleryMessage({ type: '', text: '' }); }} /><label htmlFor="gallery-caption-input">Caption (optional)</label><input id="gallery-caption-input" placeholder="Caption for selected photo(s)" value={galleryCaptionDraft} onChange={(e) => setGalleryCaptionDraft(e.target.value)} /><button className="btn primary" onClick={uploadSelectedGalleryPhotos} disabled={galleryUploadBusy}>{galleryUploadBusy ? 'Uploading...' : 'Upload Selected Photos'}</button>{!!selectedGalleryFiles.length && <p className="muted">{selectedGalleryFiles.length} file(s) selected.</p>}{!!galleryMessage.text && <p className={galleryMessage.type === 'error' ? 'admin-message error' : 'admin-message success'}>{galleryMessage.text}</p>}</div>}
+    >
       <ReorderableList items={gallery} onReorder={saveGalleryVisualOrder} getItemLabel={(galleryItem) => galleryItem.caption || 'gallery item'} renderFields={(galleryItem) => <div className="gallery-admin-item">{(galleryItem.imageUrl || galleryItem.local_path) ? <img src={galleryItem.imageUrl || galleryItem.local_path} alt="Gallery" /> : <div className="missing-image">No image</div>}<input placeholder="Caption" value={galleryItem.caption || ''} onChange={(e) => setGallery((previous) => previous.map((item) => item.id === galleryItem.id ? { ...item, caption: e.target.value } : item))} /><AdminSecondaryButton onClick={async () => { if (!hasSupabaseConfig) return; await updateRecord('gallery_items', galleryItem.id, { caption: galleryItem.caption || '' }); await refreshGalleryList(); }}>Save</AdminSecondaryButton><AdminSecondaryButton className="danger" onClick={async () => { if (hasSupabaseConfig) { await deleteGalleryImage(galleryItem.storage_key); await deleteRecord('gallery_items', galleryItem.id); await refreshGalleryList(); return; } setGallery((previous) => previous.filter((item) => item.id !== galleryItem.id)); }}>Delete</AdminSecondaryButton></div>} />
-    </section>
+    </DashboardSection>
   </main>;
 }

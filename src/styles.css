@@ -1675,7 +1675,7 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
 .inventory-nested-card summary::after,
 .payment-advanced-card summary::after,
 .payment-event-history summary::after{
-  content:'+';
+  content:'⌄';
   display:inline-grid;
   width:1.9rem;
   height:1.9rem;
@@ -1688,7 +1688,7 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
 .inventory-card[open] > summary::after,
 .inventory-nested-card[open] > summary::after,
 .payment-advanced-card[open] > summary::after,
-.payment-event-history[open] > summary::after{content:'–'}
+.payment-event-history[open] > summary::after{content:'⌃'}
 .inventory-summary .muted{margin:0;font-size:.9rem;font-weight:700}
 .inventory-collapsed-preview{
   display:grid;
@@ -2083,4 +2083,169 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
 
   .admin-modal-actions .btn,
   .payment-entry-card .btn{width:100%}
+}
+
+.dashboard-section-card{
+  padding:1rem;
+  text-align:left;
+  overflow:hidden;
+}
+
+.dashboard-section-header{
+  display:flex;
+  flex-wrap:wrap;
+  gap:.75rem 1rem;
+  align-items:center;
+  justify-content:space-between;
+}
+
+.dashboard-section-header.always-open h2{
+  margin:0;
+  color:var(--heading);
+  font-family:'Cormorant Garamond', Georgia, serif;
+  font-size:2rem;
+  line-height:1.05;
+}
+
+.dashboard-section-title{
+  min-width:0;
+  flex:1 1 220px;
+  padding:0;
+  border:0;
+  background:transparent;
+  color:var(--heading);
+  cursor:pointer;
+  font:inherit;
+  font-family:'Cormorant Garamond', Georgia, serif;
+  font-size:2rem;
+  font-weight:800;
+  line-height:1.05;
+  text-align:left;
+}
+
+.dashboard-section-meta{
+  color:#5c5268;
+  font-family:inherit;
+  font-size:1.45rem;
+}
+
+.dashboard-section-header-actions{
+  display:flex;
+  flex:0 1 auto;
+  flex-wrap:wrap;
+  gap:.55rem;
+  align-items:center;
+  justify-content:flex-end;
+}
+
+.dashboard-section-chevron{
+  cursor:pointer;
+  font:inherit;
+  font-weight:800;
+}
+
+.dashboard-section-content,
+.dashboard-section-persistent-content{
+  animation:appointment-expand .18s ease-out;
+}
+
+.dashboard-section-content{
+  margin-top:1rem;
+}
+
+.appointment-list-toolbar{
+  display:flex;
+  flex-wrap:wrap;
+  gap:.85rem 1rem;
+  align-items:center;
+  justify-content:space-between;
+  padding:.85rem;
+  border:1px solid rgba(26,47,95,.12);
+  border-radius:18px;
+  background:rgba(255,255,255,.44);
+}
+
+.appointment-list-toolbar .muted{
+  margin:.15rem 0 0;
+}
+
+.appointment-list-toggle{
+  display:inline-flex;
+  gap:.55rem;
+  align-items:center;
+  justify-content:center;
+}
+
+.appointment-list-toggle .appointment-arrow{
+  width:1.75rem;
+  height:1.75rem;
+  font-size:1rem;
+}
+
+.admin-search-field{
+  display:grid;
+  gap:.35rem;
+  width:min(100%,520px);
+  margin:0 auto 1rem;
+  color:var(--heading);
+  font-weight:800;
+}
+
+.service-collapsible-card{
+  width:100%;
+  border:1px solid rgba(26,47,95,.12);
+  border-radius:18px;
+  background:rgba(255,255,255,.46);
+  overflow:hidden;
+}
+
+.service-collapsible-card summary{
+  display:flex;
+  gap:.75rem;
+  align-items:center;
+  justify-content:space-between;
+  min-height:3.1rem;
+  padding:.75rem .9rem;
+  color:var(--heading);
+  cursor:pointer;
+  font-family:'Cormorant Garamond', Georgia, serif;
+  font-size:1.35rem;
+  font-weight:800;
+  list-style:none;
+}
+
+.service-collapsible-card summary::-webkit-details-marker{display:none}
+
+.service-collapsible-card summary::after{
+  content:'⌄';
+  display:inline-grid;
+  flex:0 0 auto;
+  width:1.9rem;
+  height:1.9rem;
+  place-items:center;
+  border:1px solid rgba(26,47,95,.16);
+  border-radius:999px;
+  background:rgba(255,255,255,.64);
+  color:var(--accent);
+  font-family:inherit;
+  font-size:1.1rem;
+  line-height:1;
+}
+
+.service-collapsible-card[open] > summary::after{content:'⌃'}
+
+.service-collapsible-content{
+  display:grid;
+  gap:.85rem;
+  padding:.9rem;
+  animation:appointment-expand .18s ease-out;
+}
+
+@media (max-width:720px){
+  .dashboard-section-card{padding:.85rem}
+  .dashboard-section-title,.dashboard-section-header.always-open h2{font-size:1.7rem}
+  .dashboard-section-header-actions{width:100%;justify-content:flex-start}
+  .dashboard-section-chevron{margin-left:auto}
+  .appointment-list-toolbar{align-items:stretch}
+  .appointment-list-toggle{width:100%}
 }

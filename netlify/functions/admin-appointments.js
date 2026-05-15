@@ -142,6 +142,17 @@ async function exportPaymentsCsv() {
 }
 
 
+
+async function cleanupPastAvailabilityWindows() {
+  const nowIso = new Date().toISOString();
+  const [blockedResult, additionalResult] = await Promise.all([
+    supabaseAdmin.from('blocked_times').delete().lt('end_at', nowIso),
+    supabaseAdmin.from('additional_availability').delete().lt('end_at', nowIso),
+  ]);
+  if (blockedResult.error) throw blockedResult.error;
+  if (additionalResult.error) throw additionalResult.error;
+}
+
 async function loadMessageTarget(payload) {
   if (payload.appointmentId) {
     const { data: appointment, error } = await supabaseAdmin
@@ -314,6 +325,8 @@ export const handler = async (event) => {
         return csvResponse(exportFile.fileName, exportFile.csvContent);
       }
 
+      await cleanupPastAvailabilityWindows();
+
       const { data: appointments, error: appointmentsError } = await supabaseAdmin
         .from('appointments')
         .select('*, customers(*), appointment_services(*), appointment_financial_events(*), appointment_payment_records(*), client_messages(*)')
@@ -330,12 +343,14 @@ export const handler = async (event) => {
       const { data: blockedTimes, error: blockedTimesError } = await supabaseAdmin
         .from('blocked_times')
         .select('*')
+        .gte('end_at', new Date().toISOString())
         .order('start_at', { ascending: true });
       if (blockedTimesError) throw blockedTimesError;
 
       const { data: additionalAvailability, error: additionalAvailabilityError } = await supabaseAdmin
         .from('additional_availability')
         .select('*')
+        .gte('end_at', new Date().toISOString())
         .order('start_at', { ascending: true });
       if (additionalAvailabilityError) throw additionalAvailabilityError;
 
