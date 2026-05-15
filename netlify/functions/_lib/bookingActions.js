@@ -26,10 +26,6 @@ const OPERATIONAL_PAYMENT_METHODS = new Set([
   'cash',
   'cashapp',
   'venmo',
-  'zelle',
-  'apple_cash',
-  'other_card',
-  'other',
 ]);
 const OPERATIONAL_PAYMENT_DIRECTIONS = new Set(['payment', 'refund']);
 
@@ -348,12 +344,16 @@ export async function applyManualAppointmentPayment({
   note,
   createdBy,
 }) {
+  if (paymentMethod === 'square_on_file') {
+    throw new Error('Use the dedicated card-on-file charge action for saved Square cards.');
+  }
+
   const { appointment } = await loadAppointment(appointmentId);
   const amountCents = dollarsToCents(amountDollars);
   const tipAmountCents = dollarsToCents(tipDollars);
   const processor = paymentMethod === 'square_manual'
     ? 'square'
-    : ['cashapp', 'venmo', 'zelle', 'apple_cash', 'other_card'].includes(paymentMethod)
+    : ['cashapp', 'venmo'].includes(paymentMethod)
       ? 'external'
       : 'manual';
 
@@ -372,6 +372,38 @@ export async function applyManualAppointmentPayment({
 
   await logAudit(appointmentId, `${paymentDirection === 'refund' ? 'manual_refund' : 'manual_payment'}_${paymentMethod}`, 'dashboard', note, externalReference || null);
   return record;
+}
+
+
+async function getOperationalServicePaidCents(appointmentId) {
+  const { data, error } = await supabaseAdmin
+    .from('appointment_payment_records')
+    .select('amount_cents, payment_direction')
+    .eq('appointment_id', appointmentId);
+  if (error) throw error;
+
+  return (data || []).reduce((total, record) => {
+    const sign = record.payment_direction === 'refund' ? -1 : 1;
+    return total + (sign * finiteNumber(record.amount_cents));
+  }, 0);
+}
+
+export async function chargeRemainingServiceBalanceOnFile({ appointmentId, initiatedBy = 'dashboard', note }) {
+  const { appointment } = await loadAppointment(appointmentId);
+  const estimatedCents = dollarsToCents(finiteNumber(appointment.estimated_total_min));
+  const paidServiceCents = await getOperationalServicePaidCents(appointmentId);
+  const remainingCents = Math.max(0, estimatedCents - paidServiceCents);
+
+  if (remainingCents <= 0) throw new Error('There is no remaining service balance to charge.');
+
+  return chargeAppointment({
+    appointmentId,
+    target: 'service',
+    amountDollars: centsToDollars(remainingCents),
+    initiatedBy,
+    note: note || 'Charged remaining service balance to card on file.',
+    allowAdditionalServiceCharge: true,
+  });
 }
 
 async function assertChargeEligibility(appointment, target, allowAdditionalServiceCharge = false) {

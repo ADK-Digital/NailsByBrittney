@@ -1865,21 +1865,78 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
   font-size:1rem;
 }
 
+.admin-modal-overlay{
+  position:fixed;
+  inset:0;
+  z-index:1000;
+  display:grid;
+  place-items:center;
+  padding:1.25rem;
+  background:rgba(31,28,38,.34);
+  backdrop-filter:blur(5px);
+}
+
+.admin-modal{
+  width:min(100%,430px);
+  display:grid;
+  gap:1rem;
+  padding:1.25rem;
+  border:1px solid rgba(26,47,95,.13);
+  border-radius:24px;
+  background:rgba(255,251,253,.94);
+  box-shadow:0 24px 70px rgba(31,28,38,.22);
+}
+
+.admin-modal-title{
+  margin:0;
+  color:var(--heading);
+  font-family:'Cormorant Garamond', Georgia, serif;
+  font-size:1.65rem;
+  line-height:1.05;
+}
+
+.admin-modal-body{
+  display:grid;
+  gap:.35rem;
+  color:#483f53;
+}
+
+.admin-modal-body p{
+  margin:0;
+}
+
+.admin-modal-actions{
+  display:flex;
+  justify-content:flex-end;
+  gap:.6rem;
+}
+
+.admin-modal-actions .btn{
+  min-height:44px;
+}
+
 .payment-entry-card{
   display:grid;
   gap:.7rem;
   margin-top:.75rem;
 }
 
-.payment-quick-actions{
-  display:flex;
-  flex-wrap:wrap;
-  gap:.45rem;
+.payment-card-on-file-action{
+  display:grid;
+  gap:.35rem;
+  padding:.75rem;
+  border:1px solid rgba(183,134,154,.18);
+  border-radius:18px;
+  background:rgba(255,255,255,.56);
 }
 
-.payment-quick-actions .admin-secondary-button{
-  padding:.42rem .68rem;
-  font-size:.78rem;
+.payment-card-on-file-action .muted{
+  margin:0;
+}
+
+.payment-card-on-file-button{
+  width:100%;
+  justify-content:center;
 }
 
 .payment-form-grid{
@@ -1949,6 +2006,22 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
 }
 
 @media (max-width:560px){
-  .payment-entry-card .btn,
-  .payment-quick-actions .admin-secondary-button{width:100%}
+  .admin-modal-overlay{
+    align-items:end;
+    padding:.85rem;
+  }
+
+  .admin-modal{
+    width:100%;
+    padding:1rem;
+    border-radius:22px;
+  }
+
+  .admin-modal-actions{
+    display:grid;
+    gap:.5rem;
+  }
+
+  .admin-modal-actions .btn,
+  .payment-entry-card .btn{width:100%}
 }

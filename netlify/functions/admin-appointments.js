@@ -4,6 +4,7 @@ import {
   chargeAppointment,
   refundAppointment,
   applyManualAppointmentPayment,
+  chargeRemainingServiceBalanceOnFile,
   getAppointmentStatusSummaryByRequestNumber,
 } from './_lib/bookingActions.js';
 import { listClientMessages, sendAdminClientMessage } from './_lib/clientMessages.js';
@@ -201,6 +202,15 @@ async function handleAppointmentAction(payload, context = {}) {
   }
 
   if (payload.action === 'charge') {
+    if (payload.target === 'service_remaining_balance') {
+      const event = await chargeRemainingServiceBalanceOnFile({
+        appointmentId: payload.appointmentId,
+        initiatedBy,
+        note: payload.note,
+      });
+      return { ok: true, event };
+    }
+
     const amountDollars = payload.amountDollars ?? payload.amount;
     const percentOverride = payload.percentOverride ?? payload.percent;
     const event = await chargeAppointment({

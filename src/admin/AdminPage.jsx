@@ -59,10 +59,6 @@ const PAYMENT_METHOD_OPTIONS = [
   ['cash', 'Cash'],
   ['cashapp', 'Cash App'],
   ['venmo', 'Venmo'],
-  ['zelle', 'Zelle'],
-  ['apple_cash', 'Apple Cash'],
-  ['other_card', 'Other Card'],
-  ['other', 'Other'],
   ['square_manual', 'Square Manual'],
 ];
 const PAYMENT_METHOD_LABELS = new Map([
@@ -71,10 +67,6 @@ const PAYMENT_METHOD_LABELS = new Map([
   ['cash', 'Cash'],
   ['cashapp', 'Cash App'],
   ['venmo', 'Venmo'],
-  ['zelle', 'Zelle'],
-  ['apple_cash', 'Apple Cash'],
-  ['other_card', 'Other card'],
-  ['other', 'Other'],
 ]);
 
 
@@ -529,7 +521,13 @@ function formatPaymentStatus(status) {
 }
 
 function formatPaymentMethod(method) {
-  return PAYMENT_METHOD_LABELS.get(method) || String(method || 'Other').replace(/_/g, ' ');
+  return PAYMENT_METHOD_LABELS.get(method) || String(method || 'Unsupported historical method').replace(/_/g, ' ');
+}
+
+function getSavedCardDescription(customer) {
+  const brand = String(customer?.card_brand || 'card').trim();
+  const last4 = String(customer?.card_last4 || '').trim();
+  return `${brand}${last4 ? ` ending in ${last4}` : ''}`;
 }
 
 function getAppointmentSortPriority(status) {
@@ -725,6 +723,8 @@ function AppointmentCard({ appointment, customer, onRefresh }) {
   const [paymentNote, setPaymentNote] = useState('');
   const [actionNotice, setActionNotice] = useState({ type: '', text: '' });
   const [actionBusy, setActionBusy] = useState(false);
+  const [showChargeOnFileModal, setShowChargeOnFileModal] = useState(false);
+  const chargeOnFileSubmittingRef = useRef(false);
 
   const events = appointment.appointment_financial_events || [];
   const paymentRecords = appointment.appointment_payment_records || [];
@@ -732,6 +732,7 @@ function AppointmentCard({ appointment, customer, onRefresh }) {
   const paymentTotals = getPaymentRecordTotals(paymentRecords);
   const estimatedCents = Math.round(Number(estimatedTotalDollars || 0) * 100);
   const remainingCents = estimatedCents - paymentTotals.serviceCents;
+  const chargeableRemainingCents = Math.max(0, remainingCents);
   const defaultPaymentAmount = formatDollarAmount(Math.max(0, remainingCents) / 100);
   const defaultRefundAmount = formatDollarAmount(Math.max(0, paymentTotals.serviceCents) / 100);
   const defaultOperationalAmount = paymentDirection === 'refund' ? defaultRefundAmount : defaultPaymentAmount;
@@ -750,6 +751,9 @@ function AppointmentCard({ appointment, customer, onRefresh }) {
   const estimatedDuration = formatEstimatedDuration(appointment.total_duration_minutes);
   const bookingNotes = getAppointmentBookingNotes(appointment, customer || appointment.customers);
   const notificationWarnings = getAppointmentNotificationWarnings(appointment);
+  const hasSavedSquareCard = appointment.customers?.card_on_file_status === 'on_file' && !!appointment.customers?.square_card_id;
+  const savedCardDescription = getSavedCardDescription(appointment.customers);
+  const chargeOnFileAmount = centsToDollars(chargeableRemainingCents);
 
   useEffect(() => {
     setServiceAmount(defaultServiceAmount);
@@ -800,6 +804,35 @@ function AppointmentCard({ appointment, customer, onRefresh }) {
     () => adminChargeAppointment({ appointmentId: appointment.id, target: 'service', amount: parseCurrencyAmount(serviceAmount) }),
     'Service charge completed successfully.',
   );
+
+  const chargeOnFileFullAmount = () => {
+    if (chargeableRemainingCents <= 0) {
+      setActionNotice({ type: 'error', text: 'There is no remaining service balance to charge.' });
+      return;
+    }
+
+    setShowChargeOnFileModal(true);
+  };
+
+  const cancelChargeOnFile = () => {
+    if (actionBusy) return;
+    setShowChargeOnFileModal(false);
+  };
+
+  const confirmChargeOnFile = async () => {
+    if (actionBusy || chargeOnFileSubmittingRef.current) return;
+
+    chargeOnFileSubmittingRef.current = true;
+    try {
+      await call(
+        () => adminChargeAppointment({ appointmentId: appointment.id, target: 'service_remaining_balance' }),
+        'Saved card charged successfully.',
+      );
+      setShowChargeOnFileModal(false);
+    } finally {
+      chargeOnFileSubmittingRef.current = false;
+    }
+  };
 
   const applyPayment = () => call(
     () => applyAppointmentPayment({
@@ -873,11 +906,17 @@ function AppointmentCard({ appointment, customer, onRefresh }) {
           <div><span>Tips</span><strong>${centsToDollars(paymentTotals.tipCents)}</strong></div>
         </div>
         <div className="payment-entry-card">
-          <div className="payment-quick-actions">
-            {PAYMENT_METHOD_OPTIONS.filter(([value]) => !value.startsWith('square')).map(([value, label]) => (
-              <button key={value} type="button" className="admin-secondary-button" onClick={() => setPaymentMethod(value)}>Apply Payment — {label}</button>
-            ))}
-          </div>
+          {hasSavedSquareCard && <div className="payment-card-on-file-action">
+            <button
+              type="button"
+              className="btn primary payment-card-on-file-button"
+              disabled={actionBusy || chargeableRemainingCents <= 0}
+              onClick={chargeOnFileFullAmount}
+            >
+              Charge On-File Card Full Amount
+            </button>
+            <p className="muted">Charges ${chargeOnFileAmount} to saved {savedCardDescription}. Tips stay separate.</p>
+          </div>}
           <div className="payment-form-grid">
             <label>Method<select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)}>
               {PAYMENT_METHOD_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
@@ -939,6 +978,20 @@ function AppointmentCard({ appointment, customer, onRefresh }) {
           aria-label="Service charge dollar amount"
         />
       </div>
+
+      {showChargeOnFileModal && <div className="admin-modal-overlay" role="presentation">
+        <div className="admin-modal" role="dialog" aria-modal="true" aria-labelledby={`charge-card-title-${appointment.id}`}>
+          <h3 className="admin-modal-title" id={`charge-card-title-${appointment.id}`}>Charge Saved Card?</h3>
+          <div className="admin-modal-body">
+            <p>Charge ${chargeOnFileAmount} to saved {savedCardDescription}?</p>
+            <p className="muted">Tips are not included in this charge.</p>
+          </div>
+          <div className="admin-modal-actions">
+            <button type="button" className="btn ghost" disabled={actionBusy} onClick={cancelChargeOnFile}>Cancel</button>
+            <button type="button" className="btn primary" disabled={actionBusy} onClick={confirmChargeOnFile}>{actionBusy ? 'Charging...' : 'Confirm charge'}</button>
+          </div>
+        </div>
+      </div>}
 
       {actionNotice.text && <p className={`admin-message ${actionNotice.type}`} role={actionNotice.type === 'error' ? 'alert' : 'status'}>{actionNotice.text}</p>}
 
