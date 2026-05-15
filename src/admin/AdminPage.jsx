@@ -415,6 +415,8 @@ function statusClassName(status) {
 }
 
 const SERVICE_PAYMENT_PILL_STATUSES = new Set(['pending_confirmation', 'pending', 'confirmed', 'completed']);
+const HIDDEN_PAYMENT_PILL_STATUSES = new Set(['declined', 'cancelled', 'expired']);
+const LATE_FEE_RELEVANT_STATUSES = new Set(['late_cancellation', 'late_cancelled']);
 
 function normalizeAppointmentStatus(status) {
   return String(status || '').toLowerCase();
@@ -452,6 +454,13 @@ function isUnappliedNoShowFee(appointment) {
     && normalizePaymentStatus(appointment?.no_show_fee_status) === 'unpaid';
 }
 
+function shouldShowLateFeePill(appointmentStatus, lateFeeStatus) {
+  const normalizedStatus = normalizeAppointmentStatus(appointmentStatus);
+  if (HIDDEN_PAYMENT_PILL_STATUSES.has(normalizedStatus)) return false;
+  if (!LATE_FEE_RELEVANT_STATUSES.has(normalizedStatus)) return false;
+  return normalizePaymentStatus(lateFeeStatus) !== 'paid';
+}
+
 function shouldShowNoShowFeePill(appointmentStatus, noShowFeeStatus) {
   const normalizedStatus = normalizeAppointmentStatus(appointmentStatus);
   if (normalizedStatus !== 'no_show') return false;
@@ -472,6 +481,7 @@ function getAppointmentPaymentPills(appointment, servicePaymentStatus) {
   }
 
   if (shouldShowLateFeePill(appointment, appointment?.late_fee_status)) {
+  if (shouldShowLateFeePill(appointmentStatus, appointment?.late_fee_status)) {
     pills.push({
       key: 'late-fee',
       label: 'Late fee',
