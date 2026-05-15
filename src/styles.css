@@ -1748,11 +1748,6 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
 }
 
 .admin-section-inventory{max-width:1040px}
-.inventory-card{
-  margin:1rem auto;
-  text-align:left;
-}
-.inventory-card summary,
 .inventory-nested-card summary,
 .payment-advanced-card summary,
 .payment-event-history summary{
@@ -1768,11 +1763,9 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
   font-weight:800;
   list-style:none;
 }
-.inventory-card summary::-webkit-details-marker,
 .inventory-nested-card summary::-webkit-details-marker,
 .payment-advanced-card summary::-webkit-details-marker,
 .payment-event-history summary::-webkit-details-marker{display:none}
-.inventory-card summary::after,
 .inventory-nested-card summary::after,
 .payment-advanced-card summary::after,
 .payment-event-history summary::after{
@@ -1789,16 +1782,21 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
   background:rgba(255,255,255,.64);
   color:var(--accent);
 }
-.inventory-card[open] > summary::after,
 .inventory-nested-card[open] > summary::after,
 .payment-advanced-card[open] > summary::after,
 .payment-event-history[open] > summary::after{content:'⌃'}
-.inventory-summary .muted{margin:0;font-size:.9rem;font-weight:700}
-.inventory-collapsed-preview{
+.inventory-critical-preview{
   display:grid;
   gap:.55rem;
-  margin-top:.85rem;
 }
+.inventory-critical-preview-head{
+  display:flex;
+  flex-wrap:wrap;
+  gap:.5rem .75rem;
+  align-items:center;
+  justify-content:space-between;
+}
+.inventory-critical-preview-head .muted{margin:0;font-size:.9rem;font-weight:700}
 .inventory-expanded-content{
   display:grid;
   gap:1rem;
@@ -1920,7 +1918,7 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
 .service-supplies-empty{margin:.1rem 0}
 
 @media (max-width:720px){
-  .inventory-card summary,.inventory-nested-card summary,.payment-advanced-card summary,.payment-event-history summary{align-items:flex-start;flex-direction:column}
+  .inventory-nested-card summary,.payment-advanced-card summary,.payment-event-history summary{align-items:flex-start;flex-direction:column}
   .inventory-critical-row{align-items:stretch;flex-direction:column}
   .service-supplies-row{grid-template-columns:1fr;align-items:stretch}
   .service-supplies-row input{max-width:none}
@@ -1950,6 +1948,64 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
   font-family:'Cormorant Garamond', Georgia, serif;
   font-size:1.35rem;
 }
+
+.desktop-payments-panel{display:block}
+.mobile-payments-collapse{display:none}
+
+.mobile-payments-summary{
+  position:relative;
+  display:flex;
+  flex-wrap:wrap;
+  gap:.55rem .7rem;
+  align-items:center;
+  min-height:3rem;
+  padding:.75rem 2.75rem .75rem .85rem;
+  cursor:pointer;
+  color:var(--heading);
+  font-weight:800;
+  list-style:none;
+}
+
+.mobile-payments-summary::-webkit-details-marker{display:none}
+.mobile-payments-summary::after{
+  content:'⌄';
+  position:absolute;
+  top:.7rem;
+  right:.75rem;
+  display:inline-grid;
+  width:1.9rem;
+  height:1.9rem;
+  place-items:center;
+  border:1px solid rgba(26,47,95,.16);
+  border-radius:999px;
+  background:rgba(255,255,255,.64);
+  color:var(--accent);
+}
+.mobile-payments-collapse[open] > .mobile-payments-summary::after{content:'⌃'}
+.mobile-payments-summary-title{
+  font-family:'Cormorant Garamond', Georgia, serif;
+  font-size:1.35rem;
+}
+.mobile-payments-summary-status{display:inline-flex}
+.mobile-payments-summary-balance,
+.mobile-payments-summary-paid{
+  display:inline-grid;
+  gap:.05rem;
+  padding:.38rem .55rem;
+  border:1px solid rgba(26,47,95,.10);
+  border-radius:14px;
+  background:rgba(255,255,255,.56);
+}
+.mobile-payments-summary-balance span,
+.mobile-payments-summary-paid span{
+  color:#5c5268;
+  font-size:.62rem;
+  font-weight:800;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+}
+.mobile-payments-summary-balance strong,
+.mobile-payments-summary-paid strong{font-size:.9rem}
 
 .payment-status-pill{
   text-transform:capitalize;
@@ -2352,4 +2408,22 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
   .dashboard-section-chevron{margin-left:auto}
   .appointment-list-toolbar{align-items:stretch}
   .appointment-list-toggle{width:100%}
+}
+
+@media (max-width:720px){
+  .desktop-payments-panel{display:none}
+  .mobile-payments-collapse{
+    display:block;
+    margin:1rem 0;
+    border:1px solid rgba(26,47,95,.12);
+    border-radius:20px;
+    background:rgba(255,255,255,.48);
+  }
+  .mobile-payments-collapse .appointment-payments-panel{
+    margin:0;
+    border:0;
+    border-top:1px solid rgba(26,47,95,.10);
+    border-radius:0 0 20px 20px;
+    background:transparent;
+  }
 }
