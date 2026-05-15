@@ -996,20 +996,29 @@ function AppointmentCard({ appointment, customer, onRefresh }) {
   };
 
   return <article className={`card appointment-card${expanded ? ' expanded' : ''}`}>
-    {!expanded && <button type="button" className="appointment-toggle" onClick={() => setExpanded(true)} aria-expanded={expanded}>
-      <span className="appointment-title">
-        <strong>{appointmentDateTime}</strong>
-        <span className="appointment-customer">{customerName}</span>
-        <span className="appointment-booking-number">Booking #{formatBookingNumber(appointment.booking_request_number)}</span>
-        {!!notificationWarnings.length && <span className="notification-warning-pill">Communication warning</span>}
-      </span>
-      <span className="appointment-toggle-status">
-        <span className={statusClassName(appointment.status)}><span>Status</span>{formatAdminStatus(appointment.status)}</span>
-        <span className="appointment-arrow" aria-hidden="true">{CHEVRON_DOWN}</span>
-      </span>
-    </button>}
+    {!expanded && <div className="appointment-collapsed-row">
+      <button type="button" className="appointment-toggle" onClick={() => setExpanded(true)} aria-expanded={expanded}>
+        <span className="appointment-title">
+          <strong>{appointmentDateTime}</strong>
+          <span className="appointment-customer">{customerName}</span>
+          <span className="appointment-booking-number">Booking #{formatBookingNumber(appointment.booking_request_number)}</span>
+          {!!notificationWarnings.length && <span className="notification-warning-pill">Communication warning</span>}
+        </span>
+        <span className="appointment-toggle-status">
+          <span className={statusClassName(appointment.status)}><span>Status</span>{formatAdminStatus(appointment.status)}</span>
+        </span>
+      </button>
+      {normalizeAppointmentStatus(appointment.status) === 'pending_confirmation' && <button
+        type="button"
+        className="btn appointment-quick-confirm"
+        disabled={actionBusy}
+        onClick={() => call(() => setAppointmentStatus(appointment.id, 'confirmed'), 'Appointment marked Confirmed.')}
+      >{actionBusy ? 'Confirming…' : 'Confirm'}</button>}
+      <button type="button" className="appointment-arrow appointment-card-chevron" onClick={() => setExpanded(true)} aria-label="Expand appointment" aria-expanded={expanded}>{CHEVRON_DOWN}</button>
+    </div>}
 
     {expanded && <div className="appointment-details">
+      <button type="button" className="appointment-arrow appointment-card-chevron appointment-collapse-button" onClick={() => setExpanded(false)} aria-label="Collapse appointment" aria-expanded={expanded}>{CHEVRON_UP}</button>
       <div className="appointment-head">
         <div className="appointment-title appointment-title-expanded">
           <strong>{appointmentDateTime}</strong>
@@ -1025,16 +1034,26 @@ function AppointmentCard({ appointment, customer, onRefresh }) {
         <div className="appointment-meta" aria-label="Booking status details">
           <span className={statusClassName(appointment.status)}><span>Status</span>{formatAdminStatus(appointment.status)}</span>
           {appointmentPaymentPills.map((pill) => <span key={pill.key} className={pill.className}><span>{pill.label}</span>{formatPaymentStatus(pill.value)}</span>)}
-          <button type="button" className="appointment-arrow appointment-collapse-button" onClick={() => setExpanded(false)} aria-label="Collapse appointment" aria-expanded={expanded}>{CHEVRON_UP}</button>
         </div>
       </div>
+      <div className="admin-action-grid appointment-status-actions" aria-label="Appointment status actions">
+        {['confirmed', 'declined', 'cancelled', 'completed', 'no_show'].map((status) => <button key={status} className="btn" disabled={actionBusy} onClick={() => call(() => setAppointmentStatus(appointment.id, status), `Appointment marked ${formatAdminStatus(status)}.`)}>{formatAdminStatus(status)}</button>)}
+      </div>
       <p className="muted">Communication preference: {formatCommunicationPreference(appointment.customers?.communication_preference)} • Card: {appointment.customers?.card_on_file_status || 'missing'} {appointment.customers?.card_brand ? `(${appointment.customers.card_brand} ••••${appointment.customers.card_last4 || ''})` : ''}</p>
-      {!!notificationWarnings.length && <div className="admin-warning-banner" role="status">
-        <strong>Customer communication may not have been delivered.</strong>
-        <ul>{notificationWarnings.slice(0, 3).map((message) => <li key={message.id}>{message.body}</li>)}</ul>
-      </div>}
 
-      <MessageThread customer={appointment.customers} appointment={appointment} />
+      <details className="appointment-messages-card">
+        <summary>
+          <span>SMS & Communication</span>
+          {!!notificationWarnings.length && <span className="notification-warning-pill">{notificationWarnings.length} warning{notificationWarnings.length === 1 ? '' : 's'}</span>}
+        </summary>
+        <div className="appointment-messages-content">
+          {!!notificationWarnings.length && <div className="admin-warning-banner" role="status">
+            <strong>Customer communication may not have been delivered.</strong>
+            <ul>{notificationWarnings.slice(0, 3).map((message) => <li key={message.id}>{message.body}</li>)}</ul>
+          </div>}
+          <MessageThread customer={appointment.customers} appointment={appointment} />
+        </div>
+      </details>
 
       <section className="appointment-payments-panel" aria-label="Payments">
         <div className="appointment-payments-head">
@@ -1137,10 +1156,6 @@ function AppointmentCard({ appointment, customer, onRefresh }) {
         </details>
       </section>
 
-      <div className="admin-action-grid">
-        {['confirmed', 'declined', 'cancelled', 'completed', 'no_show'].map((status) => <button key={status} className="btn" disabled={actionBusy} onClick={() => call(() => setAppointmentStatus(appointment.id, status), `Appointment marked ${formatAdminStatus(status)}.`)}>{formatAdminStatus(status)}</button>)}
-      </div>
-
       {showChargeOnFileModal && <div className="admin-modal-overlay" role="presentation">
         <div className="admin-modal" role="dialog" aria-modal="true" aria-labelledby={`charge-card-title-${appointment.id}`}>
           <h3 className="admin-modal-title" id={`charge-card-title-${appointment.id}`}>Charge Saved Card?</h3>
@@ -1155,8 +1170,9 @@ function AppointmentCard({ appointment, customer, onRefresh }) {
         </div>
       </div>}
 
-      {actionNotice.text && <p className={`admin-message ${actionNotice.type}`} role={actionNotice.type === 'error' ? 'alert' : 'status'}>{actionNotice.text}</p>}
     </div>}
+
+    {actionNotice.text && <p className={`admin-message appointment-action-notice ${actionNotice.type}`} role={actionNotice.type === 'error' ? 'alert' : 'status'}>{actionNotice.text}</p>}
   </article>;
 }
 
