@@ -3,6 +3,7 @@ import {
   transitionAppointment,
   chargeAppointment,
   refundAppointment,
+  applyManualAppointmentPayment,
   getAppointmentStatusSummaryByRequestNumber,
 } from './_lib/bookingActions.js';
 import { listClientMessages, sendAdminClientMessage } from './_lib/clientMessages.js';
@@ -30,20 +31,20 @@ function allowAdminAuthBypass() {
 }
 
 async function authorizeAdminRequest(event) {
-  if (allowAdminAuthBypass()) return null;
+  if (allowAdminAuthBypass()) return { user: null, email: 'local-admin' };
 
   const token = getBearerToken(event);
-  if (!token) return json(401, { error: 'Unauthorized' });
+  if (!token) return { response: json(401, { error: 'Unauthorized' }) };
 
   ensureServerConfig();
   const { data, error } = await supabaseAdmin.auth.getUser(token);
   const email = data?.user?.email?.trim().toLowerCase();
-  if (error || !data?.user || !email) return json(401, { error: 'Unauthorized' });
+  if (error || !data?.user || !email) return { response: json(401, { error: 'Unauthorized' }) };
 
   const allowedEmails = getAllowedAdminEmails();
-  if (!allowedEmails.includes(email)) return json(403, { error: 'Forbidden' });
+  if (!allowedEmails.includes(email)) return { response: json(403, { error: 'Forbidden' }) };
 
-  return null;
+  return { user: data.user, email };
 }
 
 
@@ -78,6 +79,67 @@ async function downloadArchivedAppointment(fileName) {
   return data;
 }
 
+function csvCell(value) {
+  return `"${String(value ?? '').replace(/"/g, '""')}"`;
+}
+
+function dollarsFromCents(cents) {
+  return (Number(cents || 0) / 100).toFixed(2);
+}
+
+function formatPaymentMethod(method) {
+  return String(method || '').replace(/_/g, ' ');
+}
+
+async function exportPaymentsCsv() {
+  const { data, error } = await supabaseAdmin
+    .from('appointment_payment_records')
+    .select('*, appointments(booking_request_number, appointment_services(service_name_snapshot)), customers(first_name,last_name)')
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+
+  const header = [
+    'payment_date',
+    'customer',
+    'booking_number',
+    'services_summary',
+    'payment_method',
+    'payment_direction',
+    'service_amount',
+    'tip_amount',
+    'total_collected',
+    'external_reference',
+    'note',
+  ];
+
+  const rows = (data || []).map((record) => {
+    const sign = record.payment_direction === 'refund' ? -1 : 1;
+    const services = (record.appointments?.appointment_services || [])
+      .map((service) => service.service_name_snapshot)
+      .filter(Boolean)
+      .join('; ');
+    const customer = `${record.customers?.first_name || ''} ${record.customers?.last_name || ''}`.trim();
+    const bookingNumber = String(Number(record.appointments?.booking_request_number || 0)).padStart(3, '0').slice(-3);
+    return [
+      new Date(record.created_at).toLocaleString('en-US', { timeZone: 'America/New_York' }),
+      customer,
+      bookingNumber || '---',
+      services,
+      formatPaymentMethod(record.payment_method),
+      record.payment_direction,
+      dollarsFromCents(sign * Number(record.amount_cents || 0)),
+      dollarsFromCents(sign * Number(record.tip_amount_cents || 0)),
+      dollarsFromCents(sign * (Number(record.amount_cents || 0) + Number(record.tip_amount_cents || 0))),
+      record.external_reference || '',
+      record.note || '',
+    ];
+  });
+
+  const csv = [header, ...rows].map((row) => row.map(csvCell).join(',')).join('\n');
+  const today = new Date().toISOString().slice(0, 10);
+  return { fileName: `payments_${today}.csv`, csvContent: `${csv}\n` };
+}
+
 
 async function loadMessageTarget(payload) {
   if (payload.appointmentId) {
@@ -105,7 +167,7 @@ async function loadMessageTarget(payload) {
   throw new Error('Customer or appointment is required.');
 }
 
-async function handleAppointmentAction(payload) {
+async function handleAppointmentAction(payload, context = {}) {
   const initiatedBy = 'dashboard';
 
 
@@ -164,6 +226,20 @@ async function handleAppointmentAction(payload) {
     return { ok: true, event };
   }
 
+  if (payload.action === 'apply_payment') {
+    const record = await applyManualAppointmentPayment({
+      appointmentId: payload.appointmentId,
+      amountDollars: payload.amountDollars ?? payload.amount,
+      tipDollars: payload.tipDollars ?? payload.tip,
+      paymentMethod: payload.paymentMethod,
+      paymentDirection: payload.paymentDirection || 'payment',
+      externalReference: payload.externalReference,
+      note: payload.note,
+      createdBy: context.email || initiatedBy,
+    });
+    return { ok: true, record };
+  }
+
   if (payload.action === 'status_summary') {
     const summary = await getAppointmentStatusSummaryByRequestNumber(payload.requestNumber);
     return { ok: true, summary };
@@ -205,8 +281,8 @@ async function handleAppointmentAction(payload) {
 
 export const handler = async (event) => {
   try {
-    const authResponse = await authorizeAdminRequest(event);
-    if (authResponse) return authResponse;
+    const authContext = await authorizeAdminRequest(event);
+    if (authContext?.response) return authContext.response;
 
     ensureServerConfig();
 
@@ -223,9 +299,14 @@ export const handler = async (event) => {
         return csvResponse(archive.file_name, archive.csv_content);
       }
 
+      if (q.payments === '1') {
+        const exportFile = await exportPaymentsCsv();
+        return csvResponse(exportFile.fileName, exportFile.csvContent);
+      }
+
       const { data: appointments, error: appointmentsError } = await supabaseAdmin
         .from('appointments')
-        .select('*, customers(*), appointment_services(*), appointment_financial_events(*), client_messages(*)')
+        .select('*, customers(*), appointment_services(*), appointment_financial_events(*), appointment_payment_records(*), client_messages(*)')
         .is('archived_at', null)
         .order('start_at', { ascending: true });
       if (appointmentsError) throw appointmentsError;
@@ -258,7 +339,7 @@ export const handler = async (event) => {
 
     if (event.httpMethod === 'POST') {
       const payload = JSON.parse(event.body || '{}');
-      const result = await handleAppointmentAction(payload);
+      const result = await handleAppointmentAction(payload, authContext);
       return json(200, result);
     }
 
