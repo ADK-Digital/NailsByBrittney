@@ -414,7 +414,83 @@ function statusClassName(status) {
   return `pill status-pill status-${String(status || 'unknown').replace(/_/g, '-')}`;
 }
 
+const SERVICE_PAYMENT_PILL_STATUSES = new Set(['pending_confirmation', 'pending', 'confirmed', 'completed']);
 
+function normalizeAppointmentStatus(status) {
+  return String(status || '').toLowerCase();
+}
+
+function normalizePaymentStatus(status) {
+  return String(status || 'unpaid').toLowerCase();
+}
+
+function shouldShowServicePaymentPill(appointmentStatus, servicePaymentStatus) {
+  const normalizedStatus = normalizeAppointmentStatus(appointmentStatus);
+  if (!SERVICE_PAYMENT_PILL_STATUSES.has(normalizedStatus)) return false;
+  return normalizePaymentStatus(servicePaymentStatus) !== 'paid';
+}
+
+function isLateFeeRelevantAppointment(appointment) {
+  const normalizedStatus = normalizeAppointmentStatus(appointment?.status);
+  if (!['cancelled', 'declined'].includes(normalizedStatus)) return false;
+  if (!appointment?.cancelled_at || !appointment?.start_at) return false;
+
+  const startMs = new Date(appointment.start_at).getTime();
+  const cancelledMs = new Date(appointment.cancelled_at).getTime();
+  const hoursBeforeStart = (startMs - cancelledMs) / (60 * 60 * 1000);
+
+  return Number.isFinite(hoursBeforeStart) && hoursBeforeStart > 0 && hoursBeforeStart <= 24;
+}
+
+function shouldShowLateFeePill(appointment, lateFeeStatus) {
+  if (!isLateFeeRelevantAppointment(appointment)) return false;
+  return normalizePaymentStatus(lateFeeStatus) !== 'paid';
+}
+
+function isUnappliedNoShowFee(appointment) {
+  return normalizeAppointmentStatus(appointment?.status) === 'no_show'
+    && normalizePaymentStatus(appointment?.no_show_fee_status) === 'unpaid';
+}
+
+function shouldShowNoShowFeePill(appointmentStatus, noShowFeeStatus) {
+  const normalizedStatus = normalizeAppointmentStatus(appointmentStatus);
+  if (normalizedStatus !== 'no_show') return false;
+  return normalizePaymentStatus(noShowFeeStatus) !== 'paid';
+}
+
+function getAppointmentPaymentPills(appointment, servicePaymentStatus) {
+  const appointmentStatus = appointment?.status;
+  const pills = [];
+
+  if (shouldShowServicePaymentPill(appointmentStatus, servicePaymentStatus)) {
+    pills.push({
+      key: 'service-payment',
+      label: 'Service payment',
+      value: servicePaymentStatus,
+      className: 'pill meta-pill',
+    });
+  }
+
+  if (shouldShowLateFeePill(appointment, appointment?.late_fee_status)) {
+    pills.push({
+      key: 'late-fee',
+      label: 'Late fee',
+      value: appointment?.late_fee_status || 'unpaid',
+      className: 'pill meta-pill appointment-pill-late-fee',
+    });
+  }
+
+  if (shouldShowNoShowFeePill(appointmentStatus, appointment?.no_show_fee_status)) {
+    pills.push({
+      key: 'no-show-fee',
+      label: 'No-show fee',
+      value: appointment?.no_show_fee_status || 'unpaid',
+      className: 'pill meta-pill appointment-pill-no-show-fee',
+    });
+  }
+
+  return pills;
+}
 
 function formatInventoryQuantity(value) {
   const numeric = Number(value || 0);
@@ -553,7 +629,9 @@ function sortAppointmentsForAdmin(items) {
 
 function shouldShowAppointment(appointment, visibleOptionalStatuses) {
   const normalizedStatus = String(appointment.status || '').toLowerCase();
-  return DEFAULT_APPOINTMENT_STATUSES.has(normalizedStatus) || visibleOptionalStatuses.has(normalizedStatus);
+  return DEFAULT_APPOINTMENT_STATUSES.has(normalizedStatus)
+    || visibleOptionalStatuses.has(normalizedStatus)
+    || isUnappliedNoShowFee(appointment);
 }
 
 function sortCustomersAlphabetically(items) {
@@ -737,6 +815,7 @@ function AppointmentCard({ appointment, customer, onRefresh }) {
   const defaultRefundAmount = formatDollarAmount(Math.max(0, paymentTotals.serviceCents) / 100);
   const defaultOperationalAmount = paymentDirection === 'refund' ? defaultRefundAmount : defaultPaymentAmount;
   const operationalPaymentStatus = deriveOperationalPaymentStatus(estimatedCents, paymentTotals.serviceCents);
+  const appointmentPaymentPills = getAppointmentPaymentPills(appointment, operationalPaymentStatus);
   const sortedEvents = [...events].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   const serviceChargedCents = getSucceededEventTotal(events, 'service_charge');
   const serviceRefundedCents = getSucceededEventTotal(events, 'refund_service');
@@ -880,9 +959,7 @@ function AppointmentCard({ appointment, customer, onRefresh }) {
         </div>
         <div className="appointment-meta" aria-label="Booking status details">
           <span className={statusClassName(appointment.status)}><span>Status</span>{formatAdminStatus(appointment.status)}</span>
-          <span className="pill meta-pill"><span>Service payment</span>{appointment.service_payment_status || 'unpaid'}</span>
-          <span className="pill meta-pill"><span>Late fee</span>{appointment.late_fee_status || 'unpaid'}</span>
-          <span className="pill meta-pill"><span>No-show fee</span>{appointment.no_show_fee_status || 'unpaid'}</span>
+          {appointmentPaymentPills.map((pill) => <span key={pill.key} className={pill.className}><span>{pill.label}</span>{formatPaymentStatus(pill.value)}</span>)}
           <button type="button" className="appointment-arrow appointment-collapse-button" onClick={() => setExpanded(false)} aria-label="Collapse appointment" aria-expanded={expanded}>⌃</button>
         </div>
       </div>
