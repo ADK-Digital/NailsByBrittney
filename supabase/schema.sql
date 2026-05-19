@@ -1288,7 +1288,6 @@ declare
   v_matched_count int;
 begin
   perform expire_stale_pending_appointments();
-  if not is_service_admin() then raise exception 'Admin access required'; end if;
   if p_service_ids is null or cardinality(p_service_ids) = 0 then raise exception 'At least one service is required'; end if;
   if exists (
     with selected as (
