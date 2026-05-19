@@ -797,7 +797,7 @@ export const handler = async (event) => {
 
     if (!isBrittney && isOptOutKeyword(body)) {
       await setCustomerCommunicationPreferenceByPhone(from, 'email');
-      return xmlMessage('You are opted out of appointment-related SMS messages from Nails by Brittney. Reply START to resume SMS notifications.');
+      return xmlMessage('You have successfully unsubscribed. You will not receive any more messages from this number.');
     }
 
     if (!isBrittney && isHelpKeyword(body)) {
