@@ -531,6 +531,7 @@ declare
   v_window_end timestamp;
   v_selected_count int;
   v_matched_count int;
+  v_idempotency_key text;
 begin
   -- Synchronize stale pending rows so overlap checks and exclusion constraint agree.
   perform expire_stale_pending_appointments();
@@ -1098,6 +1099,7 @@ declare
   v_window_end timestamp;
   v_selected_count int;
   v_matched_count int;
+  v_idempotency_key text;
 begin
   perform expire_stale_pending_appointments();
 
@@ -1286,6 +1288,7 @@ declare
   v_window_end timestamp;
   v_selected_count int;
   v_matched_count int;
+  v_idempotency_key text;
 begin
   perform expire_stale_pending_appointments();
   if p_service_ids is null or cardinality(p_service_ids) = 0 then raise exception 'At least one service is required'; end if;
@@ -1331,8 +1334,9 @@ begin
   v_customer_id := match_or_create_customer(p_first_name, p_last_name, p_email, p_phone, p_note, p_communication_preference, null, null, null, null);
   v_req := next_request_number();
   v_est_text := case when v_variable then 'Estimated total starts at $' || to_char(v_total_min, 'FM9999990.00') else 'Estimated total is $' || to_char(v_total_min, 'FM9999990.00') end;
-  insert into appointments(customer_id, booking_request_number, start_at, end_at, timezone, status, estimated_total_min, estimated_total_text, total_duration_minutes, confirmation_deadline_at, policy_acknowledged, sms_consent_given)
-  values (v_customer_id, v_req, p_start_at, v_end_at, 'America/New_York', 'confirmed', v_total_min, v_est_text, v_total_minutes, null, true, false)
+  v_idempotency_key := 'admin-' || to_char(now() at time zone 'utc', 'YYYYMMDD"T"HH24MISSMS"Z"') || '-' || gen_random_uuid()::text;
+  insert into appointments(customer_id, booking_request_number, start_at, end_at, timezone, status, estimated_total_min, estimated_total_text, total_duration_minutes, confirmation_deadline_at, policy_acknowledged, sms_consent_given, idempotency_key)
+  values (v_customer_id, v_req, p_start_at, v_end_at, 'America/New_York', 'confirmed', v_total_min, v_est_text, v_total_minutes, null, true, false, v_idempotency_key)
   returning id into v_apt_id;
 
   insert into appointment_services(appointment_id, service_id, service_name_snapshot, price_text_snapshot, price_min_snapshot, duration_minutes_snapshot, is_variable_price_snapshot)
