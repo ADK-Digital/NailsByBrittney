@@ -881,6 +881,9 @@ alter table appointments add column if not exists service_payment_status payment
 alter table appointments add column if not exists late_fee_status payment_status not null default 'unpaid';
 alter table appointments add column if not exists no_show_fee_status payment_status not null default 'unpaid';
 alter table appointments add column if not exists policy_acknowledged boolean not null default false;
+alter table appointments add column if not exists sms_consent_given boolean not null default false;
+alter table appointments add column if not exists sms_consented_at timestamptz;
+alter table appointments add column if not exists sms_consent_text_version text;
 alter table appointments add column if not exists archived_at timestamptz;
 
 
@@ -1063,7 +1066,10 @@ create or replace function create_booking_request(
   p_square_card_id text default null,
   p_card_brand text default null,
   p_card_last4 text default null,
-  p_policy_acknowledged boolean default false
+  p_policy_acknowledged boolean default false,
+  p_sms_consent_given boolean default false,
+  p_sms_consented_at timestamptz default null,
+  p_sms_consent_text_version text default null
 )
 returns jsonb
 language plpgsql
@@ -1097,6 +1103,9 @@ begin
 
   if not p_policy_acknowledged then
     raise exception 'Policy acknowledgement is required';
+  end if;
+  if p_communication_preference in ('sms', 'both') and not p_sms_consent_given then
+    raise exception 'SMS consent acknowledgement is required when SMS notifications are selected';
   end if;
 
   if p_square_card_id is null or btrim(p_square_card_id) = '' then
@@ -1146,8 +1155,8 @@ begin
 
   v_est_text := case when v_variable then 'Estimated total starts at $' || to_char(v_total_min, 'FM9999990.00') else 'Estimated total is $' || to_char(v_total_min, 'FM9999990.00') end;
 
-  insert into appointments(customer_id, booking_request_number, start_at, end_at, timezone, status, estimated_total_min, estimated_total_text, total_duration_minutes, confirmation_deadline_at, idempotency_key, policy_acknowledged)
-  values (v_customer_id, v_req, p_start_at, v_end_at, 'America/New_York', v_status, v_total_min, v_est_text, v_total_minutes, v_deadline, p_idempotency_key, p_policy_acknowledged)
+  insert into appointments(customer_id, booking_request_number, start_at, end_at, timezone, status, estimated_total_min, estimated_total_text, total_duration_minutes, confirmation_deadline_at, idempotency_key, policy_acknowledged, sms_consent_given, sms_consented_at, sms_consent_text_version)
+  values (v_customer_id, v_req, p_start_at, v_end_at, 'America/New_York', v_status, v_total_min, v_est_text, v_total_minutes, v_deadline, p_idempotency_key, p_policy_acknowledged, p_sms_consent_given, case when p_sms_consent_given then coalesce(p_sms_consented_at, now()) else null end, p_sms_consent_text_version)
   returning id into v_apt_id;
 
   insert into appointment_services(appointment_id, service_id, service_name_snapshot, price_text_snapshot, price_min_snapshot, duration_minutes_snapshot, is_variable_price_snapshot)

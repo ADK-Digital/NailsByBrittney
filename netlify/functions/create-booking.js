@@ -245,6 +245,9 @@ export const handler = async (event) => {
       p_card_brand: card.cardBrand,
       p_card_last4: card.cardLast4,
       p_policy_acknowledged: Boolean(payload.policyAcknowledged),
+      p_sms_consent_given: Boolean(payload.smsConsentAcknowledged),
+      p_sms_consented_at: payload.smsConsentAcknowledged ? new Date().toISOString() : null,
+      p_sms_consent_text_version: 'booking_step4_sms_consent_v1',
     });
 
     if (error) {

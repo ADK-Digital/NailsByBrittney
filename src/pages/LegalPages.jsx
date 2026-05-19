@@ -91,6 +91,17 @@ export function PrivacyPolicyPage() {
         Nails by Brittney may use Twilio to send transactional SMS messages related to appointments. Resend and other email providers may be used for transactional email communications. These communications are strictly appointment-related and are not used for promotional or marketing SMS campaigns.
       </p>
 
+      <h2>SMS Privacy &amp; Mobile Data Use</h2>
+      <p>
+        Nails by Brittney sends only appointment-related transactional SMS messages, such as booking confirmations, reminders, schedule changes, and support updates. Nails by Brittney does not send promotional or marketing SMS campaigns.
+      </p>
+      <p>
+        No mobile information will be shared with third parties or affiliates for marketing/promotional purposes. Mobile data is only used with service providers that support booking operations, such as transactional messaging delivery and customer support.
+      </p>
+      <p>
+        Message frequency varies by your appointment activity. Message and data rates may apply. Reply STOP at any time to opt out of SMS messages. Reply HELP for help. For support, contact <a href={`tel:${PHONE_LINK}`}>{PHONE_DISPLAY}</a> or <a href={`mailto:${LEGAL_EMAIL}`}>{LEGAL_EMAIL}</a>.
+      </p>
+
       <h2>Sharing of information</h2>
       <p>
         Customer information is not sold to third parties. Information may be shared with trusted service providers only as needed to operate booking, payment processing, SMS, email, hosting, security, or customer support services.
@@ -137,9 +148,15 @@ export function TermsPage() {
         By submitting an appointment request with card information, you authorize Nails by Brittney to securely keep a card on file through Square. Your card will not be charged at the time of booking unless a charge is otherwise disclosed. You authorize Nails by Brittney to manually charge the card on file for approved service charges, late cancellation fees, or no-show fees under these Terms.
       </p>
 
-      <h2>SMS consent</h2>
+      <h2>SMS Program Terms</h2>
       <p>
-        By submitting the booking form and selecting SMS communications, you agree to receive transactional text messages from Nails by Brittney related to your appointments, including confirmations, reminders, cancellations, updates, and customer support. Message and data rates may apply. Message frequency varies. Reply STOP to opt out of SMS messages. Reply HELP for assistance.
+        Nails by Brittney sends only appointment-related transactional SMS messages. Users opt in by checking the SMS consent checkbox during appointment booking when choosing SMS only or SMS + Email communication preferences.
+      </p>
+      <p>
+        SMS communications include confirmations, reminders, appointment updates, and support messages. Message frequency varies. Message and data rates may apply. Reply STOP to opt out. Reply HELP for help.
+      </p>
+      <p>
+        Consent to receive SMS messages is not a condition of purchase or booking. Carriers are not liable for delayed or undelivered messages.
       </p>
 
       <h2>Service disclaimer and limitation of liability</h2>
