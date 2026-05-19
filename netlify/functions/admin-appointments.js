@@ -291,6 +291,21 @@ async function handleAppointmentAction(payload, context = {}) {
     return { ok: true };
   }
 
+  if (payload.action === 'create_admin_appointment') {
+    const { data, error } = await supabaseAdmin.rpc('create_admin_appointment', {
+      p_first_name: payload.firstName?.trim(),
+      p_last_name: payload.lastName?.trim(),
+      p_email: payload.email?.trim() || null,
+      p_phone: payload.phone?.trim(),
+      p_note: payload.note?.trim() || null,
+      p_service_ids: payload.serviceIds || [],
+      p_start_at: payload.startAt,
+      p_communication_preference: payload.communicationPreference || 'both',
+    });
+    if (error) throw error;
+    return { ok: true, appointment: data };
+  }
+
   if (payload.action === 'delete_additional_availability') {
     await supabaseAdmin.from('additional_availability').delete().eq('id', payload.availabilityId);
     return { ok: true };

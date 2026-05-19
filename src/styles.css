@@ -2441,3 +2441,12 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
     background:transparent;
   }
 }
+
+.admin-appointments-calendar-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:.4rem;margin:.75rem 0 1rem}
+.admin-appointments-weekday{font-size:.8rem;color:var(--muted,#666);text-align:center}
+.admin-appointments-day{border:1px solid #ddd;border-radius:10px;background:#fff;padding:.45rem;min-height:44px;display:flex;justify-content:space-between;align-items:flex-start}
+.admin-appointments-day.has-appointments{border-color:#111;background:#f6f6ff}
+.admin-appointments-day.has-availability:not(.has-appointments){border-color:#b6d9b9}
+.admin-appointments-day.selected{outline:2px solid #111}
+.admin-appointments-day em{font-style:normal;font-size:.75rem;background:#111;color:#fff;border-radius:999px;padding:0 .35rem}
+.admin-appointments-day.is-unavailable,.admin-appointments-day:disabled{background:#f3f3f3;border-color:#ddd;color:#9a9a9a;cursor:not-allowed}
