@@ -214,6 +214,10 @@ alter table appointments
   )
   where (archived_at is null and status in ('pending_confirmation', 'confirmed', 'completed', 'no_show'));
 
+create unique index if not exists idx_appointments_active_booking_request_number_unique
+on appointments (booking_request_number)
+where archived_at is null;
+
 create or replace function normalize_email(p_email text)
 returns text
 language sql
