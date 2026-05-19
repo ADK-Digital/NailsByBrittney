@@ -888,6 +888,10 @@ function AdminManualAppointmentPanel({ services, selectedDate, onSelectDate, onC
       setError('Please select a communication preference.');
       return;
     }
+    if (!selectedDate || !selectedTime) {
+      setError('Please select an available date and time.');
+      return;
+    }
     setBusy(true); setError(''); setSuccess('');
     try {
       await createAdminAppointment({ ...form, serviceIds: selectedServices, startAt: new Date(`${selectedDate}T${selectedTime}:00`).toISOString() });
