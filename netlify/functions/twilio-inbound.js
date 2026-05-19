@@ -183,6 +183,39 @@ function parseTimeToken(token) {
   return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
 }
 
+
+const OPT_OUT_KEYWORDS = new Set(['stop', 'stopall', 'unsubscribe', 'cancel', 'end', 'quit']);
+const HELP_KEYWORDS = new Set(['help']);
+
+function normalizeInboundKeyword(body = '') {
+  return String(body || '').trim().toLowerCase();
+}
+
+function isOptOutKeyword(body = '') {
+  return OPT_OUT_KEYWORDS.has(normalizeInboundKeyword(body));
+}
+
+function isHelpKeyword(body = '') {
+  return HELP_KEYWORDS.has(normalizeInboundKeyword(body));
+}
+
+async function setCustomerCommunicationPreferenceByPhone(phone, preference) {
+  const customer = await findCustomerByPhone(phone);
+  if (!customer?.id) return { customer: null, updated: false };
+
+  const normalizedCurrent = normalizeCommunicationPreference(customer.communication_preference);
+  const normalizedNext = normalizeCommunicationPreference(preference);
+  if (normalizedCurrent === normalizedNext) return { customer, updated: false };
+
+  const { error } = await supabaseAdmin
+    .from('customers')
+    .update({ communication_preference: normalizedNext })
+    .eq('id', customer.id);
+
+  if (error) throw error;
+  return { customer: { ...customer, communication_preference: normalizedNext }, updated: true };
+}
+
 function parseLeadCommand(text = '') {
   const parts = String(text).trim().split(/\s+/).filter(Boolean);
   return (parts[0] || '').toLowerCase();
@@ -284,12 +317,9 @@ async function upgradeEmailOnlyCustomerForInboundSms(customer) {
   return { ...customer, communication_preference: 'both' };
 }
 
-function isStopOptOutMessage(body = '') {
-  return ['stop', 'stopall', 'unsubscribe', 'cancel', 'end', 'quit'].includes(String(body || '').trim().toLowerCase());
-}
 
 async function maybeUpgradeInboundSmsPreference(from, body) {
-  if (isStopOptOutMessage(body)) return null;
+  if (isOptOutKeyword(body)) return null;
   const customer = await findCustomerByPhone(from);
   await upgradeEmailOnlyCustomerForInboundSms(customer);
   return customer;
@@ -764,6 +794,15 @@ export const handler = async (event) => {
     console.log('[twilio-inbound] incoming', { from, body });
 
     const parsed = parseCommand(body);
+
+    if (!isBrittney && isOptOutKeyword(body)) {
+      await setCustomerCommunicationPreferenceByPhone(from, 'email');
+      return xmlMessage('You are opted out of appointment-related SMS messages from Nails by Brittney. Reply START to resume SMS notifications.');
+    }
+
+    if (!isBrittney && isHelpKeyword(body)) {
+      return xmlMessage('Nails by Brittney appointment alerts only. Reply STOP to opt out of SMS. Reply to this message with your question for support.');
+    }
 
     if (!isBrittney) {
       await maybeUpgradeInboundSmsPreference(from, body);
