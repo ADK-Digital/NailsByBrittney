@@ -32,10 +32,11 @@ import {
   setAppointmentStatus,
   fetchClientMessages,
   sendClientMessage,
+  createAdminAppointment,
+  fetchAvailability,
 } from '../lib/bookingApi';
 import { hasSupabaseConfig, supabase } from '../lib/supabase';
 
-const APPOINTMENTS_PER_PAGE = 10;
 const CUSTOMERS_PER_PAGE = 10;
 const DEFAULT_APPOINTMENT_STATUSES = new Set(['pending_confirmation', 'pending', 'confirmed']);
 const OPTIONAL_APPOINTMENT_STATUSES = ['completed', 'cancelled', 'declined', 'no_show', 'expired'];
@@ -691,14 +692,10 @@ function isFutureWindow(row) {
   return Number.isFinite(end) && end >= Date.now();
 }
 
-function getDefaultAppointmentDay(appointmentsForDisplay) {
-  const todayKey = toLocalIsoDate(new Date());
-  if (appointmentsForDisplay.some((appointment) => getLocalDateKey(appointment.start_at) === todayKey)) return todayKey;
-
-  return appointmentsForDisplay
-    .map((appointment) => getLocalDateKey(appointment.start_at))
-    .filter((dateKey) => dateKey && dateKey >= todayKey)
-    .sort()[0] || todayKey;
+function monthBounds(date) {
+  const start = new Date(date.getFullYear(), date.getMonth(), 1);
+  const end = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+  return { start, end };
 }
 
 function filterCustomersBySearch(customers, query) {
@@ -847,6 +844,45 @@ function MessageThread({ customer, appointment = null }) {
     </form>
     {notice.text && <p className={`admin-message ${notice.type}`} role="status">{notice.text}</p>}
   </section>;
+}
+
+function AdminManualAppointmentPanel({ services, selectedDate, onCreated }) {
+  const [selectedServices, setSelectedServices] = useState([]);
+  const [availability, setAvailability] = useState([]);
+  const [selectedTime, setSelectedTime] = useState('');
+  const [form, setForm] = useState({ firstName: '', lastName: '', phone: '', email: '', note: '', communicationPreference: 'both' });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const selected = services.filter((item) => selectedServices.includes(item.id));
+  const totalMin = selected.reduce((sum, item) => sum + Number(item.price_min_numeric || 0), 0);
+  const duration = selected.reduce((sum, item) => sum + Number(item.duration_minutes || 0), 0);
+  const times = availability.find((item) => item.date === selectedDate)?.times || [];
+  useEffect(() => { if (!selectedServices.length) return setAvailability([]); fetchAvailability(selectedServices).then((data) => setAvailability(data.dates || [])).catch(() => setAvailability([])); }, [selectedServices]);
+  const submit = async (event) => {
+    event.preventDefault();
+    setBusy(true); setError(''); setSuccess('');
+    try {
+      await createAdminAppointment({ ...form, serviceIds: selectedServices, startAt: new Date(`${selectedDate}T${selectedTime}:00`).toISOString() });
+      setSuccess('Appointment created and confirmed.');
+      onCreated();
+    } catch (e) { setError(e.message || 'Unable to create appointment.'); } finally { setBusy(false); }
+  };
+  return <form className="add-block-panel" onSubmit={submit}>
+    <h3>Manual appointment</h3>
+    <p className="muted">Select services, choose an available time, then add customer details.</p>
+    <div className="service-grid">{services.filter((service) => service.active !== false).map((service) => <label key={service.id} className="service-check"><input type="checkbox" checked={selectedServices.includes(service.id)} onChange={() => setSelectedServices((prev) => prev.includes(service.id) ? prev.filter((id) => id !== service.id) : [...prev, service.id])} />{service.name}</label>)}</div>
+    <p className="muted">Estimated total starts at ${totalMin.toFixed(2)} • {duration} min</p>
+    <label>Time<select required value={selectedTime} onChange={(e) => setSelectedTime(e.target.value)}><option value="">Select time</option>{times.map((time) => <option key={time} value={time}>{time}</option>)}</select></label>
+    <label>First name<input required value={form.firstName} onChange={(e) => setForm((f) => ({ ...f, firstName: e.target.value }))} /></label>
+    <label>Last name<input required value={form.lastName} onChange={(e) => setForm((f) => ({ ...f, lastName: e.target.value }))} /></label>
+    <label>Phone<input required value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} /></label>
+    <label>Email<input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} /></label>
+    <label>Note<textarea value={form.note} onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))} /></label>
+    <button className="btn" disabled={busy}>{busy ? 'Creating...' : 'Create appointment'}</button>
+    {error && <p className="admin-message error">{error}</p>}
+    {success && <p className="admin-message success">{success}</p>}
+  </form>;
 }
 
 function AppointmentCard({ appointment, customer, onRefresh }) {
@@ -1545,9 +1581,11 @@ export default function AdminPage() {
   const testimonialOrderSaveToken = useRef(0);
   const galleryOrderSaveToken = useRef(0);
   const serviceOrderSaveToken = useRef(0);
-  const [appointmentPage, setAppointmentPage] = useState(0);
   const [customerPage, setCustomerPage] = useState(0);
-  const [appointmentListExpanded, setAppointmentListExpanded] = useState(false);
+  const [appointmentCalendarMonth, setAppointmentCalendarMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+  const [selectedAppointmentDate, setSelectedAppointmentDate] = useState(() => toLocalIsoDate(new Date()));
+  const [addAppointmentOpen, setAddAppointmentOpen] = useState(false);
+  const [calendarAvailabilityDays, setCalendarAvailabilityDays] = useState(new Set());
   const [customerSearch, setCustomerSearch] = useState('');
   const [dashboardSectionsOpen, setDashboardSectionsOpen] = useState({
     blocks: false,
@@ -1569,14 +1607,13 @@ export default function AdminPage() {
 
   const filteredAppointments = useMemo(() => appointments.filter((appointment) => shouldShowAppointment(appointment, visibleOptionalAppointmentStatuses)), [appointments, visibleOptionalAppointmentStatuses]);
   const sortedAppointments = useMemo(() => sortAppointmentsForAdmin(filteredAppointments), [filteredAppointments]);
-  const defaultAppointmentDay = useMemo(() => getDefaultAppointmentDay(sortedAppointments), [sortedAppointments]);
-  const defaultDayAppointments = useMemo(() => sortedAppointments.filter((appointment) => getLocalDateKey(appointment.start_at) === defaultAppointmentDay), [defaultAppointmentDay, sortedAppointments]);
-  const appointmentListItems = appointmentListExpanded ? sortedAppointments : defaultDayAppointments;
-  const appointmentPageCount = Math.max(1, Math.ceil(sortedAppointments.length / APPOINTMENTS_PER_PAGE));
-  const currentAppointmentPage = Math.min(appointmentPage, appointmentPageCount - 1);
-  const appointmentPageStart = currentAppointmentPage * APPOINTMENTS_PER_PAGE;
-  const appointmentPageEnd = Math.min(appointmentPageStart + APPOINTMENTS_PER_PAGE, sortedAppointments.length);
-  const pagedAppointments = appointmentListExpanded ? sortedAppointments.slice(appointmentPageStart, appointmentPageEnd) : appointmentListItems;
+  const appointmentsByDay = useMemo(() => sortedAppointments.reduce((map, appointment) => {
+    const day = getLocalDateKey(appointment.start_at);
+    if (!day) return map;
+    map.set(day, [...(map.get(day) || []), appointment]);
+    return map;
+  }, new Map()), [sortedAppointments]);
+  const dayAppointments = appointmentsByDay.get(selectedAppointmentDate) || [];
   const sortedCustomers = useMemo(() => sortCustomersAlphabetically(customers), [customers]);
   const searchedCustomers = useMemo(() => filterCustomersBySearch(sortedCustomers, customerSearch), [customerSearch, sortedCustomers]);
   const customerPageCount = Math.max(1, Math.ceil(searchedCustomers.length / CUSTOMERS_PER_PAGE));
@@ -1595,10 +1632,17 @@ export default function AdminPage() {
     return grouped;
   }, [appointments]);
   const customersById = useMemo(() => new Map(customers.map((customer) => [customer.id, customer])), [customers]);
-
-  useEffect(() => {
-    if (appointmentPage > appointmentPageCount - 1) setAppointmentPage(Math.max(0, appointmentPageCount - 1));
-  }, [appointmentPage, appointmentPageCount]);
+  const calendarMeta = useMemo(() => {
+    const { start, end } = monthBounds(appointmentCalendarMonth);
+    const daysInMonth = end.getDate();
+    const firstWeekday = start.getDay();
+    return { daysInMonth, firstWeekday, label: appointmentCalendarMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) };
+  }, [appointmentCalendarMonth]);
+  const shortestActiveServiceId = useMemo(() => {
+    const activeServices = services.filter((service) => service.active !== false && Number(service.duration_minutes) > 0);
+    if (!activeServices.length) return null;
+    return [...activeServices].sort((a, b) => Number(a.duration_minutes || 0) - Number(b.duration_minutes || 0))[0].id;
+  }, [services]);
 
   const toggleOptionalAppointmentStatus = (status) => {
     setVisibleOptionalAppointmentStatuses((previous) => {
@@ -1607,7 +1651,6 @@ export default function AdminPage() {
       else next.add(status);
       return next;
     });
-    setAppointmentPage(0);
   };
 
   useEffect(() => {
@@ -1705,6 +1748,25 @@ export default function AdminPage() {
     if (hasSupabaseConfig && !session) return;
     refreshBookingAdmin().catch(() => {});
   }, [session]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!shortestActiveServiceId) {
+      setCalendarAvailabilityDays(new Set());
+      return;
+    }
+    fetchAvailability([shortestActiveServiceId]).then((data) => {
+      if (cancelled) return;
+      const availableDays = new Set((data?.dates || []).filter((row) => row.available).map((row) => row.date));
+      setCalendarAvailabilityDays(availableDays);
+    }).catch(() => {
+      if (cancelled) return;
+      setCalendarAvailabilityDays(new Set());
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [shortestActiveServiceId]);
 
   const signedIn = useMemo(() => (!hasSupabaseConfig ? true : Boolean(session)), [session]);
   const signIn = async (e) => {
@@ -1935,23 +1997,31 @@ export default function AdminPage() {
             </label>)}
           </div>
           <div className="appointment-list-toolbar">
-            <div>
-              <strong>{appointmentListExpanded ? 'All appointments' : `Showing ${defaultAppointmentDay === toLocalIsoDate(new Date()) ? 'today' : appointmentDateFormatter.format(parseLocalIsoDate(defaultAppointmentDay))}`}</strong>
-              <p className="muted">{appointmentListExpanded ? 'Browse the full appointment list with pagination.' : 'Expand to view appointment history and future appointments.'}</p>
+            <strong>{calendarMeta.label}</strong>
+            <div className="dashboard-section-header-actions">
+              <button type="button" className="admin-secondary-button" onClick={() => setAppointmentCalendarMonth((value) => new Date(value.getFullYear(), value.getMonth() - 1, 1))}>‹</button>
+              <button type="button" className="admin-secondary-button" onClick={() => setAppointmentCalendarMonth((value) => new Date(value.getFullYear(), value.getMonth() + 1, 1))}>›</button>
+              <button type="button" className="btn" onClick={() => setAddAppointmentOpen((v) => !v)}>Add Appointment</button>
             </div>
-            <button type="button" className="admin-secondary-button appointment-list-toggle" onClick={() => { setAppointmentListExpanded((expanded) => !expanded); setAppointmentPage(0); }} aria-expanded={appointmentListExpanded}>
-              {appointmentListExpanded ? 'Show today / next day' : 'Show all appointments'} <span className="appointment-arrow" aria-hidden="true">{appointmentListExpanded ? CHEVRON_UP : CHEVRON_DOWN}</span>
-            </button>
           </div>
-          {!bookingAdminError && <div className="admin-list">{pagedAppointments.map((appointment) => <AppointmentCard key={appointment.id} appointment={appointment} customer={customersById.get(appointment.customer_id)} onRefresh={refreshBookingAdmin} />)}</div>}
-          {!bookingAdminError && !appointmentListItems.length && <p className="muted">No appointments match the selected filters.</p>}
-          {appointmentListExpanded && <PaginationControls
-            label="Appointment pagination"
-            currentPage={currentAppointmentPage}
-            pageCount={appointmentPageCount}
-            onPrevious={() => setAppointmentPage((page) => Math.max(0, page - 1))}
-            onNext={() => setAppointmentPage((page) => Math.min(appointmentPageCount - 1, page + 1))}
-          />}
+          <div className="admin-appointments-calendar-grid">
+            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => <div key={d} className="admin-appointments-weekday">{d}</div>)}
+            {Array.from({ length: calendarMeta.firstWeekday }).map((_, idx) => <div key={`pad-${idx}`} />)}
+            {Array.from({ length: calendarMeta.daysInMonth }).map((_, idx) => {
+              const day = idx + 1;
+              const date = new Date(appointmentCalendarMonth.getFullYear(), appointmentCalendarMonth.getMonth(), day);
+              const dayKey = toLocalIsoDate(date);
+              const count = (appointmentsByDay.get(dayKey) || []).length;
+              const hasAvailability = calendarAvailabilityDays.has(dayKey);
+              const isDisabled = !hasAvailability && count === 0;
+              return <button key={dayKey} type="button" disabled={isDisabled} aria-disabled={isDisabled} className={`admin-appointments-day${selectedAppointmentDate === dayKey ? ' selected' : ''}${count ? ' has-appointments' : ''}${hasAvailability ? ' has-availability' : ''}${isDisabled ? ' is-unavailable' : ''}`} onClick={() => { if (!isDisabled) setSelectedAppointmentDate(dayKey); }}>
+                <span>{day}</span>{count > 0 && <em>{count}</em>}
+              </button>;
+            })}
+          </div>
+          {addAppointmentOpen && <AdminManualAppointmentPanel services={services} selectedDate={selectedAppointmentDate} onCreated={async () => { setAddAppointmentOpen(false); await refreshBookingAdmin(); }} />}
+          {!bookingAdminError && <div className="admin-list">{dayAppointments.map((appointment) => <AppointmentCard key={appointment.id} appointment={appointment} customer={customersById.get(appointment.customer_id)} onRefresh={refreshBookingAdmin} />)}</div>}
+          {!bookingAdminError && !dayAppointments.length && <p className="muted">No appointments on {selectedAppointmentDate}.</p>}
           <AppointmentArchivePanel open={archivesOpen} archives={appointmentArchives} onToggle={() => setArchivesOpen((value) => !value)} onLoad={refreshAppointmentArchives} onDownload={downloadArchivedAppointment} />
         </div>
       </div>

@@ -1119,6 +1119,22 @@ begin
   if existing is not null then return existing; end if;
 
   if p_service_ids is null or cardinality(p_service_ids) = 0 then raise exception 'At least one service is required'; end if;
+  if exists (
+    with selected as (
+      select s.id, s.type, coalesce(s.requires_service_ids, '{}'::uuid[]) as requires_service_ids
+      from services s
+      where s.id = any(p_service_ids) and s.active = true
+    )
+    select 1
+    from selected addon
+    where addon.type = 'addon'
+      and cardinality(addon.requires_service_ids) > 0
+      and not exists (
+        select 1
+        from unnest(addon.requires_service_ids) as required_id
+        where required_id = any(p_service_ids)
+      )
+  ) then raise exception 'Design and removal services must be booked with a manicure or pedicure service.'; end if;
 
   with selected as (select unnest(p_service_ids) as service_id)
   select count(*), count(s.id), coalesce(sum(s.duration_minutes), 0), coalesce(sum(s.price_min_numeric), 0), coalesce(bool_or(s.is_variable_price), false)
@@ -1234,6 +1250,99 @@ as $$
     )
   order by c.updated_at desc
   limit 1
+$$;
+
+create or replace function create_admin_appointment(
+  p_first_name text,
+  p_last_name text,
+  p_email text,
+  p_phone text,
+  p_note text,
+  p_service_ids uuid[],
+  p_start_at timestamptz,
+  p_communication_preference communication_preference default 'both'
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_customer_id uuid;
+  v_total_minutes int;
+  v_total_min numeric(10,2);
+  v_variable boolean;
+  v_end_at timestamptz;
+  v_req int;
+  v_apt_id uuid;
+  v_est_text text;
+  v_start_local timestamp;
+  v_end_local timestamp;
+  v_dow int;
+  v_open_time time;
+  v_close_time time;
+  v_is_active boolean;
+  v_window_start timestamp;
+  v_window_end timestamp;
+  v_selected_count int;
+  v_matched_count int;
+begin
+  perform expire_stale_pending_appointments();
+  if not is_service_admin() then raise exception 'Admin access required'; end if;
+  if p_service_ids is null or cardinality(p_service_ids) = 0 then raise exception 'At least one service is required'; end if;
+  if exists (
+    with selected as (
+      select s.id, s.type, coalesce(s.requires_service_ids, '{}'::uuid[]) as requires_service_ids
+      from services s
+      where s.id = any(p_service_ids) and s.active = true
+    )
+    select 1
+    from selected addon
+    where addon.type = 'addon'
+      and cardinality(addon.requires_service_ids) > 0
+      and not exists (
+        select 1
+        from unnest(addon.requires_service_ids) as required_id
+        where required_id = any(p_service_ids)
+      )
+  ) then raise exception 'Design and removal services must be booked with a manicure or pedicure service.'; end if;
+
+  with selected as (select unnest(p_service_ids) as service_id)
+  select count(*), count(s.id), coalesce(sum(s.duration_minutes), 0), coalesce(sum(s.price_min_numeric), 0), coalesce(bool_or(s.is_variable_price), false)
+  into v_selected_count, v_matched_count, v_total_minutes, v_total_min, v_variable
+  from selected x left join services s on s.id = x.service_id and s.active = true;
+  if v_selected_count <> v_matched_count then raise exception 'One or more selected services are invalid or inactive'; end if;
+  if v_total_minutes <= 0 then raise exception 'Total duration must be greater than 0'; end if;
+
+  v_start_local := p_start_at at time zone 'America/New_York';
+  if date_part('second', v_start_local) <> 0 or mod(extract(minute from v_start_local)::int, 15) <> 0 then raise exception 'Start time must be on a 15-minute increment'; end if;
+  if p_start_at <= now() then raise exception 'Start time must be in the future'; end if;
+  select window_start_local, window_end_local into v_window_start, v_window_end from booking_window_bounds_et();
+  if v_start_local < v_window_start or v_start_local >= v_window_end then raise exception 'Requested date is outside the booking window'; end if;
+
+  v_end_at := p_start_at + make_interval(mins => v_total_minutes);
+  v_end_local := v_end_at at time zone 'America/New_York';
+  v_dow := extract(dow from v_start_local)::int;
+  select bh.open_time, bh.close_time, bh.active into v_open_time, v_close_time, v_is_active from business_hours bh where bh.day_of_week = v_dow;
+  if (v_start_local)::date <> (v_end_local)::date then raise exception 'Appointment must start and end on the same local day'; end if;
+  if not ((coalesce(v_is_active, false) = true and (v_start_local)::time >= v_open_time and (v_end_local)::time <= v_close_time) or exists (select 1 from additional_availability aa where tstzrange(aa.start_at, aa.end_at, '[)') @> p_start_at and tstzrange(aa.start_at, aa.end_at, '[)') @> (v_end_at - interval '1 microsecond'))) then raise exception 'Requested time is outside available hours'; end if;
+  if exists (select 1 from blocked_times b where tstzrange(b.start_at, b.end_at, '[)') && tstzrange(p_start_at, v_end_at, '[)')) then raise exception 'Requested time is blocked'; end if;
+  if exists (select 1 from appointments a where a.archived_at is null and tstzrange(a.start_at, a.end_at, '[)') && tstzrange(p_start_at, v_end_at, '[)') and a.status in ('confirmed', 'completed', 'no_show', 'pending_confirmation')) then raise exception 'Requested time overlaps another appointment'; end if;
+
+  v_customer_id := match_or_create_customer(p_first_name, p_last_name, p_email, p_phone, p_note, p_communication_preference, null, null, null, null);
+  v_req := next_request_number();
+  v_est_text := case when v_variable then 'Estimated total starts at $' || to_char(v_total_min, 'FM9999990.00') else 'Estimated total is $' || to_char(v_total_min, 'FM9999990.00') end;
+  insert into appointments(customer_id, booking_request_number, start_at, end_at, timezone, status, estimated_total_min, estimated_total_text, total_duration_minutes, confirmation_deadline_at, policy_acknowledged, sms_consent_given)
+  values (v_customer_id, v_req, p_start_at, v_end_at, 'America/New_York', 'confirmed', v_total_min, v_est_text, v_total_minutes, null, true, false)
+  returning id into v_apt_id;
+
+  insert into appointment_services(appointment_id, service_id, service_name_snapshot, price_text_snapshot, price_min_snapshot, duration_minutes_snapshot, is_variable_price_snapshot)
+  select v_apt_id, s.id, s.name, s.price_text, s.price_min_numeric, s.duration_minutes, s.is_variable_price
+  from unnest(p_service_ids) as selected_id
+  join services s on s.id = selected_id;
+
+  return jsonb_build_object('appointment_id', v_apt_id, 'booking_request_number', v_req, 'estimated_total_text', v_est_text, 'estimated_total_min', v_total_min, 'total_duration_minutes', v_total_minutes);
+end;
 $$;
 
 alter table booking_intake_audit enable row level security;

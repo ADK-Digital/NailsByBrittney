@@ -171,3 +171,7 @@ export async function sendClientMessage(payload) {
   if (!res.ok || body.error) throw new Error(body.error || 'Failed to send message');
   return body;
 }
+
+export async function createAdminAppointment(payload) {
+  return postAdminAppointmentAction({ action: 'create_admin_appointment', ...payload });
+}
