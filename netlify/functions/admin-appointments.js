@@ -292,6 +292,9 @@ async function handleAppointmentAction(payload, context = {}) {
   }
 
   if (payload.action === 'create_admin_appointment') {
+    if (!['sms', 'email', 'both'].includes(payload.communicationPreference)) {
+      throw new Error('Please select a communication preference.');
+    }
     const { data, error } = await supabaseAdmin.rpc('create_admin_appointment', {
       p_first_name: payload.firstName?.trim(),
       p_last_name: payload.lastName?.trim(),
@@ -300,7 +303,7 @@ async function handleAppointmentAction(payload, context = {}) {
       p_note: payload.note?.trim() || null,
       p_service_ids: payload.serviceIds || [],
       p_start_at: payload.startAt,
-      p_communication_preference: payload.communicationPreference || 'both',
+      p_communication_preference: payload.communicationPreference,
     });
     if (error) throw error;
     return { ok: true, appointment: data };

@@ -846,21 +846,48 @@ function MessageThread({ customer, appointment = null }) {
   </section>;
 }
 
-function AdminManualAppointmentPanel({ services, selectedDate, onCreated }) {
+function AdminManualAppointmentPanel({ services, selectedDate, onSelectDate, onCreated }) {
   const [selectedServices, setSelectedServices] = useState([]);
   const [availability, setAvailability] = useState([]);
   const [selectedTime, setSelectedTime] = useState('');
-  const [form, setForm] = useState({ firstName: '', lastName: '', phone: '', email: '', note: '', communicationPreference: 'both' });
+  const [form, setForm] = useState({ firstName: '', lastName: '', phone: '', email: '', note: '', communicationPreference: '' });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const selected = services.filter((item) => selectedServices.includes(item.id));
   const totalMin = selected.reduce((sum, item) => sum + Number(item.price_min_numeric || 0), 0);
   const duration = selected.reduce((sum, item) => sum + Number(item.duration_minutes || 0), 0);
-  const times = availability.find((item) => item.date === selectedDate)?.times || [];
-  useEffect(() => { if (!selectedServices.length) return setAvailability([]); fetchAvailability(selectedServices).then((data) => setAvailability(data.dates || [])).catch(() => setAvailability([])); }, [selectedServices]);
+  const bookableDates = useMemo(() => availability.filter((item) => item.available && item.date && Array.isArray(item.times) && item.times.length > 0).map((item) => item.date), [availability]);
+  const hasSelectedDate = selectedDate && bookableDates.includes(selectedDate);
+  const times = useMemo(() => availability.find((item) => item.date === selectedDate)?.times || [], [availability, selectedDate]);
+  useEffect(() => {
+    if (!selectedServices.length) {
+      setAvailability([]);
+      setSelectedTime('');
+      return;
+    }
+    fetchAvailability(selectedServices).then((data) => setAvailability(data.dates || [])).catch(() => setAvailability([]));
+  }, [selectedServices]);
+  useEffect(() => {
+    if (!selectedServices.length && selectedDate) onSelectDate('');
+  }, [selectedDate, selectedServices.length, onSelectDate]);
+  useEffect(() => {
+    if (!selectedServices.length) return;
+    if (!bookableDates.length) {
+      if (selectedDate) onSelectDate('');
+      return;
+    }
+    if (!selectedDate || !bookableDates.includes(selectedDate)) onSelectDate(bookableDates[0]);
+  }, [bookableDates, onSelectDate, selectedDate, selectedServices.length]);
+  useEffect(() => {
+    if (selectedTime && !times.includes(selectedTime)) setSelectedTime('');
+  }, [selectedTime, times]);
   const submit = async (event) => {
     event.preventDefault();
+    if (!form.communicationPreference) {
+      setError('Please select a communication preference.');
+      return;
+    }
     setBusy(true); setError(''); setSuccess('');
     try {
       await createAdminAppointment({ ...form, serviceIds: selectedServices, startAt: new Date(`${selectedDate}T${selectedTime}:00`).toISOString() });
@@ -873,11 +900,19 @@ function AdminManualAppointmentPanel({ services, selectedDate, onCreated }) {
     <p className="muted">Select services, choose an available time, then add customer details.</p>
     <div className="service-grid">{services.filter((service) => service.active !== false).map((service) => <label key={service.id} className="service-check"><input type="checkbox" checked={selectedServices.includes(service.id)} onChange={() => setSelectedServices((prev) => prev.includes(service.id) ? prev.filter((id) => id !== service.id) : [...prev, service.id])} />{service.name}</label>)}</div>
     <p className="muted">Estimated total starts at ${totalMin.toFixed(2)} • {duration} min</p>
-    <label>Time<select required value={selectedTime} onChange={(e) => setSelectedTime(e.target.value)}><option value="">Select time</option>{times.map((time) => <option key={time} value={time}>{time}</option>)}</select></label>
+    <label>Date<select required disabled={!selectedServices.length || !bookableDates.length} value={hasSelectedDate ? selectedDate : ''} onChange={(e) => { setSelectedTime(''); onSelectDate(e.target.value); }}><option value="">{selectedServices.length ? (bookableDates.length ? 'Select date' : 'No dates available') : 'Select services first'}</option>{bookableDates.map((date) => <option key={date} value={date}>{new Date(`${date}T00:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</option>)}</select></label>
+    <label>Time<select required disabled={!hasSelectedDate || !times.length} value={selectedTime} onChange={(e) => setSelectedTime(e.target.value)}><option value="">{hasSelectedDate ? 'Select time' : 'Select date first'}</option>{times.map((time) => <option key={time} value={time}>{time}</option>)}</select></label>
     <label>First name<input required value={form.firstName} onChange={(e) => setForm((f) => ({ ...f, firstName: e.target.value }))} /></label>
     <label>Last name<input required value={form.lastName} onChange={(e) => setForm((f) => ({ ...f, lastName: e.target.value }))} /></label>
     <label>Phone<input required value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} /></label>
     <label>Email<input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} /></label>
+    <fieldset className="communication-preference-group">
+      <legend>Communication preference</legend>
+      <label className="service-check"><input type="radio" name="admin-communication-preference" value="sms" checked={form.communicationPreference === 'sms'} onChange={(e) => setForm((f) => ({ ...f, communicationPreference: e.target.value }))} /> SMS</label>
+      <label className="service-check"><input type="radio" name="admin-communication-preference" value="email" checked={form.communicationPreference === 'email'} onChange={(e) => setForm((f) => ({ ...f, communicationPreference: e.target.value }))} /> Email</label>
+      <label className="service-check"><input type="radio" name="admin-communication-preference" value="both" checked={form.communicationPreference === 'both'} onChange={(e) => setForm((f) => ({ ...f, communicationPreference: e.target.value }))} /> Both</label>
+      <p className="muted"><a href="/privacy-policy" target="_blank" rel="noreferrer">View communication/privacy policies</a></p>
+    </fieldset>
     <label>Note<textarea value={form.note} onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))} /></label>
     <button className="btn" disabled={busy}>{busy ? 'Creating...' : 'Create appointment'}</button>
     {error && <p className="admin-message error">{error}</p>}
@@ -2019,7 +2054,7 @@ export default function AdminPage() {
               </button>;
             })}
           </div>
-          {addAppointmentOpen && <AdminManualAppointmentPanel services={services} selectedDate={selectedAppointmentDate} onCreated={async () => { setAddAppointmentOpen(false); await refreshBookingAdmin(); }} />}
+          {addAppointmentOpen && <AdminManualAppointmentPanel services={services} selectedDate={selectedAppointmentDate} onSelectDate={setSelectedAppointmentDate} onCreated={async () => { setAddAppointmentOpen(false); await refreshBookingAdmin(); }} />}
           {!bookingAdminError && <div className="admin-list">{dayAppointments.map((appointment) => <AppointmentCard key={appointment.id} appointment={appointment} customer={customersById.get(appointment.customer_id)} onRefresh={refreshBookingAdmin} />)}</div>}
           {!bookingAdminError && !dayAppointments.length && <p className="muted">No appointments on {selectedAppointmentDate}.</p>}
           <AppointmentArchivePanel open={archivesOpen} archives={appointmentArchives} onToggle={() => setArchivesOpen((value) => !value)} onLoad={refreshAppointmentArchives} onDownload={downloadArchivedAppointment} />
