@@ -27,6 +27,10 @@ export function validateBookingInput(input) {
   const rawCommunicationPreference = input.communicationPreference ?? 'both';
   const communicationPreference = normalizeCommunicationPreference(rawCommunicationPreference);
   if (!['sms', 'email', 'both'].includes(communicationPreference)) errors.communicationPreference = 'Communication preference must include sms, email, or both.';
+  const requiresSmsConsent = communicationPreference === 'sms' || communicationPreference === 'both';
+  if (requiresSmsConsent && !input.smsConsentAcknowledged) {
+    errors.smsConsentAcknowledged = 'You must consent to appointment-related SMS messages when SMS notifications are selected.';
+  }
   if (!input.policyAcknowledged) errors.policyAcknowledged = 'You must acknowledge the card-on-file and cancellation policy.';
   if (!input.squareCardToken?.trim()) errors.squareCardToken = 'Card on file is required before submitting.';
   return { errors, phone, email, communicationPreference };

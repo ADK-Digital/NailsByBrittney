@@ -1621,6 +1621,19 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
 
 .communication-disclaimer p + p{margin-top:.28rem}
 
+.sms-consent-check{
+  margin:.2rem 0 .35rem;
+  padding:.45rem .2rem;
+}
+
+.sms-consent-check input[type='checkbox']{
+  margin-top:.2rem;
+}
+
+.communication-disclaimer.visible{
+  margin-top:-.05rem;
+}
+
 
 .communication-email-warning{
   border:1px solid rgba(116,81,146,.16);

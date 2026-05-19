@@ -103,7 +103,7 @@ function BookingSection({ services }) {
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedTime, setSelectedTime] = useState('');
   const [form, setForm] = useState({
-    firstName: '', lastName: '', phone: '', email: '', notes: '', communicationPreference: 'both', policyAcknowledged: false,
+    firstName: '', lastName: '', phone: '', email: '', notes: '', communicationPreference: 'both', smsConsentAcknowledged: false, policyAcknowledged: false,
   });
   const [pendingMessage, setPendingMessage] = useState('');
   const [cardError, setCardError] = useState('');
@@ -119,6 +119,7 @@ function BookingSection({ services }) {
   const availabilityRequestIdRef = useRef(0);
 
   const selected = services.filter((s) => selectedServices.includes(s.id));
+  const requiresSmsConsent = form.communicationPreference === 'sms' || form.communicationPreference === 'both';
   const selectedAddonServices = selected.filter((s) => isAddonService(s));
   const hasInvalidAddonSelection = selected.some((service) => isAddonService(service) && !hasCompatibleBaseService(service, selectedServices, services));
   const duration = selected.reduce((sum, s) => sum + (s.duration_minutes || 0), 0);
@@ -369,7 +370,7 @@ function BookingSection({ services }) {
         cardIdempotencyKey: crypto.randomUUID(),
       });
       setPendingMessage(result.pendingMessage);
-      setForm({ firstName: '', lastName: '', phone: '', email: '', notes: '', communicationPreference: 'both', policyAcknowledged: false });
+      setForm({ firstName: '', lastName: '', phone: '', email: '', notes: '', communicationPreference: 'both', smsConsentAcknowledged: false, policyAcknowledged: false });
       setDevSquareToken('');
       setSelectedDate('');
       setSelectedTime('');
@@ -442,14 +443,15 @@ function BookingSection({ services }) {
       <div className="split"><label>Phone<input required pattern="[0-9]{10}" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value.replace(/\D/g, '').slice(0, 10) }))} /></label><label>Email<input required type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} /></label></div>
       <label>Preferred notifications
         <select value={form.communicationPreference} onChange={(e) => setForm((f) => ({ ...f, communicationPreference: e.target.value }))}>
-          <option value="both">SMS + Email</option>
-          <option value="sms">SMS only</option>
-          <option value="email">Email only</option>
+          <option value="both">SMS + Email (transactional appointment updates)</option>
+          <option value="sms">SMS only (transactional appointment updates)</option>
+          <option value="email">Email only (transactional appointment updates)</option>
         </select>
       </label>
+      {requiresSmsConsent && <label className="service-check sms-consent-check"><input type="checkbox" required checked={form.smsConsentAcknowledged} onChange={(e) => setForm((f) => ({ ...f, smsConsentAcknowledged: e.target.checked }))} /> I agree to receive appointment-related SMS messages from Nails by Brittney at the phone number provided.</label>}
       {form.communicationPreference === 'email' && <div className="communication-email-warning" role="note"><p>Note: by opting out of SMS communications, you may not receive important real-time updates about your appointment.</p></div>}
-      <div className="communication-disclaimer">
-        <p>By submitting this form and selecting SMS communications, you agree to receive appointment-related text messages from Nails by Brittney. Message &amp; data rates may apply. Reply STOP to opt out.</p>
+      <div className={`communication-disclaimer ${requiresSmsConsent ? 'visible' : ''}`}>
+        <p>Message frequency varies. Message and data rates may apply. Reply STOP to opt out. Reply HELP for help. Consent is not a condition of purchase or booking.</p>
         <p><Link to="/privacy-policy">Privacy Policy</Link> • <Link to="/terms">Terms &amp; Conditions</Link></p>
       </div>
       <label>Notes<textarea value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} /></label>
