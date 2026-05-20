@@ -801,7 +801,7 @@ export const handler = async (event) => {
     }
 
     if (!isBrittney && isHelpKeyword(body)) {
-      return xmlMessage('Nails by Brittney appointment alerts only. Reply STOP to opt out of SMS. Reply to this message with your question for support.');
+      return xmlMessage('Nails by Brittney appointment alerts only. Message frequency varies. Message and data rates may apply. Reply STOP to opt out. Reply HELP for help. Reply with your question for support.');
     }
 
     if (!isBrittney) {

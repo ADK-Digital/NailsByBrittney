@@ -99,7 +99,7 @@ export function PrivacyPolicyPage() {
         No mobile information will be shared with third parties or affiliates for marketing/promotional purposes. Mobile data is only used with service providers that support booking operations, such as transactional messaging delivery and customer support.
       </p>
       <p>
-        Message frequency varies by your appointment activity. Message and data rates may apply. Reply STOP at any time to opt out of SMS messages. Reply HELP for help. For support, contact <a href={`tel:${PHONE_LINK}`}>{PHONE_DISPLAY}</a> or <a href={`mailto:${LEGAL_EMAIL}`}>{LEGAL_EMAIL}</a>.
+        Message frequency varies. Message and data rates may apply. Reply STOP to opt out. Reply HELP for help. Consent is not a condition of purchase or booking. For support, contact <a href={`tel:${PHONE_LINK}`}>{PHONE_DISPLAY}</a> or <a href={`mailto:${LEGAL_EMAIL}`}>{LEGAL_EMAIL}</a>.
       </p>
 
       <h2>Sharing of information</h2>
