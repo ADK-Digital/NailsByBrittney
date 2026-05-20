@@ -7,7 +7,7 @@ import SquareCardField from './components/SquareCardField';
 import './styles.css';
 import logo from '../Images/logo.png';
 
-const navItems = [['home', 'Home'], ['about', 'About'], ['examples', 'Examples'], ['services', 'Services'], ['booking', 'Booking'], ['contact', 'Contact'], ['location', 'Location']];
+const navItems = [['home', 'Home'], ['booking', 'Booking'], ['about', 'About'], ['services', 'Services'], ['examples', 'Examples'], ['contact', 'Contact'], ['location', 'Location']];
 
 
 
@@ -387,7 +387,7 @@ function BookingSection({ services }) {
     setIsSquareReady(ready);
   }, []);
 
-  return <section id="booking" className="section alt"><div className="container"><SectionHeading title="Book an Appointment" eyebrow="Real-time Scheduler" />
+  return <section id="booking" className="section alt"><div className="container"><SectionHeading title="Book an Appointment" />
     <div className="booking-grid">
       <div className="booking-services">
         <h3>1. Select service(s)</h3>
@@ -445,16 +445,16 @@ function BookingSection({ services }) {
         <h4 className="communication-consent-heading">Appointment Text Message Consent</h4>
         <label>Preferred notifications
           <select value={form.communicationPreference} onChange={(e) => setForm((f) => ({ ...f, communicationPreference: e.target.value }))}>
-            <option value="both">SMS + Email (transactional appointment updates)</option>
-            <option value="sms">SMS only (transactional appointment updates)</option>
-            <option value="email">Email only (transactional appointment updates)</option>
+            <option value="both">SMS + Email</option>
+            <option value="sms">SMS only</option>
+            <option value="email">Email only</option>
           </select>
         </label>
         {requiresSmsConsent && <label className="service-check sms-consent-check"><input type="checkbox" required checked={form.smsConsentAcknowledged} onChange={(e) => setForm((f) => ({ ...f, smsConsentAcknowledged: e.target.checked }))} /> I agree to receive appointment-related SMS messages from Nails by Brittney at the phone number provided.</label>}
-        <div className={`communication-disclaimer ${requiresSmsConsent ? 'visible' : ''}`}>
+        {requiresSmsConsent && <div className="communication-disclaimer visible">
           <p>Message frequency varies. Message and data rates may apply. Reply STOP to opt out. Reply HELP for help. Consent is not a condition of purchase or booking.</p>
           <p><Link to="/privacy-policy">Privacy Policy</Link> • <Link to="/terms">Terms &amp; Conditions</Link></p>
-        </div>
+        </div>}
       </div>
       {form.communicationPreference === 'email' && <div className="communication-email-warning" role="note"><p>Note: by opting out of SMS communications, you may not receive important real-time updates about your appointment.</p></div>}
       <label>Notes<textarea value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} /></label>
@@ -508,13 +508,13 @@ export default function App() {
     <main>
       <section id="home" className="section hero"><div className="container hero-inner"><img src={logo} className="hero-logo" alt="Nails by Brittney logo" /><h1>Nails by Brittney</h1><p className="subtitle">Licensed Nail Technician</p><div className="cta-row"><a href="#booking" className="btn primary">Book now</a><a href={`tel:${PHONE_LINK}`} className="btn">Call now</a><a href={INSTAGRAM_URL} target="_blank" rel="noreferrer" className="btn ghost">Instagram</a></div></div></section>
       <Divider />
-      <section id="about" className="section about-section"><div className="container"><div><SectionHeading title="Brittney Prosser, Licensed Nail Technician" eyebrow="About" /><p>{SAMPLE_BIO}</p></div></div></section>
+      <BookingSection services={services} />
       <Divider />
-      <section id="examples" className="section alt"><div className="container"><h3>Testimonials</h3>{testimonials.map((item) => <blockquote key={item.id}>"{item.quote}" <span>- {item.customer}</span></blockquote>)}<h3>Gallery</h3><GalleryCarousel items={gallery} />{!hasImages && <p className="muted">Upload images in admin.</p>}</div></section>
+      <section id="about" className="section about-section"><div className="container"><div><SectionHeading title="Brittney Prosser, Licensed Nail Technician" eyebrow="About" /><p>{SAMPLE_BIO}</p></div></div></section>
       <Divider />
       <section id="services" className="section"><div className="container"><SectionHeading title="Services and Pricing" eyebrow="Signature Menu" /><div className="service-grid">{services.filter((service) => service.active !== false).map((service) => <ServiceCard key={service.id} service={service} />)}</div></div></section>
       <Divider />
-      <BookingSection services={services} />
+      <section id="examples" className="section alt"><div className="container"><h3>Testimonials</h3>{testimonials.map((item) => <blockquote key={item.id}>"{item.quote}" <span>- {item.customer}</span></blockquote>)}<h3>Gallery</h3><GalleryCarousel items={gallery} />{!hasImages && <p className="muted">Upload images in admin.</p>}</div></section>
       <Divider />
       <section id="contact" className="section alt"><div className="container"><SectionHeading title="Contact" eyebrow="Get in Touch" /><p className="contact-blurb"><strong>Phone:</strong> {PHONE_DISPLAY} (call or text)<br /><strong>Email:</strong> {EMAIL}<br /><a href={INSTAGRAM_URL} target="_blank" rel="noreferrer">Instagram</a></p></div></section>
       <Divider />
