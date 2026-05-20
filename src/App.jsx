@@ -441,19 +441,22 @@ function BookingSection({ services }) {
       <h3>4. Your details</h3>
       <div className="split"><label>First name<input required value={form.firstName} onChange={(e) => setForm((f) => ({ ...f, firstName: e.target.value }))} /></label><label>Last name<input required value={form.lastName} onChange={(e) => setForm((f) => ({ ...f, lastName: e.target.value }))} /></label></div>
       <div className="split"><label>Phone<input required pattern="[0-9]{10}" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value.replace(/\D/g, '').slice(0, 10) }))} /></label><label>Email<input required type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} /></label></div>
-      <label>Preferred notifications
-        <select value={form.communicationPreference} onChange={(e) => setForm((f) => ({ ...f, communicationPreference: e.target.value }))}>
-          <option value="both">SMS + Email (transactional appointment updates)</option>
-          <option value="sms">SMS only (transactional appointment updates)</option>
-          <option value="email">Email only (transactional appointment updates)</option>
-        </select>
-      </label>
-      {requiresSmsConsent && <label className="service-check sms-consent-check"><input type="checkbox" required checked={form.smsConsentAcknowledged} onChange={(e) => setForm((f) => ({ ...f, smsConsentAcknowledged: e.target.checked }))} /> I agree to receive appointment-related SMS messages from Nails by Brittney at the phone number provided.</label>}
-      {form.communicationPreference === 'email' && <div className="communication-email-warning" role="note"><p>Note: by opting out of SMS communications, you may not receive important real-time updates about your appointment.</p></div>}
-      <div className={`communication-disclaimer ${requiresSmsConsent ? 'visible' : ''}`}>
-        <p>Message frequency varies. Message and data rates may apply. Reply STOP to opt out. Reply HELP for help. Consent is not a condition of purchase or booking.</p>
-        <p><Link to="/privacy-policy">Privacy Policy</Link> • <Link to="/terms">Terms &amp; Conditions</Link></p>
+      <div className="communication-consent-group" aria-label="Appointment text message consent">
+        <h4 className="communication-consent-heading">Appointment Text Message Consent</h4>
+        <label>Preferred notifications
+          <select value={form.communicationPreference} onChange={(e) => setForm((f) => ({ ...f, communicationPreference: e.target.value }))}>
+            <option value="both">SMS + Email (transactional appointment updates)</option>
+            <option value="sms">SMS only (transactional appointment updates)</option>
+            <option value="email">Email only (transactional appointment updates)</option>
+          </select>
+        </label>
+        {requiresSmsConsent && <label className="service-check sms-consent-check"><input type="checkbox" required checked={form.smsConsentAcknowledged} onChange={(e) => setForm((f) => ({ ...f, smsConsentAcknowledged: e.target.checked }))} /> I agree to receive appointment-related SMS messages from Nails by Brittney at the phone number provided.</label>}
+        <div className={`communication-disclaimer ${requiresSmsConsent ? 'visible' : ''}`}>
+          <p>Message frequency varies. Message and data rates may apply. Reply STOP to opt out. Reply HELP for help. Consent is not a condition of purchase or booking.</p>
+          <p><Link to="/privacy-policy">Privacy Policy</Link> • <Link to="/terms">Terms &amp; Conditions</Link></p>
+        </div>
       </div>
+      {form.communicationPreference === 'email' && <div className="communication-email-warning" role="note"><p>Note: by opting out of SMS communications, you may not receive important real-time updates about your appointment.</p></div>}
       <label>Notes<textarea value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} /></label>
 
       <h3>5. Payment information</h3>

@@ -1603,12 +1603,32 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
   }
 }
 
+
+.communication-consent-group{
+  margin:.85rem 0 .55rem;
+  padding:.85rem .95rem .8rem;
+  border:1px solid rgba(26,47,95,.2);
+  border-radius:16px;
+  background:rgba(255,255,255,.62);
+}
+
+.communication-consent-heading{
+  margin:0 0 .55rem;
+  font-size:.92rem;
+  letter-spacing:.02em;
+  text-transform:uppercase;
+  color:#3d3352;
+}
+
+.communication-consent-group > label{
+  margin-bottom:.2rem;
+}
 .communication-disclaimer{
-  border:1px solid rgba(26,47,95,.14);
+  border:1px solid rgba(26,47,95,.18);
   border-radius:14px;
-  background:rgba(255,255,255,.48);
-  padding:.72rem .85rem;
-  margin:-.1rem 0 .35rem;
+  background:rgba(255,255,255,.72);
+  padding:.78rem .88rem;
+  margin:.1rem 0 .2rem;
   color:#5c5268;
 }
 
@@ -1622,7 +1642,7 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
 .communication-disclaimer p + p{margin-top:.28rem}
 
 .sms-consent-check{
-  margin:.2rem 0 .35rem;
+  margin:.45rem 0 .35rem;
   padding:.45rem .2rem;
 }
 
@@ -1631,7 +1651,7 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
 }
 
 .communication-disclaimer.visible{
-  margin-top:-.05rem;
+  margin-top:.1rem;
 }
 
 
