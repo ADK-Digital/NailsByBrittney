@@ -1623,6 +1623,12 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
 .communication-consent-group > label{
   margin-bottom:.2rem;
 }
+
+.sms-consent-heading{
+  margin:.7rem 0 .35rem;
+  font-size:.86rem;
+  color:#3d3352;
+}
 .communication-disclaimer{
   border:1px solid rgba(26,47,95,.18);
   border-radius:14px;
@@ -1655,7 +1661,7 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
 }
 
 
-.communication-email-warning{
+.communication-info{
   border:1px solid rgba(116,81,146,.16);
   border-radius:14px;
   background:rgba(255,255,255,.58);
@@ -1666,7 +1672,7 @@ input,textarea,select{padding:.68rem .72rem;border-radius:12px;border:1px solid 
   line-height:1.45;
 }
 
-.communication-email-warning p{
+.communication-info p{
   margin:0;
 }
 

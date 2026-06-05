@@ -103,7 +103,7 @@ function BookingSection({ services }) {
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedTime, setSelectedTime] = useState('');
   const [form, setForm] = useState({
-    firstName: '', lastName: '', phone: '', email: '', notes: '', communicationPreference: 'both', smsConsentAcknowledged: false, policyAcknowledged: false,
+    firstName: '', lastName: '', phone: '', email: '', notes: '', communicationPreference: '', smsConsentAcknowledged: false, policyAcknowledged: false,
   });
   const [pendingMessage, setPendingMessage] = useState('');
   const [cardError, setCardError] = useState('');
@@ -322,6 +322,12 @@ function BookingSection({ services }) {
       return;
     }
 
+    if (!form.communicationPreference) {
+      const message = 'Please select a communication preference.';
+      setSubmitValidationError(message);
+      return;
+    }
+
     if (!e.currentTarget.checkValidity()) {
       const invalidLabels = Array.from(e.currentTarget.querySelectorAll(':invalid'))
         .map((field) => field.closest('label')?.textContent?.replace(/\s+/g, ' ').trim())
@@ -370,7 +376,7 @@ function BookingSection({ services }) {
         cardIdempotencyKey: crypto.randomUUID(),
       });
       setPendingMessage(result.pendingMessage);
-      setForm({ firstName: '', lastName: '', phone: '', email: '', notes: '', communicationPreference: 'both', smsConsentAcknowledged: false, policyAcknowledged: false });
+      setForm({ firstName: '', lastName: '', phone: '', email: '', notes: '', communicationPreference: '', smsConsentAcknowledged: false, policyAcknowledged: false });
       setDevSquareToken('');
       setSelectedDate('');
       setSelectedTime('');
@@ -441,22 +447,28 @@ function BookingSection({ services }) {
       <h3>4. Your details</h3>
       <div className="split"><label>First name<input required value={form.firstName} onChange={(e) => setForm((f) => ({ ...f, firstName: e.target.value }))} /></label><label>Last name<input required value={form.lastName} onChange={(e) => setForm((f) => ({ ...f, lastName: e.target.value }))} /></label></div>
       <div className="split"><label>Phone<input required pattern="[0-9]{10}" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value.replace(/\D/g, '').slice(0, 10) }))} /></label><label>Email<input required type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} /></label></div>
-      <div className="communication-consent-group" aria-label="Appointment text message consent">
-        <h4 className="communication-consent-heading">Appointment Text Message Consent</h4>
+      <div className="communication-consent-group" aria-label="Communication preferences">
+        <h4 className="communication-consent-heading">Communication Preferences</h4>
         <label>Preferred notifications
-          <select value={form.communicationPreference} onChange={(e) => setForm((f) => ({ ...f, communicationPreference: e.target.value }))}>
+          <select required value={form.communicationPreference} onChange={(e) => setForm((f) => ({ ...f, communicationPreference: e.target.value, smsConsentAcknowledged: e.target.value === 'email' || e.target.value === '' ? false : f.smsConsentAcknowledged }))}>
+            <option value="" disabled>Select communication preference</option>
             <option value="both">SMS + Email</option>
             <option value="sms">SMS only</option>
             <option value="email">Email only</option>
           </select>
         </label>
-        {requiresSmsConsent && <label className="service-check sms-consent-check"><input type="checkbox" required checked={form.smsConsentAcknowledged} onChange={(e) => setForm((f) => ({ ...f, smsConsentAcknowledged: e.target.checked }))} /> I agree to receive appointment-related SMS messages from Nails by Brittney at the phone number provided.</label>}
-        {requiresSmsConsent && <div className="communication-disclaimer visible">
-          <p>Message frequency varies. Message and data rates may apply. Reply STOP to opt out. Reply HELP for help. Consent is not a condition of purchase or booking.</p>
-          <p><Link to="/privacy-policy">Privacy Policy</Link> • <Link to="/terms">Terms &amp; Conditions</Link></p>
+        {form.communicationPreference === 'email' && <div className="communication-info" role="note"><p>Appointment-related updates and messages will be sent by email to {form.email || 'the email address provided'}.</p></div>}
+        {form.communicationPreference === 'sms' && <div className="communication-info" role="note"><p>Appointment-related updates and messages will be sent by SMS to {form.phone || 'the phone number provided'}.</p></div>}
+        {form.communicationPreference === 'both' && <div className="communication-info" role="note"><p>Appointment-related updates and messages will be sent by SMS and email.</p></div>}
+        {requiresSmsConsent && <div className="sms-consent-section">
+          <h5 className="sms-consent-heading">SMS Consent</h5>
+          <label className="service-check sms-consent-check"><input type="checkbox" required checked={form.smsConsentAcknowledged} onChange={(e) => setForm((f) => ({ ...f, smsConsentAcknowledged: e.target.checked }))} /> I agree to receive appointment-related SMS messages from Nails by Brittney at the phone number provided.</label>
+          <div className="communication-disclaimer visible">
+            <p>Message frequency varies. Message and data rates may apply. Reply STOP to opt out. Reply HELP for help. Consent is not a condition of purchase or booking.</p>
+            <p><Link to="/privacy-policy">Privacy Policy</Link> • <Link to="/terms">Terms &amp; Conditions</Link></p>
+          </div>
         </div>}
       </div>
-      {form.communicationPreference === 'email' && <div className="communication-email-warning" role="note"><p>Note: by opting out of SMS communications, you may not receive important real-time updates about your appointment.</p></div>}
       <label>Notes<textarea value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} /></label>
 
       <h3>5. Payment information</h3>

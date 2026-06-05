@@ -24,9 +24,12 @@ export function validateBookingInput(input) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date || '')) errors.date = 'Date is invalid.';
   if (!/^\d{2}:\d{2}$/.test(input.time || '')) errors.time = 'Time is invalid.';
   if (!input.idempotencyKey?.trim()) errors.idempotencyKey = 'Idempotency key is required.';
-  const rawCommunicationPreference = input.communicationPreference ?? 'both';
+  const rawCommunicationPreference = String(input.communicationPreference ?? '').trim().toLowerCase();
   const communicationPreference = normalizeCommunicationPreference(rawCommunicationPreference);
-  if (!['sms', 'email', 'both'].includes(communicationPreference)) errors.communicationPreference = 'Communication preference must include sms, email, or both.';
+  const allowedCommunicationPreferences = ['sms', 'email', 'both'];
+  if (!allowedCommunicationPreferences.includes(rawCommunicationPreference) || !allowedCommunicationPreferences.includes(communicationPreference)) {
+    errors.communicationPreference = 'Please select a communication preference.';
+  }
   const requiresSmsConsent = communicationPreference === 'sms' || communicationPreference === 'both';
   if (requiresSmsConsent && !input.smsConsentAcknowledged) {
     errors.smsConsentAcknowledged = 'You must consent to appointment-related SMS messages when SMS notifications are selected.';

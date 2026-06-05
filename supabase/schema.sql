@@ -876,6 +876,9 @@ end
 $$;
 
 alter table customers add column if not exists communication_preference communication_preference not null default 'both';
+-- Require booking/admin RPCs to pass an explicit communication preference.
+-- The temporary add-column default above protects existing installs during migration only; remove it so future direct inserts cannot silently select SMS + Email.
+alter table customers alter column communication_preference drop default;
 alter table customers add column if not exists square_customer_id text;
 alter table customers add column if not exists square_card_id text;
 alter table customers add column if not exists card_brand text;
@@ -1000,7 +1003,7 @@ create or replace function match_or_create_customer(
   p_email text,
   p_phone text,
   p_note text default null,
-  p_communication_preference communication_preference default 'both',
+  p_communication_preference communication_preference default null,
   p_square_customer_id text default null,
   p_square_card_id text default null,
   p_card_brand text default null,
@@ -1019,6 +1022,7 @@ begin
   if v_first_name = '' or v_last_name = '' then raise exception 'First and last name are required'; end if;
   if v_email = '' then raise exception 'Email is required'; end if;
   if v_phone = '' then raise exception 'Phone is required'; end if;
+  if p_communication_preference is null then raise exception 'Communication preference is required'; end if;
 
   select c.* into customer_row
   from customers c
@@ -1066,7 +1070,7 @@ create or replace function create_booking_request(
   p_service_ids uuid[],
   p_start_at timestamptz,
   p_idempotency_key text,
-  p_communication_preference communication_preference default 'both',
+  p_communication_preference communication_preference default null,
   p_square_customer_id text default null,
   p_square_card_id text default null,
   p_card_brand text default null,
@@ -1109,6 +1113,9 @@ begin
 
   if not p_policy_acknowledged then
     raise exception 'Policy acknowledgement is required';
+  end if;
+  if p_communication_preference is null then
+    raise exception 'Communication preference is required';
   end if;
   if p_communication_preference in ('sms', 'both') and not p_sms_consent_given then
     raise exception 'SMS consent acknowledgement is required when SMS notifications are selected';
@@ -1266,7 +1273,7 @@ create or replace function create_admin_appointment(
   p_note text,
   p_service_ids uuid[],
   p_start_at timestamptz,
-  p_communication_preference communication_preference default 'both'
+  p_communication_preference communication_preference default null
 )
 returns jsonb
 language plpgsql
@@ -1295,6 +1302,7 @@ declare
   v_idempotency_key text;
 begin
   perform expire_stale_pending_appointments();
+  if p_communication_preference is null then raise exception 'Communication preference is required'; end if;
   if p_service_ids is null or cardinality(p_service_ids) = 0 then raise exception 'At least one service is required'; end if;
   if exists (
     with selected as (
