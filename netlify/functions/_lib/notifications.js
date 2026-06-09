@@ -1,6 +1,17 @@
 const twilioFrom = process.env.TWILIO_PHONE_NUMBER;
 const notifyPhone = process.env.BRITTNEY_NOTIFICATION_PHONE;
 
+
+function maskPhoneDigits(value) {
+  const digits = String(value || '').replace(/\D/g, '');
+  if (!digits) return null;
+
+  const firstThree = digits.slice(0, 3);
+  const lastTwo = digits.length > 5 ? digits.slice(-2) : '';
+  const maskedLength = Math.max(digits.length - firstThree.length - lastTwo.length, 0);
+  return `${firstThree}${'*'.repeat(maskedLength)}${lastTwo}`;
+}
+
 function authHeader(user, pass) {
   return `Basic ${Buffer.from(`${user}:${pass}`).toString('base64')}`;
 }
@@ -87,6 +98,12 @@ export async function sendSms(to, body, { type = 'sms', preference = null } = {}
 
   try {
     const form = new URLSearchParams({ To: to, From: twilioFrom, Body: body });
+    console.log('SMS TWILIO FROM DIAGNOSTIC', {
+      twilioPhoneNumberExists: Boolean(process.env.TWILIO_PHONE_NUMBER),
+      twilioPhoneNumberLength: process.env.TWILIO_PHONE_NUMBER?.length ?? 0,
+      twilioPhoneNumberMasked: maskPhoneDigits(process.env.TWILIO_PHONE_NUMBER),
+      twilioFromParameterMasked: maskPhoneDigits(form.get('From')),
+    });
     const response = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${process.env.TWILIO_ACCOUNT_SID}/Messages.json`, {
       method: 'POST',
       headers: {
