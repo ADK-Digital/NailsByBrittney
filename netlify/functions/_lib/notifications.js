@@ -1,4 +1,4 @@
-const twilioFrom = process.env.TWILIO_PHONE_NUMBER;
+const twilioFrom = process.env.TWILIO_SMS_FROM_NUMBER;
 const notifyPhone = process.env.BRITTNEY_NOTIFICATION_PHONE;
 
 
@@ -99,9 +99,9 @@ export async function sendSms(to, body, { type = 'sms', preference = null } = {}
   try {
     const form = new URLSearchParams({ To: to, From: twilioFrom, Body: body });
     console.log('SMS TWILIO FROM DIAGNOSTIC', {
-      twilioPhoneNumberExists: Boolean(process.env.TWILIO_PHONE_NUMBER),
-      twilioPhoneNumberLength: process.env.TWILIO_PHONE_NUMBER?.length ?? 0,
-      twilioPhoneNumberMasked: maskPhoneDigits(process.env.TWILIO_PHONE_NUMBER),
+      twilioPhoneNumberExists: Boolean(process.env.TWILIO_SMS_FROM_NUMBER),
+      twilioPhoneNumberLength: process.env.TWILIO_SMS_FROM_NUMBER?.length ?? 0,
+      twilioPhoneNumberMasked: maskPhoneDigits(process.env.TWILIO_SMS_FROM_NUMBER),
       twilioFromParameterMasked: maskPhoneDigits(form.get('From')),
     });
     const response = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${process.env.TWILIO_ACCOUNT_SID}/Messages.json`, {

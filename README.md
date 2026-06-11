@@ -36,7 +36,7 @@ Required core values:
 - `ADMIN_EMAILS` (required for admin portal access; comma-separated Supabase Auth email addresses)
 - `TWILIO_ACCOUNT_SID`
 - `TWILIO_AUTH_TOKEN`
-- `TWILIO_PHONE_NUMBER`
+- `TWILIO_SMS_FROM_NUMBER`
 - `BRITTNEY_NOTIFICATION_PHONE`
 - `RESEND_API_KEY`
 - `RESEND_FROM_EMAIL` (required in production; must be a Resend-verified sender/domain)
