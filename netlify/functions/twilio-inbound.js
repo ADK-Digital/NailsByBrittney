@@ -132,6 +132,23 @@ function parseRequestNumber(token) {
   return Number(m[1]);
 }
 
+function normalizeDirectOutboundPhone(token = '') {
+  const raw = String(token || '').trim();
+  if (!raw) return null;
+  const digits = raw.replace(/\D/g, '');
+  const hasPlus = raw.startsWith('+');
+  if (hasPlus && !/^\+1\d{10}$/.test(raw)) return null;
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`;
+  return null;
+}
+
+function isDirectPhoneCandidate(token = '') {
+  const raw = String(token || '').trim();
+  const digits = raw.replace(/\D/g, '');
+  return raw.startsWith('+') || digits.length >= 10;
+}
+
 function formatBookingNumber(value) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return '---';
@@ -222,7 +239,7 @@ function parseLeadCommand(text = '') {
 }
 
 const COMMAND_HELP = {
-  default: 'Commands: yes/no <id>, status, balance, offer, charge, late, no show, refund, text/reply, block/unblock, today/tomorrow/day, find, undo, remind, help',
+  default: 'Commands: yes/no <id>, status, balance, offer, charge, late, no show, refund, text/reply <appointment # or phone> <message>, block/unblock, today/tomorrow/day, find, undo, remind, help',
   payments: 'Payments: charge 001 $85 | late 001 [50%] | no show 001 [40%] | refund late 001 | refund services 001 [50%]',
   scheduling: 'Scheduling: offer 001 MM/DD/YYYY time | block MM/DD/YYYY start end reason | today | tomorrow | day MM/DD/YYYY',
 };
@@ -238,7 +255,7 @@ const commandSpecs = [
   { key: 'late', match: /^late\s+#?(\d{2,6})(?:\s+(\d{1,3}%?))?$/i },
   { key: 'no_show', match: /^no\s*show\s+#?(\d{2,6})(?:\s+(\d{1,3}%?))?$/i },
   { key: 'refund', match: /^refund\s+(late|no\s*show|services?)\s+#?(\d{2,6})(?:\s+(\d{1,3}%?))?$/i },
-  { key: 'text', match: /^(?:text|reply)\s+#?(\d{2,6})\s+([\s\S]+)$/i },
+  { key: 'text', match: /^(?:text|reply)\s+(#?\+?[^\s]+)\s+([\s\S]+)$/i },
   { key: 'block', match: /^block\s+(\d{1,2}\/\d{1,2}\/\d{4})\s+([^\s]+)\s+([^\s]+)\s+([\s\S]+)$/i },
   { key: 'unblock', match: /^unblock\s+([a-f0-9-]{8,})$/i },
   { key: 'today', match: /^today$/i },
@@ -587,10 +604,46 @@ const handlers = {
   },
 
   async text({ command }) {
-    const requestNumber = parseRequestNumber(command.groups[0]);
+    const target = command.groups[0];
     const message = command.groups[1].trim();
+    if (isDirectPhoneCandidate(target)) {
+      const normalizedPhone = normalizeDirectOutboundPhone(target);
+      if (!normalizedPhone) {
+        return 'Invalid phone number. Use a 10-digit US number, 1 plus 10 digits, or +1XXXXXXXXXX.';
+      }
+
+      try {
+        await sendSms(normalizedPhone, message);
+      } catch (error) {
+        return `Unable to send message to ${normalizedPhone}: ${error.message || 'SMS failed'}`;
+      }
+
+      const customer = await findCustomerByPhone(normalizedPhone);
+      if (customer?.id) {
+        await safeLogClientMessage({
+          customerId: customer.id,
+          appointmentId: null,
+          direction: 'admin_to_customer',
+          channel: 'sms',
+          body: message,
+          source: 'twilio_command_direct_phone',
+        });
+      }
+      // client_messages requires a customer_id, so phone-only direct sends are not persisted
+      // when the normalized phone number does not match an existing customer record.
+
+      return `Message sent to ${normalizedPhone}.`;
+    }
+
+    const requestNumber = parseRequestNumber(target);
     const appointment = await findAppointmentByRequestNumber(requestNumber);
-    if (!appointment) return `Appointment ${formatBookingNumber(requestNumber)} not found.`;
+    if (!appointment) {
+      const targetDigits = String(target || '').replace(/\D/g, '');
+      if ((targetDigits.length > 0 && !requestNumber) || targetDigits.length >= 4) {
+        return 'Invalid phone number. Use a 10-digit US number, 1 plus 10 digits, or +1XXXXXXXXXX.';
+      }
+      return `Appointment ${formatBookingNumber(requestNumber)} not found.`;
+    }
     await sendToAppointmentCustomer(appointment, message);
     await safeLogClientMessage({
       customerId: appointment.customer_id,
@@ -614,7 +667,7 @@ const handlers = {
     const startAt = localDateTimeToUtcIso(isoDate, start);
     const endAt = localDateTimeToUtcIso(isoDate, end);
     if (new Date(endAt) <= new Date(startAt)) return 'End time must be after start time.';
-    const { data, error } = await supabaseAdmin.from('blocked_times').insert({ start_at: startAt, end_at: endAt, reason }).select('*').single();
+    const { error } = await supabaseAdmin.from('blocked_times').insert({ start_at: startAt, end_at: endAt, reason }).select('*').single();
     if (error) throw error;
     return `Blocked ${formatDate(startAt)} from ${formatTime(startAt)} to ${formatTime(endAt)} (${reason}).`;
   },
