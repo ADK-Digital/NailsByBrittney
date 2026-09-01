@@ -727,13 +727,13 @@ $$;
 
 insert into business_hours (day_of_week, open_time, close_time, active)
 values
-  (0, '09:30', '16:30', true),
-  (1, '09:30', '19:30', true),
-  (2, '09:30', '19:30', false),
-  (3, '09:30', '19:30', false),
-  (4, '09:30', '19:30', false),
-  (5, '09:30', '19:30', false),
-  (6, '09:30', '19:30', true)
+  (0, '10:00', '18:00', false),
+  (1, '10:00', '18:00', false),
+  (2, '10:00', '18:00', true),
+  (3, '10:00', '18:00', true),
+  (4, '10:00', '18:00', true),
+  (5, '10:00', '18:00', true),
+  (6, '10:00', '18:00', true)
 on conflict (day_of_week) do update
 set open_time = excluded.open_time,
     close_time = excluded.close_time,
